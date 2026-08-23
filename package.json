@@ -18,6 +18,7 @@
     "verify:ui": "node scripts/verify-mobile-onescreen.js && node scripts/verify-ui-onescreen.mjs && node scripts/verify-rulebook.mjs",
     "verify:interactions": "node scripts/verify-ui-interactions.mjs",
     "verify:rulebook": "node scripts/verify-rulebook.mjs",
+    "verify:skill-fx": "node scripts/verify-skill-fx-gallery.mjs",
     "capture:ui": "node scripts/capture-ui-review.mjs",
     "verify:online": "node scripts/verify-online-sync.js"
   },

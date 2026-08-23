@@ -16,6 +16,9 @@ describe("frontend DOM contract", () => {
   const style = fs.readFileSync(path.join(publicDir, "style.css"), "utf8");
   const salon = fs.readFileSync(path.join(publicDir, "salon.css"), "utf8");
   const tableV2 = fs.readFileSync(path.join(publicDir, "table-v2.css"), "utf8");
+  const skillEffects = fs.readFileSync(path.join(publicDir, "skill-effects.css"), "utf8");
+  const skillFxProfiles = fs.readFileSync(path.join(publicDir, "skill-fx-profiles.js"), "utf8");
+  const skillFxManager = fs.readFileSync(path.join(publicDir, "skill-fx-manager.js"), "utf8");
 
   test("HTML id 唯一", () => {
     const ids = collectMatches(html, /\bid=["']([^"']+)["']/g);
@@ -121,6 +124,8 @@ describe("frontend DOM contract", () => {
     expect(client).toContain('quickStart: "overlimit_quickstart_v1"');
     expect(client).toContain("function renderQuickStartPage");
     expect(client).toContain("function releaseQuickStartPointer");
+    expect(client).not.toContain("!hasPendingReconnect && !state.quickStartSeen");
+    expect(client).toContain('el.btnOpenQuickStart?.addEventListener("click", () => openQuickStart({ page: 1 }))');
     expect(client).toContain('openRulesFromQuickStart("rule-hands")');
     expect(client).toContain("openSkillsFromQuickStart");
     expect(salon).toContain(".salon-ui .quickstart-entry");
@@ -160,6 +165,8 @@ describe("frontend DOM contract", () => {
     expect(client).toContain("function scrollToRulesTarget");
     expect(client).toContain("function highlightRulesTarget");
     expect(client).toContain("function setRulesTocOpen");
+    expect(client).toContain('target.querySelector(".rules-chapter-heading")');
+    expect(client).toContain("highlight: Boolean(query)");
     expect(client).toContain("RULEBOOK_DATA.sections.length !== 18");
     expect(rulebookData).toContain('id: "rule-skills"');
     expect(rulebookData).toContain('id: "rule-protocols"');
@@ -282,23 +289,32 @@ describe("frontend DOM contract", () => {
     expect(client).toContain("skillExpertText");
   });
 
-  test("公开技能短特效不阻断操作，秘密技能仅本人可见", () => {
+  test("首发技能特效由数据配置驱动，公开与秘密通道保持隔离", () => {
     expect(html).toContain('id="skill-fx-public"');
     expect(html).toContain('id="skill-fx-secret"');
+    expect(html).toContain('id="skill-effect-layer"');
+    expect(html).toContain('id="skill-state-layer"');
     expect(html).toContain('id="skill-fx-name"');
-    expect(client).toContain("const SKILL_FX_PUBLIC_MS = 980");
-    expect(client).toContain("const SKILL_FX_BLOOD_MS = 1180");
-    expect(client).toContain("const SKILL_FX_SECRET_MS = 720");
+    expect(client).toContain("const SKILL_FX_STALE_MS = 2500");
+    expect(skillFxManager).toContain("profilesApi.fxDuration");
+    expect(skillFxManager).toContain("Math.min(1100, Math.max(700, duration))");
     expect(client).toContain("function announceSkillResolved");
     expect(client).toContain("function announcePrivateSkillResult");
-    expect(client).toContain('enqueueSkillFx({ lane: "public", payload })');
-    expect(client).toContain("job.payload?.skillId === \"BLOOD_BATTLE\"");
+    expect(client).toContain("function getSkillFxManager");
+    expect(client).toContain("rememberSkillFxRequest");
+    expect(client).toContain("announceNullificationReveals");
     expect(client).toContain("payload.restored");
     expect(html).toContain("SELF ONLY");
-    expect(style).toContain("pointer-events: none");
+    expect(skillEffects).toContain("pointer-events: none");
+    expect(skillEffects).toContain('.skill-effect-instance[data-effect="blood"]');
+    expect(skillEffects).toContain('[data-fx-motion="reduced"]');
     expect(style).toContain(".skill-fx-public");
     expect(style).toContain(".skill-fx-secret");
-    expect(style).toContain('[data-skill="BLOOD_BATTLE"]');
+    expect(skillFxProfiles).toContain("PROTOCOL_SHOWDOWN_PROFILE");
+    expect(skillFxProfiles).toContain('id: "DISGUISE"');
+    expect(skillFxProfiles).not.toContain('id: "ENDGAME",');
+    expect(skillFxManager).toContain("canRenderSkillFx");
+    expect(skillFxManager).toContain("SHAKE_ALLOWLIST");
   });
 
   test("技能选择随权威回合失效，移动技能抽屉不会穿透或污染无技能局", () => {

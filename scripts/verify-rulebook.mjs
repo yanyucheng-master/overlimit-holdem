@@ -130,6 +130,11 @@ async function main() {
       documentScrollY: window.scrollY,
       modalScrollTop: document.getElementById("rules-handbook-modal")?.scrollTop || 0,
       articleScrollTop: article?.scrollTop || 0,
+      chapterFlash: chapter?.classList.contains("is-rule-target-flash") || false,
+      activeFlashTargets: [...document.querySelectorAll(".is-rule-target-flash")].map((node) => ({
+        id: node.id || "",
+        className: typeof node.className === "string" ? node.className : "",
+      })),
     };
   });
 
@@ -204,6 +209,9 @@ async function main() {
     if (item.modalScrollTop !== 0) failures.push(`search scrolled modal outer layer: ${item.query}`);
   });
   if (report.navigation.active !== "rule-protocols" || !report.navigation.targetVisible) failures.push("chapter navigation failed");
+  if (report.navigation.chapterFlash || report.navigation.activeFlashTargets.length) {
+    failures.push("chapter navigation triggered a large-area target flash");
+  }
   if (report.navigation.documentScrollY !== 0 || report.navigation.articleScrollTop <= 0) failures.push("wrong scroll container");
   if (report.navigation.modalScrollTop !== 0) failures.push("chapter navigation scrolled modal outer layer");
   if (!report.resize.positionRetained) failures.push("resize lost reading position");

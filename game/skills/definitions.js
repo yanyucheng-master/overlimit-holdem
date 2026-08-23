@@ -47,10 +47,11 @@ function protocolSkill(id, name, category, shortDescription, expertExtra) {
 const SKILL_DEFINITIONS = Object.freeze({
   DEEP_BREATH: freezeSkill({
     id: "DEEP_BREATH", name: "深呼吸", load: 1, energyCost: 1,
-    tags: [SKILL_TAGS.ACTIVE, SKILL_TAGS.RESOURCE, SKILL_TAGS.ONCE_PER_HAND],
+    tags: [SKILL_TAGS.ACTIVE, SKILL_TAGS.RESOURCE, SKILL_TAGS.SECRET, SKILL_TAGS.ONCE_PER_HAND],
+    visibility: "SECRET",
     allowedPhases: ACTIVE_STREETS, maxUsesPerHand: 1, requiresActionTurn: true, canBeCountered: true,
     shortDescription: "花 1 点能量缓一口气。如果这手牌你不再用别的技能，结束时会拿回 2 点，相当于净赚 1 点。",
-    expertDescription: "主动技能。负载 1，费用 1，每手最多 1 次，仅能在自己的合法下注行动回合发动，翻牌前至河牌均可。发动时支付 1 能量；若此后直到本手结束没有再发生任何自己的技能事件，手牌结束时恢复 2 能量。无当前能量上限要求，只受实际能量上限约束。Fold 后仍正常结算。若深呼吸后无其他技能事件且自己 Fold：恢复 2，并再获得败局自然 +1。公平会抑制本手全部结束恢复。",
+    expertDescription: "主动/秘密。负载 1，费用 1，每手最多 1 次，仅能在自己的合法下注行动回合发动，翻牌前至河牌均可。发动时支付 1 能量；若此后直到本手结束没有再发生任何自己的技能事件，手牌结束时恢复 2 能量。无当前能量上限要求，只受实际能量上限约束。普通 Fold 不取消恢复；若深呼吸后无其他技能事件且自己 Fold：恢复 2，并再获得败局自然 +1。可被反制；费用 1 的失败技能经回收利用计算后实际返还 0。公平会清除待恢复状态并抑制本手全部结束恢复。",
   }),
   RECYCLE: freezeSkill({
     id: "RECYCLE", name: "回收利用", load: 2, energyCost: 0,

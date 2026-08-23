@@ -21,13 +21,7 @@ const ENDGAME_DECLARE_MS = 2600;
 const ENDGAME_KILL_MS = 2800;
 const ENDGAME_DECLARE_VIBRATION = Object.freeze([60, 40, 110]);
 const ENDGAME_KILL_VIBRATION = Object.freeze([130, 50, 210, 60, 330]);
-const SKILL_FX_PUBLIC_MS = 980;
-const SKILL_FX_BLOOD_MS = 1180;
-const SKILL_FX_SECRET_MS = 720;
 const SKILL_FX_STALE_MS = 2500;
-const SKILL_FX_PUBLIC_HAPTICS = Object.freeze([28, 22, 46]);
-const SKILL_FX_BLOOD_HAPTICS = Object.freeze([40, 28, 72]);
-const SKILL_FX_SECRET_HAPTICS = Object.freeze([18, 16, 28]);
 const ALL_IN_STYLES = Object.freeze(["abyss", "verdict", "royal", "singularity"]);
 const PRO_FONT_STYLES = Object.freeze(["broadcast", "neonrail", "chrome", "classic"]);
 const QUICKSTART_PAGE_COUNT = 4;
@@ -264,6 +258,8 @@ const el = {
   connectionBannerText: byId("connection-banner-text"),
   toastRegion: byId("toast-region"),
   chipFx: byId("chip-fx-layer"),
+  skillEffectLayer: byId("skill-effect-layer"),
+  skillStateLayer: byId("skill-state-layer"),
   flash: byId("flash-allin"),
   flashEndgameDeclare: byId("flash-endgame-declare"),
   flashEndgameKill: byId("flash-endgame-kill"),
@@ -440,6 +436,7 @@ const el = {
   community: byId("community-cards"),
   currentBet: byId("current-bet"),
   potCore: byId("pot-core"),
+  deckStack: byId("deck-stack"),
   pot: byId("pot-value"),
   commitmentShort: byId("commitment-short"),
   fairnessHandId: byId("fairness-hand-id"),
@@ -622,11 +619,11 @@ let allInEffectTimer = 0;
 let allInEffectEndsAt = 0;
 let endgameDeclareTimer = 0;
 let endgameKillTimer = 0;
-let skillFxTimer = 0;
-let skillFxBusy = false;
-let lastPublicSkillFxId = "";
-let lastPublicSkillFxAt = 0;
-const skillFxQueue = [];
+let skillFxManager = null;
+const skillFxRequestMeta = new Map();
+const latestSkillFxMetaBySkill = new Map();
+const seenPassiveSkillFxKeys = new Set();
+let revealedNullificationFxCodes = new Set();
 let delayedHandResultTimer = 0;
 let skillPreviewReturnFocus = null;
 let previewingSkill = null;
@@ -751,6 +748,62 @@ function playTone(kind) {
   oscillator.start(now);
   oscillator.stop(now + preset[1] + 0.02);
 }
+
+const SKILL_FX_SOUND_PRESETS = Object.freeze({
+  breath: [["sine", 250, 510, 0, .22, .42], ["sine", 620, 390, .24, .24, .32]],
+  recycle: [["triangle", 310, 210, 0, .12, .34], ["sine", 380, 760, .12, .28, .42]],
+  pressure: [["sawtooth", 96, 54, 0, .5, .38], ["square", 540, 310, .16, .12, .18]],
+  critical: [["square", 180, 132, 0, .12, .24], ["square", 180, 132, .17, .12, .28], ["square", 220, 110, .34, .2, .34]],
+  blood: [["sawtooth", 86, 38, 0, .7, .48], ["triangle", 420, 130, .12, .34, .24]],
+  shield: [["triangle", 720, 360, 0, .18, .28], ["sine", 260, 180, .08, .36, .28]],
+  whisper: [["sine", 980, 740, 0, .14, .19], ["sine", 1260, 980, .07, .12, .13]],
+  scan: [["square", 420, 840, 0, .2, .18], ["sine", 1100, 1320, .18, .1, .2]],
+  vault: [["triangle", 290, 150, 0, .32, .3], ["square", 760, 260, .24, .13, .24]],
+  counter: [["sawtooth", 920, 150, 0, .16, .33], ["square", 240, 76, .14, .2, .3]],
+  reset: [["sine", 140, 680, 0, .48, .36], ["triangle", 920, 220, .2, .36, .22]],
+  swap: [["triangle", 340, 920, 0, .21, .23], ["triangle", 900, 330, .07, .21, .23]],
+  lockdown: [["sawtooth", 125, 42, 0, .72, .43], ["square", 360, 70, .3, .16, .3]],
+  clairvoyance: [["sine", 410, 790, 0, .32, .25], ["sine", 820, 560, .12, .32, .2]],
+  null: [["sawtooth", 680, 56, 0, .36, .3], ["sine", 92, 34, .16, .42, .34]],
+  fortune: [["sine", 520, 780, 0, .18, .24], ["sine", 780, 1180, .16, .24, .28]],
+  destiny: [["triangle", 330, 660, 0, .28, .27], ["sine", 990, 660, .21, .28, .22]],
+  loan: [["square", 260, 440, 0, .12, .18], ["sine", 440, 650, .14, .22, .26]],
+  alert: [["sine", 1160, 920, 0, .09, .18], ["sine", 1380, 1080, .11, .09, .14]],
+  retreat: [["triangle", 620, 280, 0, .26, .24], ["sine", 390, 230, .2, .3, .2]],
+  restart: [["triangle", 240, 920, 0, .32, .25], ["triangle", 920, 360, .32, .28, .27]],
+  probe: [["sine", 740, 880, 0, .1, .16], ["square", 440, 520, .14, .08, .13]],
+  veil: [["sawtooth", 310, 120, 0, .48, .22], ["sine", 880, 430, .08, .36, .15]],
+  protocol: [["triangle", 420, 840, 0, .3, .3], ["sine", 630, 1260, .16, .42, .28]],
+  signal: [["sine", 560, 720, 0, .16, .22]],
+});
+
+function playSkillFxSound(kind) {
+  if (Number(state.settings.sfx) <= 0) return;
+  const context = ensureAudioContext();
+  if (!context) return;
+  const voices = SKILL_FX_SOUND_PRESETS[kind] || SKILL_FX_SOUND_PRESETS.signal;
+  const now = context.currentTime;
+  const baseGain = Math.max(0.0002, Number(state.settings.sfx) / 5200);
+  voices.forEach(([type, from, to, start, duration, level]) => {
+    const oscillator = context.createOscillator();
+    const gain = context.createGain();
+    oscillator.type = type;
+    oscillator.frequency.setValueAtTime(Math.max(1, from), now + start);
+    if (to !== from) {
+      oscillator.frequency.exponentialRampToValueAtTime(Math.max(1, to), now + start + duration);
+    }
+    gain.gain.setValueAtTime(0.0001, now + start);
+    gain.gain.exponentialRampToValueAtTime(Math.max(0.0002, baseGain * level), now + start + .015);
+    gain.gain.exponentialRampToValueAtTime(0.0001, now + start + duration);
+    oscillator.connect(gain).connect(context.destination);
+    oscillator.start(now + start);
+    oscillator.stop(now + start + duration + .03);
+  });
+}
+
+window.addEventListener("overlimit:skill-fx-sound", (event) => {
+  playSkillFxSound(event.detail?.kind || "signal");
+});
 
 function updateAmbientAudio() {
   const context = Number(state.settings.music) > 0 ? ensureAudioContext() : audioContext;
@@ -1511,6 +1564,7 @@ function renderState() {
   el.selfHandType.textContent = state.handHint || "等待发牌";
   animatePot(state.pot);
   updateActionCountdown();
+  syncSkillFxStates();
 }
 
 function setConnectionUI(connected, message) {
@@ -1637,6 +1691,7 @@ function playAllInHaptics() {
 
 function playAllInEffect(_actorId, { preview = false } = {}) {
   if (preview && allInEffectEndsAt > Date.now()) return;
+  if (!preview) getSkillFxManager()?.pause(ALL_IN_EFFECT_MS, { clear: true });
   if (allInEffectTimer) clearTimeout(allInEffectTimer);
   el.flash.classList.add("hidden");
   el.flash.classList.toggle("is-preview", preview);
@@ -1718,6 +1773,9 @@ function isLiveSkillFxEvent(payload) {
 
 function isPublicSkillAnnounce(payload) {
   if (!payload?.skillId || payload.skillId === "ENDGAME") return false;
+  const visibility = String(payload.visibility || "").toUpperCase();
+  if (visibility === "SECRET") return false;
+  if (["PUBLIC", "RESULT"].includes(visibility)) return true;
   if (isGenericSecretSummary(payload.publicSummary)) return false;
   const summary = String(payload.publicSummary || "");
   if (!summary || summary.includes("隐秘") || summary.includes("秘密")) return false;
@@ -1729,122 +1787,261 @@ function skillFxCasterLabel(casterId) {
   return getOpponent()?.name || "对手";
 }
 
-function hideSkillFxLayers() {
-  el.skillFxPublic?.classList.add("hidden");
-  el.skillFxSecret?.classList.add("hidden");
-  document.body.classList.remove("skill-fx-public-on");
-  el.board?.classList.remove("skill-announce-hold", "skill-announce-blood");
+function skillFxTierForPayload(payload, { publicEvent = false, resultOnly = false } = {}) {
+  const id = String(payload?.skillId || "").toUpperCase();
+  if (id === "DEFENSE" && resultOnly) return "FX3";
+  if (id === "COUNTER" && !publicEvent) return "FX1";
+  if (id === "PROBE" && !resultOnly) return "FX1";
+  if (id === "DESPERATION" && !resultOnly) return "FX2";
+  return undefined;
+}
+
+function getSkillFxManager() {
+  if (skillFxManager || !window.OverlimitSkillFx?.createSkillFxManager || !el.skillEffectLayer) {
+    return skillFxManager;
+  }
+  skillFxManager = window.OverlimitSkillFx.createSkillFxManager({
+    effectLayer: el.skillEffectLayer,
+    stateLayer: el.skillStateLayer,
+    broadcastLayer: el.skillFxPublic,
+    privateLayer: el.skillFxSecret,
+    getSettings: () => ({
+      quality: state.settings.animation,
+      reduceMotion: state.settings.reduceMotion,
+      lowPerformance: state.settings.lowPerformance,
+    }),
+    getAnchors: () => ({
+      board: el.board,
+      self: el.selfArea,
+      opponent: el.opponentArea,
+      selfEnergy: el.selfEnergy?.closest(".skill-energy-row") || el.selfArea,
+      opponentEnergy: el.opponentEnergy?.parentElement || el.opponentArea,
+      selfCards: el.selfCards,
+      opponentCards: el.opponentCards,
+      community: el.community,
+      river: el.community?.querySelector('[data-board-index="4"]') || el.community,
+      pot: el.potCore,
+      deck: el.deckStack,
+      settlement: el.settleBoard || el.handSettleModal,
+      target: el.community,
+    }),
+    playSound: (kind) => playSkillFxSound(kind),
+    playHaptics: (pattern) => playFxHaptics(pattern),
+  });
+  return skillFxManager;
 }
 
 function clearSkillFxQueue() {
-  if (skillFxTimer) clearTimeout(skillFxTimer);
-  skillFxTimer = 0;
-  skillFxBusy = false;
-  skillFxQueue.length = 0;
-  hideSkillFxLayers();
+  getSkillFxManager()?.clear();
+  el.board?.classList.remove("skill-announce-hold", "skill-announce-blood");
 }
 
-function skillFxDuration(job) {
-  const reduced = Boolean(state.settings.reduceMotion || state.settings.lowPerformance);
-  const base = job.lane === "secret"
-    ? SKILL_FX_SECRET_MS
-    : (job.payload?.skillId === "BLOOD_BATTLE" ? SKILL_FX_BLOOD_MS : SKILL_FX_PUBLIC_MS);
-  return reduced ? Math.min(420, base) : base;
+function rememberSkillFxRequest(requestId, skillId, target) {
+  const meta = {
+    requestId,
+    skillId: String(skillId || "").toUpperCase(),
+    target: target && typeof target === "object" ? { ...target } : {},
+    phase: state.phase,
+    at: Date.now(),
+  };
+  skillFxRequestMeta.set(requestId, meta);
+  latestSkillFxMetaBySkill.set(meta.skillId, meta);
+  const cutoff = Date.now() - 15000;
+  skillFxRequestMeta.forEach((entry, key) => {
+    if (entry.at < cutoff) skillFxRequestMeta.delete(key);
+  });
+  latestSkillFxMetaBySkill.forEach((entry, key) => {
+    if (entry.at < cutoff) latestSkillFxMetaBySkill.delete(key);
+  });
+  return meta;
 }
 
-function showPublicSkillFx(job, ms) {
-  if (!el.skillFxPublic) return;
-  const payload = job.payload || {};
-  const skill = skillDefinition(payload.skillId);
-  const mine = payload.casterId === state.playerId;
-  const blood = skill.id === "BLOOD_BATTLE";
-  const verb = blood ? "宣告" : "发动";
-  el.skillFxPublic.dataset.skill = skill.id || "";
-  el.skillFxPublic.dataset.side = mine ? "self" : "opponent";
-  el.skillFxPublic.style.setProperty("--skfx-dur", ms + "ms");
-  if (el.skillFxWho) el.skillFxWho.textContent = skillFxCasterLabel(payload.casterId) + " " + verb;
-  if (el.skillFxName) el.skillFxName.textContent = skill.name || "技能";
-  if (el.skillFxTag) {
-    el.skillFxTag.textContent = blood ? "本手结算筹码 ×2" : "公开技能已生效";
+function skillFxMetaFor(payload) {
+  return skillFxRequestMeta.get(payload?.requestId)
+    || latestSkillFxMetaBySkill.get(String(payload?.skillId || "").toUpperCase())
+    || null;
+}
+
+function skillFxBoardTarget(index) {
+  const boardIndex = Number(index);
+  if (!Number.isInteger(boardIndex) || boardIndex < 0 || boardIndex > 4) return null;
+  return el.community?.querySelector(`[data-board-index="${boardIndex}"]`) || null;
+}
+
+function resolveSkillFxElements(skillId, meta, payload = {}) {
+  const id = String(skillId || "").toUpperCase();
+  const target = meta?.target || {};
+  const zone = String(target.zone || target.mode || payload.publicData?.mode || "").toLowerCase();
+  let targetElement = null;
+  if (id === "DESTINY") targetElement = skillFxBoardTarget(4);
+  if (["INTEL_ONE", "NULLIFICATION"].includes(id)) {
+    const index = target.boardIndex ?? target.index ?? payload.boardIndex;
+    targetElement = zone === "opponent" || zone === "hole"
+      ? el.opponentCards
+      : skillFxBoardTarget(index);
   }
-  el.skillFxPublic.classList.add("hidden");
-  void el.skillFxPublic.offsetWidth;
-  el.skillFxPublic.classList.remove("hidden");
-  document.body.classList.add("skill-fx-public-on");
-  lastPublicSkillFxId = skill.id || "";
-  lastPublicSkillFxAt = Date.now();
-  pulseBoard(blood ? "skill-announce-blood" : "skill-announce-hold", ms);
-  playTone(blood ? "blood" : "skill");
-  playFxHaptics(blood ? SKILL_FX_BLOOD_HAPTICS : SKILL_FX_PUBLIC_HAPTICS);
-}
-
-function showSecretSkillFx(job, ms) {
-  if (!el.skillFxSecret) return;
-  const payload = job.payload || {};
-  const skill = skillDefinition(payload.skillId);
-  const message = String(job.message || payload.message || "").trim();
-  el.skillFxSecret.style.setProperty("--skfx-dur", ms + "ms");
-  if (el.skillFxSecretName) el.skillFxSecretName.textContent = skill.name || "秘密技能";
-  if (el.skillFxSecretMsg) el.skillFxSecretMsg.textContent = message || "仅你可见，技能已生效";
-  el.skillFxSecret.classList.add("hidden");
-  void el.skillFxSecret.offsetWidth;
-  el.skillFxSecret.classList.remove("hidden");
-  playTone("secret");
-  playFxHaptics(SKILL_FX_SECRET_HAPTICS);
-}
-
-function pumpSkillFx() {
-  if (skillFxBusy || !skillFxQueue.length) return;
-  if (!el.game?.classList.contains("active")) {
-    skillFxQueue.length = 0;
-    return;
+  if (id === "CHEAT") {
+    if (["community", "future"].includes(zone)) targetElement = skillFxBoardTarget(target.index);
+    else if (zone === "opponent") targetElement = el.opponentCards?.children?.[Number(target.index)] || el.opponentCards;
+    else targetElement = el.selfCards?.children?.[Number(target.ownIndex)] || el.selfCards;
   }
-  const job = skillFxQueue.shift();
-  skillFxBusy = true;
-  hideSkillFxLayers();
-  const ms = skillFxDuration(job);
-  if (job.lane === "secret") showSecretSkillFx(job, ms);
-  else showPublicSkillFx(job, ms);
-  skillFxTimer = setTimeout(() => {
-    hideSkillFxLayers();
-    skillFxBusy = false;
-    skillFxTimer = 0;
-    pumpSkillFx();
-  }, ms);
+  if (["FORTUNE", "RESTART"].includes(id)) targetElement = el.selfCards;
+  if (["DEEP_BREATH", "RECYCLE"].includes(id)) targetElement = el.selfEnergy?.closest(".skill-energy-row") || el.selfArea;
+  if (["DEFENSE", "COUNTER", "ALERT"].includes(id)) targetElement = el.selfArea;
+  if (id === "TOP_SECRET") targetElement = payload.casterId === state.playerId ? el.selfArea : el.opponentArea;
+  if (["PERCEPTION", "CLAIRVOYANCE", "PROBE"].includes(id)) targetElement = el.opponentCards || el.opponentArea;
+  if (id === "LOAN") targetElement = zone === "energy"
+    ? (el.selfEnergy?.closest(".skill-energy-row") || el.selfArea)
+    : el.potCore;
+  if (["BLOOD_BATTLE", "RETREAT"].includes(id)) targetElement = el.potCore;
+  if (["INTIMIDATION", "FAIRNESS", "DEAD_END", "DISGUISE"].includes(id)) targetElement = el.board;
+  if (id === "DESPERATION") targetElement = payload.casterId === state.playerId ? el.selfArea : el.opponentArea;
+  return {
+    targetElement,
+    fromElement: id === "RETREAT" ? el.potCore : el.opponentArea,
+    toElement: id === "LOAN" && zone === "chip"
+      ? (payload.casterId === state.playerId ? el.selfArea : el.opponentArea)
+      : el.selfArea,
+    variant: payload.publicData?.mode || target.mode || target.zone || "default",
+    targetKey: [zone, target.boardIndex ?? target.index ?? target.ownIndex ?? ""].join(":"),
+  };
 }
 
-function enqueueSkillFx(job) {
-  if (!job || !el.game?.classList.contains("active")) return;
-  if (job.lane === "secret") {
-    const secretCount = skillFxQueue.filter((item) => item.lane === "secret").length;
-    if (secretCount >= 3) return;
-  }
-  skillFxQueue.push(job);
-  pumpSkillFx();
+function skillFxEffectLabel(payload, meta, privateMessage = "") {
+  const id = String(payload?.skillId || "").toUpperCase();
+  const labels = {
+    DEEP_BREATH: payload?.status === "REFUNDED"
+      ? `ENERGY RETURN +${Math.max(0, Number(payload?.amount) || 0)}`
+      : "RESOURCE CYCLE ARMED",
+    RECYCLE: "ENERGY RETURN",
+    INTIMIDATION: "NO FOLD // CAP 500",
+    DESPERATION: "CRITICAL WIN ×3",
+    BLOOD_BATTLE: "STAKES ×2",
+    DEFENSE: payload?.status === "REVEALED" ? "FINAL LOSS ×0.5" : "DEFENSE ARMED",
+    PERCEPTION: "PRIVATE SIGNAL",
+    INTEL_ONE: "TARGET READ",
+    TOP_SECRET: "ACCESS DENIED",
+    COUNTER: "ACTIVE SKILL INTERRUPTED",
+    FAIRNESS: "PENDING STATES CLEARED",
+    CHEAT: "CARD ROUTE ALTERED",
+    DEAD_END: "NO EXIT // ALL IN",
+    CLAIRVOYANCE: "HIDDEN TRACE READ",
+    NULLIFICATION: payload?.status === "REVEALED" ? "TARGET EXCLUDED" : "NULL TARGET LOCKED",
+    FORTUNE: "FAVORABLE BRANCH",
+    DESTINY: "RIVER LOCKED",
+    LOAN: payload?.publicData?.mode === "chip" && payload.publicData?.take != null
+      ? `CHIP CREDIT +${payload.publicData.take}`
+      : (meta?.target?.mode === "energy" ? "ENERGY CREDIT" : "CREDIT ROUTE OPEN"),
+    ALERT: "HIDDEN ACTIVITY",
+    RETREAT: payload?.status === "REVEALED" ? "CONTRIBUTIONS RETURNED" : "EXIT ROUTE ARMED",
+    RESTART: "HAND REBUILT",
+    PROBE: payload?.status === "REVEALED" ? "FOLD BONUS +50" : "PRESSURE MARK ARMED",
+    DISGUISE: "CHIP DATA MASKED",
+  };
+  if (labels[id]) return labels[id];
+  return privateMessage ? "PRIVATE RESULT" : "RESOLVED";
 }
 
 function announceSkillResolved(payload) {
-  if (!isLiveSkillFxEvent(payload) || !payload?.skillId) return;
-  if (payload.skillId === "ENDGAME") return;
-  if (isPublicSkillAnnounce(payload)) enqueueSkillFx({ lane: "public", payload });
+  if (!isLiveSkillFxEvent(payload) || !payload?.skillId || payload.skillId === "ENDGAME") return;
+  if (!el.game?.classList.contains("active")) return;
+  const publicEvent = isPublicSkillAnnounce(payload);
+  const isSelf = payload.casterId === state.playerId;
+  if (!publicEvent && !isSelf) return;
+  const meta = skillFxMetaFor(payload);
+  const elements = resolveSkillFxElements(payload.skillId, meta, payload);
+  const resultOnly = ["REVEALED", "RESULT"].includes(String(payload.status || "").toUpperCase());
+  // Defense is revealed while standard settlement is still being calculated.
+  // Its public VFX is played once from hand_result, anchored to the final chip
+  // ledger, so the preliminary socket event cannot create a duplicate pulse.
+  if (payload.skillId === "DEFENSE" && publicEvent && resultOnly) return;
+  getSkillFxManager()?.play({
+    eventId: payload.requestId ? `resolved:${payload.requestId}` : `resolved:${payload.skillId}:${payload.casterId}:${payload.status || "SUCCESS"}:${payload.at || Date.now()}`,
+    requestId: payload.requestId,
+    handNo: state.handNo,
+    skillId: payload.skillId,
+    casterId: payload.casterId,
+    viewerId: state.playerId,
+    casterLabel: skillFxCasterLabel(payload.casterId),
+    audience: isSelf ? "self" : "opponent",
+    disclosure: publicEvent ? (resultOnly ? "result" : "public") : "self",
+    status: payload.status || "SUCCESS",
+    phase: state.phase,
+    tier: skillFxTierForPayload(payload, { publicEvent, resultOnly }),
+    resultOnly,
+    safeMessage: publicEvent ? "" : `你发动了「${skillDefinition(payload.skillId).name}」`,
+    effectLabel: skillFxEffectLabel(payload, meta),
+    at: payload.at,
+    ...elements,
+  });
 }
 
 function announcePrivateSkillResult(payload) {
-  if (!isLiveSkillFxEvent(payload)) return;
-  const message = String(payload?.message || "").trim();
-  if (!message) return;
-  if (
-    payload.skillId &&
-    payload.skillId === lastPublicSkillFxId &&
-    Date.now() - lastPublicSkillFxAt < SKILL_FX_BLOOD_MS + 400
-  ) {
-    return;
+  if (!isLiveSkillFxEvent(payload) || !payload?.skillId || payload.skillId === "ENDGAME") return;
+  if (!el.game?.classList.contains("active")) return;
+  const message = String(payload.message || "").trim();
+  const meta = skillFxMetaFor(payload);
+  const elements = resolveSkillFxElements(payload.skillId, meta, payload);
+  getSkillFxManager()?.play({
+    eventId: payload.resultId ? `private:${payload.resultId}` : `private:${payload.skillId}:${payload.at || Date.now()}`,
+    resultId: payload.resultId,
+    handNo: state.handNo,
+    skillId: payload.skillId,
+    casterId: state.playerId,
+    viewerId: state.playerId,
+    casterLabel: "你",
+    audience: "self",
+    disclosure: "self",
+    status: payload.status || "SUCCESS",
+    phase: state.phase,
+    tier: skillFxTierForPayload(payload, { publicEvent: false, resultOnly: false }),
+    glyph: payload.skillId === "DEEP_BREATH" && Number(payload.amount) > 0
+      ? `+${Number(payload.amount)}`
+      : undefined,
+    safeMessage: message || "仅你可见，技能已结算",
+    effectLabel: skillFxEffectLabel(payload, meta, message),
+    at: payload.at,
+    ...elements,
+  });
+}
+
+function announceFreshPassiveSkillFx(entries) {
+  if (!el.game?.classList.contains("active") || !Array.isArray(entries)) return;
+  entries.filter((entry) => entry?.skillId === "DESPERATION").forEach((entry) => {
+    const key = [state.handNo, entry.skillId, entry.casterId, entry.at].join(":");
+    if (seenPassiveSkillFxKeys.has(key) || !isLiveSkillFxEvent(entry)) return;
+    seenPassiveSkillFxKeys.add(key);
+    announceSkillResolved({ ...entry, status: entry.status || "TRIGGERED" });
+  });
+}
+
+function announceNullificationReveals(nextCodes) {
+  const codes = new Set(Array.isArray(nextCodes) ? nextCodes : []);
+  if (el.game?.classList.contains("active")) {
+    [...codes].filter((code) => !revealedNullificationFxCodes.has(code)).forEach((code) => {
+      const index = state.communityCards.findIndex((card) => card?.code === code);
+      getSkillFxManager()?.play({
+        eventId: `null-reveal:${state.handNo}:${code}`,
+        handNo: state.handNo,
+        skillId: "NULLIFICATION",
+        casterId: "PUBLIC_RESULT",
+        viewerId: state.playerId,
+        audience: "public",
+        disclosure: "result",
+        status: "REVEALED",
+        resultOnly: true,
+        effectLabel: "BOARD CARD EXCLUDED",
+        targetElement: skillFxBoardTarget(index) || el.community,
+        targetKey: String(index),
+      });
+    });
   }
-  enqueueSkillFx({ lane: "secret", payload, message });
+  revealedNullificationFxCodes = codes;
 }
 
 function playEndgameDeclare({ execution = false } = {}) {
   if (!el.flashEndgameDeclare) return;
+  getSkillFxManager()?.pause(ENDGAME_DECLARE_MS, { clear: true });
   if (endgameDeclareTimer) clearTimeout(endgameDeclareTimer);
   el.flashEndgameDeclare.classList.add("hidden");
   el.flashEndgameDeclare.dataset.mode = execution ? "execution" : "declare";
@@ -1867,6 +2064,7 @@ function playEndgameDeclare({ execution = false } = {}) {
 
 function playEndgameExecution() {
   if (!el.flashEndgameKill) return;
+  getSkillFxManager()?.pause(ENDGAME_KILL_MS, { clear: true });
   if (endgameKillTimer) clearTimeout(endgameKillTimer);
   el.flashEndgameKill.classList.add("hidden");
   document.body.classList.remove("shake-hard");
@@ -1982,6 +2180,10 @@ function resetLocalRoom() {
     if (node) delete node.dataset.rowSignature;
   });
   state.nullifiedCommunityCardIds = [];
+  revealedNullificationFxCodes = new Set();
+  skillFxRequestMeta.clear();
+  latestSkillFxMetaBySkill.clear();
+  seenPassiveSkillFxKeys.clear();
   state.privateResultQueue = [];
   state.seenPrivateResultIds = new Set();
   state.commitments = new Map();
@@ -2275,6 +2477,94 @@ function updateHandSettleCountdown() {
   if (remaining > 0) state.handSettleRaf = requestAnimationFrame(updateHandSettleCountdown);
 }
 
+function playSettlementSkillFx(payload) {
+  if (!payload || state.settleReviewFromHistory || state.skillMode !== "abyss") return;
+  const effects = Array.isArray(payload.skillSettlement?.effects) ? payload.skillSettlement.effects : [];
+  const winnerId = payload.winner || null;
+  const loserId = (payload.players || []).find((player) => player.playerId !== winnerId)?.playerId || null;
+  const settlementEffects = effects.filter((effect) => {
+    const id = String(effect?.skillId || "").toUpperCase();
+    return id.startsWith("PROTOCOL_")
+      || ["PROBE", "DESPERATION", "BLOOD_BATTLE", "DEFENSE", "DEAD_END"].includes(id);
+  });
+  if (settlementEffects.length) {
+    const priority = ["PROTOCOL", "DEAD_END", "BLOOD_BATTLE", "DESPERATION", "DEFENSE", "PROBE"];
+    const primary = [...settlementEffects].sort((a, b) => {
+      const rank = (effect) => {
+        const id = String(effect?.skillId || "").toUpperCase();
+        const key = id.startsWith("PROTOCOL_") ? "PROTOCOL" : id;
+        const index = priority.indexOf(key);
+        return index < 0 ? priority.length : index;
+      };
+      return rank(a) - rank(b);
+    })[0];
+    const labelFor = (effect) => {
+      const id = String(effect?.skillId || "").toUpperCase();
+      const factor = Number(effect?.factor);
+      const amount = Number(effect?.amount);
+      if (id.startsWith("PROTOCOL_")) return `PROTOCOL ×${Number.isFinite(factor) ? factor : 2}`;
+      if (id === "PROBE") return Number.isFinite(amount) ? `PROBE +${amount}` : "PROBE BONUS";
+      if (id === "DESPERATION") return `CRITICAL ×${Number.isFinite(factor) ? factor : 3}`;
+      if (id === "BLOOD_BATTLE") return `BLOOD ×${Number.isFinite(factor) ? factor : 2}`;
+      if (id === "DEFENSE") return "DEFENSE ½";
+      if (id === "DEAD_END") return `NO EXIT ×${Number.isFinite(factor) ? factor : 3}`;
+      return id;
+    };
+    const compositeSkills = [...new Set(settlementEffects.map((effect) => String(effect.skillId || "").toUpperCase()))];
+    const compositeLabels = settlementEffects.map(labelFor);
+    const sourceId = primary.source === "opponent" ? loserId : winnerId;
+    const primaryId = String(primary.skillId || "").toUpperCase();
+    const maxTier = settlementEffects.some((effect) => String(effect.skillId || "").toUpperCase() === "DEAD_END")
+      ? "FX4"
+      : settlementEffects.some((effect) => ["DEFENSE", "BLOOD_BATTLE", "DESPERATION"].includes(String(effect.skillId || "").toUpperCase()))
+        ? "FX3"
+        : undefined;
+    getSkillFxManager()?.play({
+      eventId: `settlement:${payload.handNo || state.handNo}:${compositeSkills.join("+")}`,
+      handNo: payload.handNo || state.handNo,
+      skillId: primaryId,
+      casterId: sourceId || "PUBLIC_RESULT",
+      viewerId: state.playerId,
+      casterLabel: sourceId ? skillFxCasterLabel(sourceId) : "结算",
+      audience: "public",
+      disclosure: "result",
+      status: "REVEALED",
+      tier: maxTier,
+      context: "settlement",
+      resultOnly: true,
+      broadcast: false,
+      effectLabel: compositeLabels.join(" · "),
+      compositeSkills,
+      compositeLabels,
+      targetElement: primaryId.startsWith("PROTOCOL_")
+        ? (el.settleBoard || el.handSettleModal)
+        : (el.settleChipLedger || el.settleBoard || el.handSettleModal),
+      fromElement: el.potCore,
+      toElement: sourceId === state.playerId ? el.selfArea : el.opponentArea,
+      targetKey: compositeSkills.join("+"),
+    });
+  }
+  if (payload.reason === "retreat") {
+    getSkillFxManager()?.play({
+      eventId: `settlement:${payload.handNo || state.handNo}:RETREAT`,
+      handNo: payload.handNo || state.handNo,
+      skillId: "RETREAT",
+      casterId: "PUBLIC_RESULT",
+      viewerId: state.playerId,
+      audience: "public",
+      disclosure: "result",
+      status: "REVEALED",
+      context: "settlement",
+      resultOnly: true,
+      broadcast: false,
+      effectLabel: "CONTRIBUTIONS RETURNED",
+      targetElement: el.settleChipLedger || el.handSettleModal,
+      fromElement: el.potCore,
+      toElement: el.selfArea,
+    });
+  }
+}
+
 function startHandSettlement(payload, { review = false } = {}) {
   if (review) {
     showHandSettlementReview(payload);
@@ -2319,6 +2609,7 @@ function startHandSettlement(payload, { review = false } = {}) {
   el.handSettleModal.classList.toggle("is-endgame-execution", executionKill);
   if (executionKill) playEndgameExecution();
   el.handSettleModal.classList.remove("hidden");
+  if (!executionKill) playSettlementSkillFx(payload);
   el.board.classList.add("settle-dim");
   el.chipFx.classList.add("settlement-flow");
   syncHandHistoryButton();
@@ -3938,7 +4229,10 @@ function removeRulesHighlights() {
 function highlightRulesTarget(target, rawQuery) {
   if (!target) return;
   removeRulesHighlights();
-  target.classList.add("is-rule-target-flash");
+  const flashTarget = target.matches("[data-rule-section]")
+    ? target.querySelector(".rules-chapter-heading")
+    : target.querySelector(".rules-skill-heading, h4, h5, dt") || target;
+  flashTarget?.classList.add("is-rule-target-flash");
   const query = String(rawQuery || "").trim();
   let marked = false;
   if (query) {
@@ -3998,7 +4292,11 @@ function scrollToRulesTarget(anchorId, { behavior = "auto", query = "", highligh
     top: Math.max(0, top - 12),
     behavior: state.settings.reduceMotion ? "auto" : behavior,
   });
-  if (highlight) highlightRulesTarget(target, query);
+  if (highlight) {
+    highlightRulesTarget(target, query);
+  } else {
+    removeRulesHighlights();
+  }
   setRulesTocOpen(false);
   return true;
 }
@@ -4008,7 +4306,7 @@ function showRulesSection(sectionId, { scroll = false, query = "" } = {}) {
   const section = byId(sectionId);
   if (!section) return false;
   setActiveRulesToc(sectionId);
-  if (scroll) scrollToRulesTarget(sectionId, { query });
+  if (scroll) scrollToRulesTarget(sectionId, { query, highlight: Boolean(query) });
   return true;
 }
 
@@ -4140,7 +4438,7 @@ function openRulesHandbook({ fromSettings = false, sectionId = "rule-overview" }
   el.rulesModal.scrollTop = 0;
   el.rulesModal?.classList.remove("hidden");
   requestAnimationFrame(() => {
-    scrollToRulesTarget(sectionId, { behavior: "auto" });
+    scrollToRulesTarget(sectionId, { behavior: "auto", highlight: false });
     el.rulesSearch?.focus();
   });
   return true;
@@ -4223,7 +4521,7 @@ el.rulesArticle?.addEventListener("click", (event) => {
 });
 el.rulesArticle?.addEventListener("scroll", scheduleRulesScrollState, { passive: true });
 el.btnRulesTop?.addEventListener("click", () => {
-  scrollToRulesTarget("rule-overview", { behavior: "auto" });
+  scrollToRulesTarget("rule-overview", { behavior: "auto", highlight: false });
 });
 window.addEventListener("resize", () => {
   if (!isRulesMobileLayout()) setRulesTocOpen(false);
@@ -4543,6 +4841,7 @@ socket.on("room_state", (payload) => {
     if (Array.isArray(payload.skillState.recentLog)) {
       applyAuthoritativeSkillLog(payload.skillState.recentLog);
       payload.skillState.recentLog.forEach(rememberPublicSkillIntel);
+      announceFreshPassiveSkillFx(payload.skillState.recentLog);
     }
   }
   state.players = payload.players || state.players;
@@ -4591,6 +4890,7 @@ socket.on("room_state", (payload) => {
   maybeAutoSubmitLoadout();
   renderSkillDraft();
   renderState();
+  announceNullificationReveals(state.nullifiedCommunityCardIds);
 });
 socket.on("game_started", (payload) => {
   if (shouldIgnoreSyncEvent(payload)) return;
@@ -4610,6 +4910,9 @@ socket.on("your_cards", (payload) => {
   if (shouldIgnoreSyncEvent(payload)) return;
   invalidateSkillChoiceIfStale({ force: true });
   clearHandSettlement();
+  getSkillFxManager()?.clear();
+  revealedNullificationFxCodes = new Set();
+  seenPassiveSkillFxKeys.clear();
   state.gameOver = false;
   state.myCards = payload.cards || [];
   state.showdownCards = {};
@@ -4650,6 +4953,7 @@ socket.on("community_cards", (payload) => {
   }
   invalidateSkillChoiceIfStale();
   renderState();
+  announceNullificationReveals(state.nullifiedCommunityCardIds);
   if (state.communityCards.length > previousCount) triggerStreetEffect(state.phase);
 });
 socket.on("player_turn", (payload) => {
@@ -4694,7 +4998,8 @@ socket.on("action_made", (payload) => {
     playTone("chips");
   }
   if ((presentedAction === "allin" || payload.forcePublicAllIn) && (!state.chipViewHidden || payload.forcePublicAllIn || payload.playerId === state.playerId)) {
-    playAllInEffect(payload.playerId);
+    const deadEndOwnsPresentation = Boolean(payload.forcePublicAllIn && getSkillFxManager()?.isPlaying("DEAD_END"));
+    if (!deadEndOwnsPresentation) playAllInEffect(payload.playerId);
   } else playTone(payload.action);
   renderState();
 });
@@ -4865,9 +5170,6 @@ if (hasPendingReconnect) showScreen("wait");
 renderState();
 syncTableRailAccessibility();
 window.addEventListener("resize", syncTableRailAccessibility, { passive: true });
-if (!hasPendingReconnect && !state.quickStartSeen) {
-  requestAnimationFrame(() => openQuickStart({ page: 1, returnFocus: el.btnOpenQuickStart }));
-}
 
 /* ========== 深渊技能 UI ========== */
 function setSkillMode(mode) {
@@ -5178,6 +5480,45 @@ function applySkillRuntimeUi() {
   renderPlayers();
   renderActions();
   renderSkillHud();
+  syncSkillFxStates();
+}
+
+function syncSkillFxStates() {
+  if (!el.game?.classList.contains("active") || state.skillMode !== "abyss") {
+    skillFxManager?.syncStates([]);
+    return;
+  }
+  const self = state.skillSelf || {};
+  const room = state.skillState || {};
+  const descriptors = [];
+  let selfOffset = 0;
+  let tableOffset = 0;
+  const addSelf = (condition, key, label, tone) => {
+    if (!condition) return;
+    descriptors.push({ key, label, tone, targetElement: el.selfArea, offset: selfOffset });
+    selfOffset += 20;
+  };
+  const addTable = (condition, key, label, tone) => {
+    if (!condition) return;
+    descriptors.push({ key, label, tone, targetElement: el.board, offset: tableOffset });
+    tableOffset += 20;
+  };
+  addSelf(self.breathArmed, "deep-breath", "BREATH", "cyan");
+  addSelf(self.defenseActive, "defense", "DEF", "cyan");
+  addSelf(self.counterArmed, "counter", "COUNTER", "violet");
+  addSelf(self.topSecretActive, "top-secret", "SEALED", "gold");
+  addSelf(self.bloodBattleActive, "blood", "BLOOD", "red");
+  addSelf(self.desperationActive, "desperation", "CRITICAL", "red");
+  addSelf(self.deadEndActive, "dead-end", "NO EXIT", "red");
+  addSelf(self.retreatActive, "retreat", "EXIT", "cyan");
+  addSelf(self.probeActive, "probe", "PROBE", "gold");
+  addSelf(self.disguiseActive, "disguise-self", "MASK", "violet");
+  addSelf(self.energyLoanPending || self.chipLoanPending || Number(self.energyDebt) > 0 || Number(self.chipDebt) > 0,
+    "loan", "DEBT", "gold");
+  addTable(room.fairnessActive, "fairness", "SILENCE", "gold");
+  addTable(room.noFoldActive, "intimidation", "NO FOLD", "red");
+  addTable(room.disguiseActive, "disguise", "MASKED", "violet");
+  getSkillFxManager()?.syncStates(descriptors);
 }
 
 function renderSkillFeed() {
@@ -5314,10 +5655,12 @@ function renderSkillHud() {
 
 function emitSkillUse(skillId, target = {}) {
   if (!beginRealtimeRequest("skill", 5000)) return false;
+  const requestId = "req_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8);
+  rememberSkillFxRequest(requestId, skillId, target);
   socket.emit("skill:use", {
     skillId,
     target,
-    requestId: "req_" + Date.now() + "_" + Math.random().toString(36).slice(2, 8),
+    requestId,
     handId: state.activeCommitment?.handId || null,
     turnId: state.turnId,
     phase: state.phase,
@@ -6004,6 +6347,7 @@ socket.on("skill:state", (payload) => {
   if (Array.isArray(recentLog)) {
     applyAuthoritativeSkillLog(recentLog);
     recentLog.forEach(rememberPublicSkillIntel);
+    announceFreshPassiveSkillFx(recentLog);
   }
   if (el.game?.classList.contains("active")) {
     applySkillRuntimeUi();
@@ -6054,7 +6398,10 @@ socket.on("skill:resolved", (payload) => {
     announceSkillResolved(payload);
   }
   applySkillRuntimeUi();
-  if (payload.publicData?.nullifiedCommunityCardIds) renderCards();
+  if (payload.publicData?.nullifiedCommunityCardIds) {
+    renderCards();
+    announceNullificationReveals(state.nullifiedCommunityCardIds);
+  }
 });
 
 socket.on("skill:failed", (payload) => {

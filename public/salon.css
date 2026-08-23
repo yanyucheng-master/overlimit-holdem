@@ -2817,12 +2817,19 @@ html.has-modal-layer body {
 }
 
 .salon-ui .is-rule-target-flash {
-  animation: rule-target-flash 760ms ease-out;
+  border-radius: 6px;
+  animation: rule-target-flash 620ms ease-out;
 }
 
 @keyframes rule-target-flash {
-  0% { background-color: rgba(75, 224, 239, 0.15); }
-  100% { background-color: transparent; }
+  0% {
+    background-color: rgba(75, 224, 239, 0.07);
+    box-shadow: inset 3px 0 0 rgba(75, 224, 239, 0.78);
+  }
+  100% {
+    background-color: transparent;
+    box-shadow: inset 3px 0 0 rgba(75, 224, 239, 0);
+  }
 }
 
 @media (max-width: 760px) {

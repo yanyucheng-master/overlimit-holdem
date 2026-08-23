@@ -313,12 +313,14 @@ describe("socket integration", () => {
 
     const sockets = { PSKILLA: c1, PSKILLB: c2 };
     const caster = sockets[firstTurn.playerId];
+    const opponent = caster === c1 ? c2 : c1;
     const requestId = "integration-deep-breath";
     const resolved = waitFor(
       caster,
       "skill:resolved",
       (payload) => payload.requestId === requestId
     );
+    const opponentSeesNoResolved = expectNoEvent(opponent, "skill:resolved", 500);
     const noReaction = expectNoEvent(caster, "skill:reaction-window", 400);
     const startedAt = Date.now();
     caster.emit("skill:use", {
@@ -337,6 +339,7 @@ describe("socket integration", () => {
       })
     );
     await noReaction;
+    await opponentSeesNoResolved;
     expect(Date.now() - startedAt).toBeLessThan(1000);
   });
 

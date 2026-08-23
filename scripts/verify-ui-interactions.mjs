@@ -171,10 +171,21 @@ async function main() {
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
   const page = await context.newPage();
   const consoleErrors = [];
+  const externalConsoleErrors = [];
+  const requestErrors = [];
   page.on("console", (message) => {
-    if (message.type() === "error") consoleErrors.push(message.text());
+    if (message.type() !== "error") return;
+    const location = message.location();
+    const entry = location?.url ? `${message.text()} @ ${location.url}` : message.text();
+    if (!location?.url || location.url.startsWith(BASE)) consoleErrors.push(entry);
+    else externalConsoleErrors.push(entry);
   });
   page.on("pageerror", (error) => consoleErrors.push(error.message));
+  page.on("requestfailed", (request) => {
+    if (request.url().startsWith(BASE)) {
+      requestErrors.push(`${request.failure()?.errorText || "request failed"} @ ${request.url()}`);
+    }
+  });
 
   const report = {
     staticButtons: null,
@@ -194,6 +205,14 @@ async function main() {
   await page.waitForSelector("#screen-auth.active", { timeout: 10000 });
   await page.waitForSelector("#btn-open-skill-lab:not([disabled])", { timeout: 10000 });
 
+  await page.waitForSelector("#quickstart-modal", { state: "hidden", timeout: 5000 });
+  report.quickstart.autoStart = await page.evaluate(() => ({
+    autoOpened: !document.getElementById("quickstart-modal")?.classList.contains("hidden"),
+    mainInert: Boolean(document.getElementById("main-content")?.inert),
+    stored: localStorage.getItem("overlimit_quickstart_v1"),
+    entryAction: document.getElementById("quickstart-entry-action")?.textContent || "",
+  }));
+  await page.click("#btn-open-quickstart");
   await page.waitForSelector("#quickstart-modal:not(.hidden)", { timeout: 5000 });
   report.quickstart.initial = await page.evaluate(() => ({
     pageCount: document.querySelectorAll("[data-quickstart-page]").length,
@@ -521,6 +540,10 @@ async function main() {
 
   const failures = [];
   if (
+    report.quickstart.autoStart.autoOpened ||
+    report.quickstart.autoStart.mainInert ||
+    report.quickstart.autoStart.stored !== null ||
+    report.quickstart.autoStart.entryAction !== "开始阅读" ||
     report.quickstart.initial.pageCount !== 4 ||
     report.quickstart.initial.pageStatus !== "01 / 04" ||
     report.quickstart.initial.activePage !== "1" ||
@@ -665,8 +688,16 @@ async function main() {
     if (current.hitAudit.failures.length) failures.push(`${label} button hit targets blocked`);
   }
   if (consoleErrors.length) failures.push("browser console errors");
+  if (requestErrors.length) failures.push("same-origin resource requests failed");
 
-  console.log(JSON.stringify({ ok: failures.length === 0, failures, consoleErrors, report }, null, 2));
+  console.log(JSON.stringify({
+    ok: failures.length === 0,
+    failures,
+    consoleErrors,
+    externalConsoleErrors,
+    requestErrors,
+    report,
+  }, null, 2));
   if (failures.length) process.exit(1);
 }
 

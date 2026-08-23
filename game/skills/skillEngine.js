@@ -292,6 +292,13 @@ function sanitizeSkillEventForReveal(entry = {}) {
   }, {});
 }
 
+function isPrivateOnlyRevealSkillEvent(entry = {}) {
+  // Deep Breath is personal resource planning. Its identity and even its
+  // occurrence stay in the server-side private audit instead of the public
+  // hand reveal; Clairvoyance still reads the authoritative live action log.
+  return entry.skillId === "DEEP_BREATH" && entry.secret === true;
+}
+
 function sanitizeSkillTransformForReveal(entry = {}) {
   const safe = {};
   ["at", "skillId", "casterId", "node"].forEach((key) => {
@@ -562,6 +569,7 @@ class SkillEngine {
       skillId: skill.id,
       casterId: player.playerId,
       status: options.status || "SUCCESS",
+      visibility: secret ? "SECRET" : "PUBLIC",
       publicSummary: options.publicSummary || `${player.name} 发动「${skill.name}」`,
       publicData: options.publicData || null,
     };
@@ -696,7 +704,15 @@ class SkillEngine {
       const debtLock = runtime.abyssEnergy < 0;
       if (!fairness) {
         if (runtime.breathArmed && !runtime.breathBroken) {
-          gainEnergy(player, SKILL_CONFIG.DEEP_BREATH_RESTORE);
+          const restored = gainEnergy(player, SKILL_CONFIG.DEEP_BREATH_RESTORE);
+          if (restored > 0) {
+            this.notifyPrivate(player, {
+              skillId: "DEEP_BREATH",
+              status: "REFUNDED",
+              amount: restored,
+              message: `深呼吸：恢复 ${restored} 点能量。`,
+            });
+          }
         }
         if (runtime.counterArmed) {
           runtime.counterArmed = false;
@@ -1025,7 +1041,12 @@ class SkillEngine {
     switch (skill.id) {
       case "DEEP_BREATH":
         runtime.breathArmed = true;
-        return { publicSummary: `${player.name} 调整呼吸`, pending: true, audit: { armed: true, cost } };
+        return {
+          secret: true,
+          publicSummary: "秘密技能已结算",
+          pending: true,
+          audit: { armed: true, cost },
+        };
       case "INTIMIDATION":
         room.skillState.noFoldActive = true;
         room.skillState.contributionCap = SKILL_CONFIG.FEAR_CONTRIBUTION_CAP;
@@ -2106,9 +2127,9 @@ class SkillEngine {
       skillTransforms: (state.transformations || []).map((entry) => (
         includePrivateAudit ? clone(entry) : sanitizeSkillTransformForReveal(entry)
       )),
-      skillActions: (state.skillActionLog || []).map((entry) => (
-        includePrivateAudit ? clone(entry) : sanitizeSkillEventForReveal(entry)
-      )),
+      skillActions: (state.skillActionLog || [])
+        .filter((entry) => includePrivateAudit || !isPrivateOnlyRevealSkillEvent(entry))
+        .map((entry) => (includePrivateAudit ? clone(entry) : sanitizeSkillEventForReveal(entry))),
       equippedSkills: includeLoadouts
         ? room.players.map((player) => ({
           playerId: player.playerId,

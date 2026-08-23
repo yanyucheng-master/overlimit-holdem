@@ -311,7 +311,7 @@ async function main() {
   if (actionAudit) {
     // Bot loadouts may validly resolve only secret skills in this short random
     // window. Keep public observation as diagnostics, not a pass/fail gate.
-    actionAudit.botPublicSkillObserved = /深渊AI.*(?:血战|防守|深呼吸)/.test(
+    actionAudit.botPublicSkillObserved = /深渊AI.*血战/.test(
       actionAudit.after?.skillLog || ""
     );
   }

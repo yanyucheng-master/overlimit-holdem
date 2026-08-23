@@ -281,13 +281,16 @@ describe("能量、深呼吸、回收与公平", () => {
     expect(getPublicSkillSummary(b).knownSkills).toContain("FAIRNESS");
   });
 
-  test("自然公开的技能会进入已知构筑并跨手保留", () => {
-    const { engine, room, a } = setupRoom({ loadoutA: ["DEEP_BREATH", "RECYCLE"] });
+  test("秘密技能不进入已知构筑；自然公开的技能仍跨手保留", () => {
+    const { engine, room, a } = setupRoom({ loadoutA: ["DEEP_BREATH", "BLOOD_BATTLE", "RECYCLE"] });
     expect(use(engine, room, a, "DEEP_BREATH", {}, "reveal-breath")).toMatchObject({ status: "SUCCESS" });
-    expect(getPublicSkillSummary(a).knownSkills).toContain("DEEP_BREATH");
+    expect(getPublicSkillSummary(a).knownSkills).not.toContain("DEEP_BREATH");
+    expect(use(engine, room, a, "BLOOD_BATTLE", {}, "reveal-blood")).toMatchObject({ status: "SUCCESS" });
+    expect(getPublicSkillSummary(a).knownSkills).toContain("BLOOD_BATTLE");
 
     beginHandSkills(room);
-    expect(getPublicSkillSummary(a).knownSkills).toContain("DEEP_BREATH");
+    expect(getPublicSkillSummary(a).knownSkills).not.toContain("DEEP_BREATH");
+    expect(getPublicSkillSummary(a).knownSkills).toContain("BLOOD_BATTLE");
     expect(getPublicSkillSummary(a)).not.toHaveProperty("equippedSkillIds");
   });
 

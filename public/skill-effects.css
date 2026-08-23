@@ -1,0 +1,1321 @@
+/* OVERLIMIT launch skill effects -------------------------------------------------
+   Event effects live in a fixed, pointer-transparent surface. Persistent state
+   markers are rendered by a separate layer so an event can end without erasing
+   information that remains true for the hand. ENDGAME is intentionally absent. */
+
+.skill-effect-layer,
+.skill-state-layer {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  overflow: hidden;
+  pointer-events: none;
+  contain: layout style paint;
+}
+
+.skill-effect-layer {
+  z-index: 170;
+}
+
+.skill-effect-layer.is-settlement-active {
+  z-index: 225;
+}
+
+.skill-state-layer {
+  z-index: 158;
+}
+
+.skill-effect-instance {
+  --fx-x: 50vw;
+  --fx-y: 50vh;
+  --fx-w: 220px;
+  --fx-h: 120px;
+  --fx-from-x: 72vw;
+  --fx-from-y: 30vh;
+  --fx-to-x: 28vw;
+  --fx-to-y: 72vh;
+  --fx-route-length: 42vw;
+  --fx-route-angle: 135deg;
+  --fx-accent: #46e6ff;
+  --fx-secondary: #a65cff;
+  --fx-duration: 680ms;
+  position: absolute;
+  inset: 0;
+  isolation: isolate;
+  color: #f7fbff;
+  font-family: "Rajdhani", "Microsoft YaHei", sans-serif;
+  animation: skill-effect-instance-fade var(--fx-duration) linear both;
+}
+
+.skill-effect-core {
+  position: absolute;
+  left: var(--fx-x);
+  top: var(--fx-y);
+  width: clamp(132px, calc(var(--fx-w) * 1.32), 540px);
+  height: clamp(104px, calc(var(--fx-h) * 1.45), 360px);
+  transform: translate(-50%, -50%);
+  filter: drop-shadow(0 0 16px color-mix(in srgb, var(--fx-accent) 48%, transparent));
+  animation: skill-effect-core-arrive var(--fx-duration) cubic-bezier(.16, .82, .22, 1) both;
+}
+
+.skill-effect-halo,
+.skill-effect-line,
+.skill-effect-card,
+.skill-effect-glyph,
+.skill-effect-particles,
+.skill-effect-particles .particle {
+  position: absolute;
+  display: block;
+}
+
+.skill-effect-halo {
+  inset: 12%;
+  border: 1px solid color-mix(in srgb, var(--fx-accent) 70%, transparent);
+  border-radius: 50%;
+  box-shadow:
+    0 0 18px color-mix(in srgb, var(--fx-accent) 30%, transparent),
+    inset 0 0 18px color-mix(in srgb, var(--fx-secondary) 18%, transparent);
+}
+
+.skill-effect-halo.halo-a {
+  animation: skill-effect-ring-out var(--fx-duration) cubic-bezier(.2, .7, .2, 1) both;
+}
+
+.skill-effect-halo.halo-b {
+  inset: 28%;
+  border-style: dashed;
+  border-color: color-mix(in srgb, var(--fx-secondary) 74%, transparent);
+  animation: skill-effect-ring-in var(--fx-duration) ease-out both;
+}
+
+.skill-effect-line {
+  left: 12%;
+  right: 12%;
+  top: 50%;
+  height: 1px;
+  transform-origin: center;
+  background: linear-gradient(90deg, transparent, var(--fx-accent), #fff, var(--fx-secondary), transparent);
+  box-shadow: 0 0 10px var(--fx-accent);
+  animation: skill-effect-line-cut var(--fx-duration) cubic-bezier(.12, .8, .2, 1) both;
+}
+
+.skill-effect-line.line-b { transform: rotate(60deg); animation-delay: 45ms; }
+.skill-effect-line.line-c { transform: rotate(-60deg); animation-delay: 90ms; }
+
+.skill-effect-card {
+  left: 50%;
+  top: 50%;
+  width: clamp(34px, calc(var(--fx-w) * .2), 72px);
+  aspect-ratio: .7;
+  border: 1px solid color-mix(in srgb, var(--fx-accent) 72%, transparent);
+  border-radius: 8px;
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--fx-accent) 12%, #07101e), #050815 62%),
+    repeating-linear-gradient(45deg, transparent 0 8px, color-mix(in srgb, var(--fx-secondary) 20%, transparent) 8px 9px);
+  opacity: 0;
+}
+
+.skill-effect-card.card-a { transform: translate(-120%, -50%) rotate(-9deg); }
+.skill-effect-card.card-b { transform: translate(20%, -50%) rotate(9deg); }
+.skill-effect-card.card-c { transform: translate(-50%, -50%); }
+
+.skill-effect-glyph {
+  left: 50%;
+  top: 50%;
+  min-width: 1.15em;
+  transform: translate(-50%, -50%);
+  color: #fff;
+  font-family: "Orbitron", "Rajdhani", sans-serif;
+  font-size: clamp(25px, 3vw, 52px);
+  font-style: normal;
+  font-weight: 800;
+  line-height: 1;
+  text-align: center;
+  text-shadow:
+    0 0 8px #fff,
+    0 0 22px var(--fx-accent),
+    0 0 42px var(--fx-secondary);
+  animation: skill-effect-glyph-hit var(--fx-duration) cubic-bezier(.18, .8, .22, 1) both;
+}
+
+.skill-effect-particles {
+  inset: 0;
+}
+
+.skill-effect-particles .particle {
+  --particle-angle: 0deg;
+  --particle-distance: 68px;
+  left: 50%;
+  top: 50%;
+  width: 5px;
+  height: 5px;
+  border-radius: 1px;
+  background: #fff;
+  box-shadow: 0 0 9px var(--fx-accent);
+  animation: skill-effect-particle-out var(--fx-duration) ease-out both;
+}
+
+.skill-effect-particles .particle-1 { --particle-angle: 0deg; --particle-distance: 76px; }
+.skill-effect-particles .particle-2 { --particle-angle: 45deg; --particle-distance: 58px; animation-delay: 30ms; }
+.skill-effect-particles .particle-3 { --particle-angle: 90deg; --particle-distance: 82px; animation-delay: 60ms; }
+.skill-effect-particles .particle-4 { --particle-angle: 135deg; --particle-distance: 66px; animation-delay: 90ms; }
+.skill-effect-particles .particle-5 { --particle-angle: 180deg; --particle-distance: 90px; animation-delay: 40ms; }
+.skill-effect-particles .particle-6 { --particle-angle: 225deg; --particle-distance: 61px; animation-delay: 75ms; }
+.skill-effect-particles .particle-7 { --particle-angle: 270deg; --particle-distance: 78px; animation-delay: 105ms; }
+.skill-effect-particles .particle-8 { --particle-angle: 315deg; --particle-distance: 70px; animation-delay: 135ms; }
+
+.skill-effect-route {
+  position: absolute;
+  left: var(--fx-from-x);
+  top: var(--fx-from-y);
+  width: var(--fx-route-length);
+  height: 8px;
+  transform: rotate(var(--fx-route-angle));
+  transform-origin: 0 50%;
+  opacity: 0;
+}
+
+.skill-effect-route .route-line {
+  position: absolute;
+  inset: 3px 0 auto;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--fx-secondary) 18%, #fff 50%, var(--fx-accent) 82%, transparent);
+  box-shadow: 0 0 9px var(--fx-accent);
+}
+
+.skill-effect-route .route-packet {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 8px;
+  height: 8px;
+  transform: rotate(45deg);
+  background: #fff;
+  box-shadow: 0 0 12px var(--fx-accent);
+  animation: skill-effect-packet var(--fx-duration) cubic-bezier(.18, .78, .2, 1) both;
+}
+
+.skill-effect-route .packet-b { animation-delay: 110ms; }
+
+.skill-effect-caption {
+  position: absolute;
+  left: var(--fx-x);
+  top: calc(var(--fx-y) + max(76px, calc(var(--fx-h) * .85)));
+  width: min(78vw, 430px);
+  transform: translate(-50%, -50%);
+  text-align: center;
+  text-transform: uppercase;
+  text-shadow: 0 2px 18px #02030b;
+  animation: skill-effect-caption-in var(--fx-duration) cubic-bezier(.18, .82, .22, 1) both;
+}
+
+.skill-effect-instance[data-placement="above"] .skill-effect-caption {
+  top: calc(var(--fx-y) - max(76px, calc(var(--fx-h) * .85)));
+}
+
+.skill-effect-caption > * {
+  display: block;
+}
+
+.skill-effect-kicker {
+  color: color-mix(in srgb, var(--fx-accent) 78%, #fff);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: .28em;
+}
+
+.skill-effect-title {
+  margin-top: 3px;
+  color: #fff;
+  font-family: "Orbitron", "Rajdhani", sans-serif;
+  font-size: clamp(16px, 2vw, 26px);
+  letter-spacing: .11em;
+  text-shadow: 0 0 18px var(--fx-accent);
+}
+
+.skill-effect-result {
+  margin-top: 4px;
+  color: color-mix(in srgb, var(--fx-secondary) 58%, #fff);
+  font-size: 10px;
+  font-style: normal;
+  font-weight: 700;
+  letter-spacing: .17em;
+}
+
+.skill-effect-modifiers {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 4px;
+  margin-top: 7px;
+}
+
+.skill-effect-modifier {
+  display: inline-flex;
+  align-items: center;
+  min-height: 18px;
+  padding: 2px 7px;
+  border: 1px solid color-mix(in srgb, var(--fx-accent) 44%, transparent);
+  border-radius: 999px;
+  background: rgb(4 8 19 / .78);
+  color: color-mix(in srgb, var(--fx-accent) 64%, #fff);
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 800;
+  letter-spacing: .12em;
+  white-space: nowrap;
+}
+
+.skill-effect-instance[data-context="settlement"] .skill-effect-core {
+  width: clamp(180px, calc(var(--fx-w) * 1.7), 620px);
+  height: clamp(130px, calc(var(--fx-h) * 1.65), 420px);
+}
+
+.skill-effect-instance[data-context="settlement"] .skill-effect-caption {
+  top: min(calc(var(--fx-y) + 148px), calc(100dvh - 78px));
+}
+
+.skill-effect-instance[data-effect="protocol"] .skill-effect-caption {
+  top: calc(var(--fx-y) - 132px);
+}
+
+/* 01 Deep Breath: a controlled inhale/exhale with energy motes returning. */
+.skill-effect-instance[data-effect="breath"] .skill-effect-core {
+  z-index: 2;
+  width: clamp(118px, calc(var(--fx-w) * 3.2), 172px);
+  height: clamp(104px, calc(var(--fx-h) * 3.2), 158px);
+  filter:
+    drop-shadow(0 0 10px color-mix(in srgb, var(--fx-accent) 72%, transparent))
+    drop-shadow(0 0 28px color-mix(in srgb, var(--fx-secondary) 42%, transparent));
+}
+.skill-effect-instance[data-effect="breath"] .halo-a {
+  border-width: 3px;
+  background: radial-gradient(circle, color-mix(in srgb, var(--fx-accent) 12%, transparent), transparent 64%);
+  box-shadow:
+    0 0 22px color-mix(in srgb, var(--fx-accent) 46%, transparent),
+    inset 0 0 20px color-mix(in srgb, var(--fx-secondary) 28%, transparent);
+  animation-name: skill-effect-breath-ring;
+}
+.skill-effect-instance[data-effect="breath"] .halo-b {
+  border-width: 2px;
+  border-style: solid;
+}
+.skill-effect-instance[data-effect="breath"] .skill-effect-glyph {
+  display: none;
+}
+.skill-effect-instance[data-effect="breath"] .skill-effect-line,
+.skill-effect-instance[data-effect="breath"] .skill-effect-card { display: none; }
+.skill-effect-instance[data-effect="breath"] .particle {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  animation-name: skill-effect-particle-in;
+}
+
+/* 02 Recycle: broken amber fragments reverse into a cool complete loop. */
+.skill-effect-instance[data-effect="recycle"] .halo-a {
+  border-width: 3px;
+  border-left-color: transparent;
+  border-bottom-color: var(--fx-secondary);
+  animation-name: skill-effect-recycle-ring;
+}
+.skill-effect-instance[data-effect="recycle"] .halo-b { display: none; }
+.skill-effect-instance[data-effect="recycle"] .skill-effect-line,
+.skill-effect-instance[data-effect="recycle"] .skill-effect-card { display: none; }
+.skill-effect-instance[data-effect="recycle"] .particle {
+  background: var(--fx-secondary);
+  animation-name: skill-effect-particle-in;
+}
+
+/* 03 Intimidation: table-wide pressure scan and hard betting perimeter. */
+.skill-effect-instance[data-effect="intimidation"] .skill-effect-core {
+  width: min(82vw, 1040px);
+  height: min(44vh, 360px);
+}
+.skill-effect-instance[data-effect="intimidation"] .halo-a {
+  inset: 8% 2%;
+  border-radius: 24px;
+  border-width: 2px;
+  animation-name: skill-effect-pressure-frame;
+}
+.skill-effect-instance[data-effect="intimidation"] .halo-b { display: none; }
+.skill-effect-instance[data-effect="intimidation"] .skill-effect-line {
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--fx-accent), #fff, var(--fx-accent), transparent);
+}
+.skill-effect-instance[data-effect="intimidation"] .line-b,
+.skill-effect-instance[data-effect="intimidation"] .line-c,
+.skill-effect-instance[data-effect="intimidation"] .skill-effect-card { display: none; }
+
+/* 04 Desperation: a critical-health aperture with a three-step multiplier hit. */
+.skill-effect-instance[data-effect="desperation"] .halo-a {
+  border: 3px solid var(--fx-accent);
+  border-top-color: transparent;
+  border-bottom-color: var(--fx-secondary);
+  animation-name: skill-effect-critical-ring;
+}
+.skill-effect-instance[data-effect="desperation"] .halo-b { border-style: solid; }
+.skill-effect-instance[data-effect="desperation"] .skill-effect-line,
+.skill-effect-instance[data-effect="desperation"] .skill-effect-card { display: none; }
+
+/* 05 Blood Battle: a magenta/red fracture over the pot; the only large multiplier pulse. */
+.skill-effect-instance[data-effect="blood"] .skill-effect-core {
+  width: min(70vw, 840px);
+  height: min(42vh, 390px);
+  filter: drop-shadow(0 0 28px rgb(255 22 78 / .6));
+}
+.skill-effect-instance[data-effect="blood"] .halo-a {
+  inset: 3%;
+  border: 3px solid var(--fx-accent);
+  border-radius: 48% 52% 46% 54%;
+  animation-name: skill-effect-blood-ring;
+}
+.skill-effect-instance[data-effect="blood"] .halo-b {
+  inset: 24%;
+  border-color: var(--fx-secondary);
+}
+.skill-effect-instance[data-effect="blood"] .skill-effect-line {
+  height: 4px;
+  transform: rotate(-14deg);
+  background: linear-gradient(90deg, transparent, #ff2b5f, #fff 48%, #c12dff 52%, transparent);
+}
+.skill-effect-instance[data-effect="blood"] .line-b { transform: rotate(13deg); }
+.skill-effect-instance[data-effect="blood"] .line-c { transform: rotate(-3deg); }
+.skill-effect-instance[data-effect="blood"] .skill-effect-card { display: none; }
+
+/* 06 Defense: hexagonal shield planes absorb an incoming line. */
+.skill-effect-instance[data-effect="defense"] .halo-a {
+  inset: 4% 17%;
+  border-radius: 18% 18% 48% 48%;
+  border-width: 3px;
+  clip-path: polygon(50% 0, 94% 16%, 86% 70%, 50% 100%, 14% 70%, 6% 16%);
+  animation-name: skill-effect-shield-hit;
+}
+.skill-effect-instance[data-effect="defense"] .halo-b {
+  inset: 24% 34%;
+  border-style: solid;
+  clip-path: polygon(50% 0, 94% 16%, 86% 70%, 50% 100%, 14% 70%, 6% 16%);
+}
+.skill-effect-instance[data-effect="defense"] .skill-effect-card { display: none; }
+.skill-effect-instance[data-effect="defense"] .line-a { transform: rotate(90deg); }
+.skill-effect-instance[data-effect="defense"] .line-b,
+.skill-effect-instance[data-effect="defense"] .line-c { display: none; }
+
+/* 07 Perception: one restrained radar sweep, deliberately the quietest FX. */
+.skill-effect-instance[data-effect="perception"] .skill-effect-core { width: 180px; height: 180px; }
+.skill-effect-instance[data-effect="perception"] .halo-a {
+  border-left-color: transparent;
+  border-bottom-color: transparent;
+  animation-name: skill-effect-radar-sweep;
+}
+.skill-effect-instance[data-effect="perception"] .halo-b { inset: 34%; border-style: solid; }
+.skill-effect-instance[data-effect="perception"] .skill-effect-line,
+.skill-effect-instance[data-effect="perception"] .skill-effect-card,
+.skill-effect-instance[data-effect="perception"] .particle:nth-child(n+4) { display: none; }
+
+/* 08 Intel: scan brackets close around the exact selected card/slot. */
+.skill-effect-instance[data-effect="intel"] .halo-a {
+  inset: 2%;
+  border-radius: 12px;
+  border-width: 2px;
+  clip-path: polygon(0 0, 30% 0, 30% 4%, 4% 4%, 4% 30%, 0 30%, 0 0, 100% 0, 100% 30%, 96% 30%, 96% 4%, 70% 4%, 70% 0, 100% 0, 100% 100%, 70% 100%, 70% 96%, 96% 96%, 96% 70%, 100% 70%, 100% 100%, 0 100%, 0 70%, 4% 70%, 4% 96%, 30% 96%, 30% 100%, 0 100%);
+  animation-name: skill-effect-bracket-lock;
+}
+.skill-effect-instance[data-effect="intel"] .halo-b,
+.skill-effect-instance[data-effect="intel"] .skill-effect-card { display: none; }
+.skill-effect-instance[data-effect="intel"] .line-a { transform: rotate(90deg); }
+.skill-effect-instance[data-effect="intel"] .line-b,
+.skill-effect-instance[data-effect="intel"] .line-c { display: none; }
+
+/* 09 Top Secret: a gold vault shutter closes over protected information. */
+.skill-effect-instance[data-effect="top-secret"] .halo-a {
+  inset: 5% 12%;
+  border-radius: 14px;
+  border-width: 3px;
+  animation-name: skill-effect-vault-close;
+}
+.skill-effect-instance[data-effect="top-secret"] .halo-b { inset: 24% 31%; border-style: solid; border-radius: 8px; }
+.skill-effect-instance[data-effect="top-secret"] .skill-effect-card { display: none; }
+
+/* 10 Counter: cyan and crimson vectors intersect and snap the target signal. */
+.skill-effect-instance[data-effect="counter"] .halo-a {
+  border-color: var(--fx-secondary);
+  animation-name: skill-effect-counter-collapse;
+}
+.skill-effect-instance[data-effect="counter"] .halo-b,
+.skill-effect-instance[data-effect="counter"] .skill-effect-card { display: none; }
+.skill-effect-instance[data-effect="counter"] .line-a { transform: rotate(34deg); height: 4px; }
+.skill-effect-instance[data-effect="counter"] .line-b { transform: rotate(-34deg); height: 4px; }
+.skill-effect-instance[data-effect="counter"] .line-c { display: none; }
+
+/* 11 Fairness: a neutral white/gold reset wave removes colored state noise. */
+.skill-effect-instance[data-effect="fairness"] .skill-effect-core {
+  width: min(88vw, 1180px);
+  height: min(72vh, 760px);
+}
+.skill-effect-instance[data-effect="fairness"] .halo-a {
+  inset: 4%;
+  border-width: 4px;
+  animation-name: skill-effect-reset-wave;
+}
+.skill-effect-instance[data-effect="fairness"] .halo-b {
+  inset: 34%;
+  border-style: solid;
+  animation-name: skill-effect-reset-core;
+}
+.skill-effect-instance[data-effect="fairness"] .skill-effect-card { display: none; }
+.skill-effect-instance[data-effect="fairness"] .skill-effect-line { background: linear-gradient(90deg, transparent, #fff, var(--fx-accent), #fff, transparent); }
+
+/* 12 Cheat: two physical card planes cross on cyan/magenta swap tracks. */
+.skill-effect-instance[data-effect="cheat"] .skill-effect-card { opacity: 1; }
+.skill-effect-instance[data-effect="cheat"] .card-a { animation: skill-effect-card-swap-a var(--fx-duration) cubic-bezier(.22,.76,.18,1) both; }
+.skill-effect-instance[data-effect="cheat"] .card-b { animation: skill-effect-card-swap-b var(--fx-duration) cubic-bezier(.22,.76,.18,1) both; }
+.skill-effect-instance[data-effect="cheat"] .card-c,
+.skill-effect-instance[data-effect="cheat"] .halo-b { display: none; }
+.skill-effect-instance[data-effect="cheat"] .halo-a { border-radius: 16px; border-style: dashed; }
+
+/* 13 Dead End: opposing blast doors close and leave a hard red lock. */
+.skill-effect-instance[data-effect="dead-end"] .skill-effect-core { width: min(84vw, 1080px); height: min(58vh, 560px); }
+.skill-effect-instance[data-effect="dead-end"] .halo-a {
+  inset: 4%;
+  border-radius: 12px;
+  border-width: 4px;
+  animation-name: skill-effect-lock-frame;
+}
+.skill-effect-instance[data-effect="dead-end"] .halo-b { inset: 31% 42%; border-style: solid; border-radius: 4px; }
+.skill-effect-instance[data-effect="dead-end"] .skill-effect-card {
+  opacity: .75;
+  top: 50%;
+  width: 42%;
+  height: 80%;
+  border-radius: 4px;
+  background: linear-gradient(90deg, rgb(69 4 18 / .82), rgb(10 6 18 / .96));
+}
+.skill-effect-instance[data-effect="dead-end"] .card-a { animation: skill-effect-door-left var(--fx-duration) cubic-bezier(.15,.82,.18,1) both; }
+.skill-effect-instance[data-effect="dead-end"] .card-b { animation: skill-effect-door-right var(--fx-duration) cubic-bezier(.15,.82,.18,1) both; }
+.skill-effect-instance[data-effect="dead-end"] .card-c { display: none; }
+
+/* 14 Clairvoyance: layered eye/radar lens reads the opponent's hidden trace. */
+.skill-effect-instance[data-effect="clairvoyance"] .halo-a {
+  inset: 15% 2%;
+  border-radius: 50% 8%;
+  transform: rotate(45deg);
+  animation-name: skill-effect-eye-open;
+}
+.skill-effect-instance[data-effect="clairvoyance"] .halo-b { inset: 31%; border-style: solid; }
+.skill-effect-instance[data-effect="clairvoyance"] .skill-effect-line,
+.skill-effect-instance[data-effect="clairvoyance"] .skill-effect-card { display: none; }
+
+/* 15 Nullification: a violet/cyan void consumes only the resolved target. */
+.skill-effect-instance[data-effect="nullification"] .halo-a {
+  border-width: 3px;
+  border-color: var(--fx-secondary);
+  animation-name: skill-effect-null-void;
+}
+.skill-effect-instance[data-effect="nullification"] .halo-b { border-style: solid; border-color: var(--fx-accent); }
+.skill-effect-instance[data-effect="nullification"] .skill-effect-line { height: 3px; }
+.skill-effect-instance[data-effect="nullification"] .line-a { transform: rotate(45deg); }
+.skill-effect-instance[data-effect="nullification"] .line-b { transform: rotate(-45deg); }
+.skill-effect-instance[data-effect="nullification"] .line-c,
+.skill-effect-instance[data-effect="nullification"] .skill-effect-card { display: none; }
+
+/* 16 Fortune: several probability branches converge on one gold outcome. */
+.skill-effect-instance[data-effect="fortune"] .halo-a { border-color: var(--fx-accent); animation-name: skill-effect-fortune-converge; }
+.skill-effect-instance[data-effect="fortune"] .halo-b { border-color: var(--fx-secondary); }
+.skill-effect-instance[data-effect="fortune"] .skill-effect-card { display: none; }
+.skill-effect-instance[data-effect="fortune"] .skill-effect-line {
+  transform-origin: 100% 50%;
+  animation-name: skill-effect-branch-converge;
+}
+
+/* 17 Destiny: the fifth board slot receives a gold seal and river index V. */
+.skill-effect-instance[data-effect="destiny"] .halo-a {
+  inset: 1%;
+  border-radius: 12px;
+  border: 3px double var(--fx-accent);
+  animation-name: skill-effect-destiny-seal;
+}
+.skill-effect-instance[data-effect="destiny"] .halo-b { inset: 20%; border-style: solid; border-radius: 9px; }
+.skill-effect-instance[data-effect="destiny"] .skill-effect-line,
+.skill-effect-instance[data-effect="destiny"] .skill-effect-card { display: none; }
+
+/* 18 Loan: visible chip credit travels player-to-player; secret energy loops locally. */
+.skill-effect-instance[data-effect="loan"] .skill-effect-route { opacity: 1; }
+.skill-effect-instance[data-effect="loan"] .skill-effect-card { display: none; }
+.skill-effect-instance[data-effect="loan"] .halo-a { border-left-color: var(--fx-secondary); border-right-color: var(--fx-accent); }
+.skill-effect-instance[data-effect="loan"][data-variant="energy"] .skill-effect-route { display: none; }
+.skill-effect-instance[data-effect="loan"][data-variant="energy"] .halo-a { animation-name: skill-effect-energy-credit; }
+
+/* 19 Alert: an opponent-origin wave resolves only when the observer is prompted. */
+.skill-effect-instance[data-effect="alert"] .skill-effect-route { opacity: 1; }
+.skill-effect-instance[data-effect="alert"] .route-packet { border-radius: 50%; }
+.skill-effect-instance[data-effect="alert"] .skill-effect-line,
+.skill-effect-instance[data-effect="alert"] .skill-effect-card { display: none; }
+.skill-effect-instance[data-effect="alert"] .halo-a { border-left-color: transparent; animation-name: skill-effect-alert-wave; }
+
+/* 20 Retreat: contribution packets reverse from the pot toward both players. */
+.skill-effect-instance[data-effect="retreat"] .skill-effect-route { opacity: 1; transform: rotate(calc(var(--fx-route-angle) + 180deg)); }
+.skill-effect-instance[data-effect="retreat"] .route-packet { animation-direction: reverse; }
+.skill-effect-instance[data-effect="retreat"] .skill-effect-card,
+.skill-effect-instance[data-effect="retreat"] .skill-effect-line { display: none; }
+.skill-effect-instance[data-effect="retreat"] .halo-a { border-right-color: transparent; animation-name: skill-effect-retreat-open; }
+
+/* 21 Restart: both cards collapse to a deck core, shuffle, and redeal. */
+.skill-effect-instance[data-effect="restart"] .skill-effect-card { opacity: 1; }
+.skill-effect-instance[data-effect="restart"] .card-a { animation: skill-effect-restart-card-a var(--fx-duration) cubic-bezier(.2,.78,.16,1) both; }
+.skill-effect-instance[data-effect="restart"] .card-b { animation: skill-effect-restart-card-b var(--fx-duration) cubic-bezier(.2,.78,.16,1) both; }
+.skill-effect-instance[data-effect="restart"] .card-c { animation: skill-effect-restart-deck var(--fx-duration) cubic-bezier(.2,.78,.16,1) both; }
+.skill-effect-instance[data-effect="restart"] .skill-effect-line { display: none; }
+
+/* 22 Probe: a small planted marker; +50 appears only on the public result. */
+.skill-effect-instance[data-effect="probe"] .skill-effect-core { width: 190px; height: 150px; }
+.skill-effect-instance[data-effect="probe"] .halo-a { border-radius: 12px; border-style: dashed; animation-name: skill-effect-probe-mark; }
+.skill-effect-instance[data-effect="probe"] .halo-b,
+.skill-effect-instance[data-effect="probe"] .skill-effect-card,
+.skill-effect-instance[data-effect="probe"] .line-b,
+.skill-effect-instance[data-effect="probe"] .line-c { display: none; }
+
+/* 23 Disguise: the table's numeric layer fragments, then settles behind a veil. */
+.skill-effect-instance[data-effect="disguise"] .skill-effect-core { width: min(84vw, 1080px); height: min(58vh, 620px); }
+.skill-effect-instance[data-effect="disguise"] .halo-a {
+  inset: 3%;
+  border-radius: 28px;
+  border-color: var(--fx-secondary);
+  background: repeating-linear-gradient(90deg, transparent 0 10%, color-mix(in srgb, var(--fx-accent) 8%, transparent) 10% 11%);
+  animation-name: skill-effect-veil;
+}
+.skill-effect-instance[data-effect="disguise"] .halo-b { display: none; }
+.skill-effect-instance[data-effect="disguise"] .skill-effect-line { background: linear-gradient(90deg, transparent, var(--fx-secondary), var(--fx-accent), transparent); }
+.skill-effect-instance[data-effect="disguise"] .skill-effect-card { display: none; }
+
+/* Shared showdown protocol template. */
+.skill-effect-instance[data-effect="protocol"] .skill-effect-core {
+  width: min(76vw, 820px);
+  height: min(42vh, 380px);
+}
+.skill-effect-instance[data-effect="protocol"] .halo-a {
+  inset: 4%;
+  border: 3px double var(--fx-accent);
+  border-radius: 28px;
+  animation-name: skill-effect-protocol-outline;
+}
+.skill-effect-instance[data-effect="protocol"] .halo-b { inset: 24%; border-style: solid; }
+.skill-effect-instance[data-effect="protocol"] .skill-effect-card { opacity: 1; }
+.skill-effect-instance[data-effect="protocol"] .card-a,
+.skill-effect-instance[data-effect="protocol"] .card-b { animation: skill-effect-protocol-card var(--fx-duration) cubic-bezier(.18,.82,.2,1) both; }
+.skill-effect-instance[data-effect="protocol"] .card-c { display: none; }
+
+/* Status layer: compact and deliberately static. */
+.skill-state-marker {
+  --state-x: 50vw;
+  --state-y: 50vh;
+  position: absolute;
+  left: var(--state-x);
+  top: var(--state-y);
+  min-width: 25px;
+  padding: 3px 7px;
+  transform: translate(-100%, 0);
+  border: 1px solid rgb(83 229 239 / .38);
+  border-radius: 999px;
+  background: rgb(4 11 23 / .78);
+  color: #7feaf0;
+  box-shadow: 0 0 10px rgb(60 224 235 / .12);
+  font: 800 9px/1.2 "Rajdhani", sans-serif;
+  letter-spacing: .13em;
+  text-align: center;
+  text-transform: uppercase;
+  backdrop-filter: blur(4px);
+}
+
+.skill-state-marker[data-tone="gold"] { border-color: rgb(244 203 102 / .48); color: #f3d67f; }
+.skill-state-marker[data-tone="red"] { border-color: rgb(255 61 102 / .48); color: #ff6988; }
+.skill-state-marker[data-tone="violet"] { border-color: rgb(171 100 255 / .48); color: #c793ff; }
+
+/* Broadcast layer remains a short identity confirmation and is visually
+   subordinate to the anchored effect. */
+.skill-fx-public[data-family] {
+  position: fixed;
+  inset: auto;
+  top: max(70px, calc(env(safe-area-inset-top) + 54px));
+  left: 50%;
+  display: block;
+  width: min(430px, calc(100vw - 32px));
+  min-height: 50px;
+  overflow: hidden;
+  transform: translateX(-50%);
+  border: 1px solid color-mix(in srgb, var(--fx-accent) 38%, rgb(90 110 150 / .25));
+  border-radius: 13px;
+  background: rgb(3 8 20 / .88);
+  box-shadow: 0 12px 36px rgb(0 0 0 / .34), 0 0 20px color-mix(in srgb, var(--fx-accent) 11%, transparent);
+  contain: layout paint;
+}
+
+.skill-fx-public[data-family] .skfx-dim {
+  inset: 0;
+  background: linear-gradient(90deg,
+    color-mix(in srgb, var(--fx-accent) 10%, transparent),
+    transparent 34% 72%,
+    color-mix(in srgb, var(--fx-secondary) 9%, transparent));
+}
+
+.skill-fx-public[data-family] .skfx-vignette {
+  display: none;
+}
+
+.skill-fx-public[data-family] .skfx-slash {
+  left: 50%;
+  top: 50%;
+  width: 125%;
+  height: 1px;
+}
+
+.skill-fx-public[data-family] .skfx-spark {
+  width: 70px;
+  height: 70px;
+}
+
+.skill-fx-public[data-family] .skfx-lockup {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "who name" "who tag";
+  align-items: center;
+  justify-items: start;
+  gap: 2px 11px;
+  min-height: 50px;
+  padding: 7px 14px;
+  text-align: left;
+}
+
+.skill-fx-public[data-family] .skfx-who {
+  grid-area: who;
+  max-width: 92px;
+  overflow: hidden;
+  font-size: 9px;
+  letter-spacing: .14em;
+  text-indent: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-fx-public[data-family] .skfx-name {
+  grid-area: name;
+  color: #fff;
+  font-size: 15px;
+  line-height: 1.1;
+  letter-spacing: .12em;
+  text-indent: 0;
+  text-shadow: 0 0 18px var(--fx-accent), 0 0 44px var(--fx-secondary);
+}
+
+.skill-fx-public[data-family] .skfx-tag {
+  grid-area: tag;
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  color: color-mix(in srgb, var(--fx-accent) 64%, #fff);
+  font-size: 9px;
+  line-height: 1.15;
+  letter-spacing: .1em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.skill-fx-public[data-family="fairness"] .skfx-slash,
+.skill-fx-public[data-family="intimidation"] .skfx-slash,
+.skill-fx-public[data-family="disguise"] .skfx-slash { transform: translate(-50%, -50%) rotate(0deg); }
+
+.skill-fx-secret[data-family] {
+  border-color: color-mix(in srgb, var(--fx-accent, #55e8df) 45%, transparent);
+  box-shadow: 0 12px 34px rgb(0 0 0 / .38), 0 0 22px color-mix(in srgb, var(--fx-accent, #55e8df) 12%, transparent);
+}
+
+body.skill-fx-shake-soft #screen-game.active {
+  animation: skill-effect-table-shake 120ms cubic-bezier(.2,.75,.25,1) both;
+}
+
+/* Quality gates. */
+.skill-effect-layer[data-fx-quality="medium"] .particle:nth-child(n+7),
+.skill-effect-layer[data-fx-quality="low"] .particle:nth-child(n+4),
+.skill-effect-layer[data-fx-quality="low"] .halo-b,
+.skill-effect-layer[data-fx-quality="low"] .line-c {
+  display: none;
+}
+
+.skill-effect-layer[data-fx-quality="low"] .skill-effect-core {
+  filter: none;
+}
+
+.skill-effect-layer[data-fx-motion="reduced"] .skill-effect-instance,
+.skill-effect-layer[data-fx-motion="reduced"] .skill-effect-core,
+.skill-effect-layer[data-fx-motion="reduced"] .skill-effect-halo,
+.skill-effect-layer[data-fx-motion="reduced"] .skill-effect-line,
+.skill-effect-layer[data-fx-motion="reduced"] .skill-effect-card,
+.skill-effect-layer[data-fx-motion="reduced"] .skill-effect-glyph,
+.skill-effect-layer[data-fx-motion="reduced"] .skill-effect-route,
+.skill-effect-layer[data-fx-motion="reduced"] .skill-effect-caption {
+  animation: skill-effect-reduced-fade var(--fx-duration) ease both !important;
+}
+
+.skill-effect-layer[data-fx-motion="reduced"] .skill-effect-particles,
+.skill-effect-layer[data-fx-motion="reduced"] .skill-effect-line,
+.skill-effect-layer[data-fx-motion="reduced"] .skill-effect-route,
+.skill-effect-layer[data-fx-motion="reduced"] .skill-effect-card {
+  display: none !important;
+}
+
+body.reduce-motion.skill-fx-shake-soft #screen-game.active,
+body.low-performance.skill-fx-shake-soft #screen-game.active {
+  animation: none;
+}
+
+@media (max-width: 720px) {
+  .skill-fx-public[data-family] {
+    top: max(62px, calc(env(safe-area-inset-top) + 48px));
+    width: min(390px, calc(100vw - 20px));
+  }
+  .skill-fx-public[data-family] .skfx-lockup { padding-inline: 10px; }
+  .skill-fx-public[data-family] .skfx-who { max-width: 72px; }
+  .skill-effect-core {
+    width: clamp(112px, calc(var(--fx-w) * 1.18), 330px);
+    height: clamp(92px, calc(var(--fx-h) * 1.26), 260px);
+  }
+  .skill-effect-caption {
+    top: calc(var(--fx-y) + max(62px, calc(var(--fx-h) * .72)));
+    width: min(88vw, 350px);
+  }
+  .skill-effect-title { font-size: 15px; }
+  .skill-effect-result { font-size: 9px; letter-spacing: .12em; }
+  .skill-effect-instance[data-effect="fairness"] .skill-effect-core,
+  .skill-effect-instance[data-effect="dead-end"] .skill-effect-core,
+  .skill-effect-instance[data-effect="disguise"] .skill-effect-core {
+    width: 94vw;
+    height: 58vh;
+  }
+  .skill-state-marker { padding: 2px 5px; font-size: 8px; }
+}
+
+/* Development-only Skill FX Gallery. The launcher is removed by JavaScript on
+   non-local hosts unless the explicit ?skillfx=1 flag is present. */
+.skill-fx-gallery-launcher {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 155;
+  min-width: 78px;
+  min-height: 38px;
+  border: 1px solid rgb(89 231 240 / .38);
+  border-radius: 999px;
+  background: rgb(3 11 24 / .88);
+  color: #77eef2;
+  box-shadow: 0 8px 28px rgb(0 0 0 / .34), 0 0 20px rgb(62 223 235 / .12);
+  font: 800 11px/1 "Orbitron", sans-serif;
+  letter-spacing: .16em;
+  cursor: pointer;
+}
+
+.skill-fx-gallery-launcher.hidden { display: none; }
+
+/* The development launcher must never become part of the live table's hit
+   surface. During a hand the gallery remains available through
+   ?skillfx=gallery, while the floating launcher yields every pointer target to
+   the actual game controls. */
+body[data-screen="game"] .skill-fx-gallery-launcher {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.skill-fx-gallery-panel {
+  width: min(1480px, calc(100vw - 34px));
+  height: min(900px, calc(100dvh - 34px));
+  overflow: hidden;
+}
+
+.skill-fx-gallery-workspace {
+  display: grid;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
+  gap: 16px;
+  min-height: 0;
+  height: calc(100% - 76px);
+}
+
+.skill-fx-gallery-controls {
+  display: grid;
+  align-content: start;
+  gap: 9px;
+  min-height: 0;
+  padding: 12px;
+  overflow: auto;
+  border-radius: 16px;
+  background: rgb(2 8 19 / .62);
+  box-shadow: inset 0 0 0 1px rgb(110 215 230 / .12);
+}
+
+.skill-fx-gallery-controls label {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  color: #7f91ad;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.skill-fx-gallery-controls select {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  border: 1px solid rgb(108 215 229 / .18);
+  border-radius: 8px;
+  background: #070d19;
+  color: #dce8f6;
+  padding: 0 8px;
+  font-size: 11px;
+}
+
+.skill-fx-gallery-controls .skill-fx-gallery-check input {
+  justify-self: end;
+}
+
+.skill-fx-gallery-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.skill-fx-gallery-status-text {
+  display: block;
+  min-height: 36px;
+  padding: 9px;
+  border-radius: 9px;
+  background: rgb(43 231 219 / .06);
+  color: #6de5df;
+  font: 700 10px/1.4 "Rajdhani", sans-serif;
+  letter-spacing: .1em;
+}
+
+.skill-fx-gallery-status-text[data-tone="suppressed"] {
+  background: rgb(255 82 118 / .08);
+  color: #ff718e;
+}
+
+.skill-fx-gallery-stage {
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+  border-radius: 20px;
+  background:
+    radial-gradient(circle at 50% 44%, rgb(67 29 125 / .34), transparent 34%),
+    radial-gradient(circle at 50% 45%, rgb(15 136 164 / .15), transparent 54%),
+    linear-gradient(180deg, #07091a, #030711 70%);
+  box-shadow: inset 0 0 0 1px rgb(110 90 213 / .24), inset 0 0 70px rgb(25 4 64 / .54);
+}
+
+.skill-fx-gallery-grid {
+  position: absolute;
+  inset: 0;
+  opacity: .15;
+  background-image:
+    linear-gradient(rgb(68 226 239 / .13) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(68 226 239 / .13) 1px, transparent 1px);
+  background-size: 38px 38px;
+  mask-image: radial-gradient(circle, #000, transparent 76%);
+}
+
+.skill-fx-gallery-player {
+  position: absolute;
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: min(52%, 520px);
+  min-height: 66px;
+  padding: 10px 16px;
+  transform: translateX(-50%);
+  border-radius: 15px;
+  background: rgb(5 13 31 / .82);
+  box-shadow: inset 0 0 0 1px rgb(73 211 224 / .16);
+  color: #8396b4;
+  font: 800 11px/1 "Orbitron", sans-serif;
+  letter-spacing: .14em;
+}
+
+.skill-fx-gallery-player strong { margin-left: auto; color: #f2d378; font-size: 18px; }
+.skill-fx-gallery-energy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  background: rgb(46 223 224 / .08);
+  color: #63dde3;
+  font-size: 9px;
+  letter-spacing: .08em;
+}
+.skill-fx-gallery-energy b { color: #d8fbff; font: 800 10px/1 "Orbitron", sans-serif; }
+.skill-fx-gallery-player.gallery-opponent { top: 4%; }
+.skill-fx-gallery-player.gallery-self { bottom: 4%; }
+
+.skill-fx-gallery-cards {
+  display: flex;
+  gap: 6px;
+}
+
+.skill-fx-gallery-cards i,
+.skill-fx-gallery-board-row i {
+  display: block;
+  width: 46px;
+  aspect-ratio: .7;
+  border: 1px solid rgb(59 213 235 / .34);
+  border-radius: 7px;
+  background: linear-gradient(145deg, #13274e, #120d3c 68%);
+  box-shadow: inset 0 0 0 3px rgb(3 7 22 / .48);
+}
+
+.skill-fx-gallery-board-row {
+  position: absolute;
+  left: 50%;
+  top: 45%;
+  display: flex;
+  gap: 8px;
+  transform: translate(-50%, -50%);
+}
+
+.skill-fx-gallery-board-row i:nth-child(-n+3) {
+  background: linear-gradient(145deg, #eef5ff, #cfdcf1);
+  border-color: #f2d882;
+}
+
+.skill-fx-gallery-pot {
+  position: absolute;
+  left: 50%;
+  top: 65%;
+  display: grid;
+  place-items: center;
+  width: 78px;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border: 2px solid rgb(221 68 224 / .62);
+  border-radius: 50%;
+  background: rgb(9 8 31 / .86);
+  color: #9a82b7;
+  box-shadow: 0 0 0 6px rgb(54 222 232 / .08), 0 0 32px rgb(172 45 206 / .2);
+}
+
+.skill-fx-gallery-pot span { font: 700 9px/1 "Rajdhani", sans-serif; letter-spacing: .14em; }
+.skill-fx-gallery-pot strong { color: #f5f7ff; font: 800 23px/1 "Orbitron", sans-serif; }
+
+.skill-fx-gallery-settlement {
+  position: absolute;
+  right: 20px;
+  bottom: 18px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: rgb(237 199 93 / .08);
+  color: #e6c96d;
+  font: 700 10px/1 "Rajdhani", sans-serif;
+  letter-spacing: .16em;
+}
+
+.skill-fx-gallery-effect-layer {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  z-index: 6;
+}
+
+.skill-fx-gallery-broadcast {
+  position: absolute;
+  z-index: 8;
+}
+
+.skill-fx-public.skill-fx-gallery-broadcast[data-family] {
+  position: absolute;
+  top: 14px;
+  left: 50%;
+  width: min(430px, calc(100% - 28px));
+}
+
+.skill-fx-secret.skill-fx-gallery-private[data-family] {
+  position: absolute;
+  z-index: 8;
+  left: 18px;
+  right: auto;
+  bottom: 104px;
+  width: min(280px, calc(100% - 36px));
+}
+
+@media (max-width: 860px) {
+  .skill-fx-gallery-panel { overflow: auto; }
+  .skill-fx-gallery-workspace { grid-template-columns: 1fr; height: auto; }
+  .skill-fx-gallery-controls { grid-template-columns: 1fr 1fr; max-height: none; }
+  .skill-fx-gallery-controls label { grid-template-columns: 72px 1fr; }
+  .skill-fx-gallery-stage { min-height: 520px; }
+}
+
+@media (max-width: 560px) {
+  .skill-fx-gallery-panel { width: calc(100vw - 16px); height: calc(100dvh - 16px); }
+  .skill-fx-gallery-controls { grid-template-columns: 1fr; }
+  .skill-fx-gallery-player { width: 82%; }
+  .skill-fx-gallery-board-row { gap: 4px; }
+  .skill-fx-gallery-cards i,
+  .skill-fx-gallery-board-row i { width: 38px; }
+  .skill-effect-instance[data-effect="protocol"] .skill-effect-caption {
+    top: calc(var(--fx-y) - 104px);
+  }
+}
+
+@keyframes skill-effect-instance-fade {
+  0% { opacity: 0; }
+  8%, 76% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes skill-effect-core-arrive {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(.72); }
+  24% { opacity: 1; transform: translate(-50%, -50%) scale(1.04); }
+  68% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.08); }
+}
+@keyframes skill-effect-ring-out {
+  0% { opacity: 0; transform: scale(.42) rotate(-24deg); }
+  32% { opacity: 1; }
+  100% { opacity: 0; transform: scale(1.18) rotate(18deg); }
+}
+@keyframes skill-effect-ring-in {
+  0% { opacity: 0; transform: scale(1.6) rotate(25deg); }
+  35% { opacity: .9; }
+  100% { opacity: 0; transform: scale(.72) rotate(-35deg); }
+}
+@keyframes skill-effect-line-cut {
+  0% { opacity: 0; scale: .04 1; }
+  30% { opacity: 1; scale: 1 1; }
+  68% { opacity: .72; }
+  100% { opacity: 0; scale: 1.08 1; }
+}
+@keyframes skill-effect-glyph-hit {
+  0%, 12% { opacity: 0; transform: translate(-50%, -50%) scale(2.1); filter: blur(7px); }
+  31% { opacity: 1; transform: translate(-50%, -50%) scale(.9); filter: blur(0); }
+  45% { transform: translate(-50%, -50%) scale(1); }
+  82% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.08); }
+}
+@keyframes skill-effect-particle-out {
+  0%, 18% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--particle-angle)) translateX(2px) scale(.3); }
+  35% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--particle-angle)) translateX(var(--particle-distance)) scale(.08); }
+}
+@keyframes skill-effect-particle-in {
+  0% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--particle-angle)) translateX(var(--particle-distance)) scale(.2); }
+  42% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--particle-angle)) translateX(4px) scale(1); }
+}
+@keyframes skill-effect-packet {
+  0%, 14% { opacity: 0; left: 0; }
+  24% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; left: calc(100% - 8px); }
+}
+@keyframes skill-effect-caption-in {
+  0%, 16% { opacity: 0; transform: translate(-50%, calc(-50% + 12px)); letter-spacing: .32em; }
+  36%, 78% { opacity: 1; transform: translate(-50%, -50%); }
+  100% { opacity: 0; transform: translate(-50%, calc(-50% - 6px)); }
+}
+@keyframes skill-effect-breath-ring {
+  0% { opacity: 0; transform: scale(1.18); }
+  38% { opacity: 1; transform: scale(.7); }
+  72% { opacity: 1; transform: scale(.76); }
+  100% { opacity: 0; transform: scale(1.18); }
+}
+@keyframes skill-effect-recycle-ring {
+  0% { opacity: 0; transform: rotate(120deg) scale(.58); border-color: var(--fx-secondary); }
+  50% { opacity: 1; transform: rotate(-20deg) scale(1); }
+  100% { opacity: 0; transform: rotate(-210deg) scale(1.12); border-color: var(--fx-accent); }
+}
+@keyframes skill-effect-pressure-frame {
+  0% { opacity: 0; transform: scaleX(1.18) scaleY(.72); }
+  34%, 72% { opacity: 1; transform: scale(1); box-shadow: inset 0 0 42px rgb(255 43 80 / .18), 0 0 28px rgb(255 43 80 / .3); }
+  100% { opacity: 0; transform: scale(.98); }
+}
+@keyframes skill-effect-critical-ring {
+  0% { opacity: 0; transform: rotate(-80deg) scale(.55); }
+  26% { opacity: 1; transform: rotate(0) scale(1.08); }
+  42% { transform: rotate(15deg) scale(.94); }
+  58% { transform: rotate(30deg) scale(1.06); }
+  78% { opacity: 1; transform: rotate(45deg) scale(1); }
+  100% { opacity: 0; transform: rotate(75deg) scale(1.2); }
+}
+@keyframes skill-effect-blood-ring {
+  0% { opacity: 0; transform: scale(.26) rotate(-16deg); }
+  24% { opacity: 1; transform: scale(1.08) rotate(2deg); }
+  48% { transform: scale(.95) rotate(-3deg); }
+  76% { opacity: 1; transform: scale(1.03) rotate(2deg); }
+  100% { opacity: 0; transform: scale(1.22) rotate(7deg); }
+}
+@keyframes skill-effect-shield-hit {
+  0% { opacity: 0; transform: perspective(300px) rotateY(72deg) scale(.6); }
+  36% { opacity: 1; transform: perspective(300px) rotateY(0) scale(1.08); }
+  48% { transform: perspective(300px) rotateY(-5deg) scale(.96); }
+  80% { opacity: 1; transform: perspective(300px) rotateY(0) scale(1); }
+  100% { opacity: 0; transform: scale(1.12); }
+}
+@keyframes skill-effect-radar-sweep {
+  0% { opacity: 0; transform: rotate(-120deg) scale(.7); }
+  30%, 72% { opacity: 1; }
+  100% { opacity: 0; transform: rotate(250deg) scale(1.08); }
+}
+@keyframes skill-effect-bracket-lock {
+  0% { opacity: 0; transform: scale(1.5); }
+  42%, 78% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(.94); }
+}
+@keyframes skill-effect-vault-close {
+  0% { opacity: 0; transform: scaleX(1.7) scaleY(.4); }
+  38% { opacity: 1; transform: scale(1); }
+  52% { box-shadow: inset 0 0 0 1px #fff, inset 0 0 44px var(--fx-secondary), 0 0 30px var(--fx-accent); }
+  100% { opacity: 0; transform: scale(.96); }
+}
+@keyframes skill-effect-counter-collapse {
+  0% { opacity: 0; transform: scale(1.7); }
+  38% { opacity: 1; transform: scale(.82); }
+  52% { transform: scale(1.05); }
+  100% { opacity: 0; transform: scale(.1); }
+}
+@keyframes skill-effect-reset-wave {
+  0% { opacity: 0; transform: scale(.06); }
+  30% { opacity: 1; }
+  75% { opacity: .85; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.12); }
+}
+@keyframes skill-effect-reset-core {
+  0%, 25% { opacity: 0; transform: scale(2.4) rotate(60deg); }
+  52%, 78% { opacity: 1; transform: scale(1) rotate(0); }
+  100% { opacity: 0; transform: scale(.4) rotate(-20deg); }
+}
+@keyframes skill-effect-card-swap-a {
+  0% { opacity: 0; transform: translate(-180%, -50%) rotate(-22deg) scale(.72); }
+  28% { opacity: 1; }
+  68% { opacity: 1; transform: translate(30%, -50%) rotate(10deg) scale(1.05); }
+  100% { opacity: 0; transform: translate(80%, -50%) rotate(15deg) scale(.9); }
+}
+@keyframes skill-effect-card-swap-b {
+  0% { opacity: 0; transform: translate(80%, -50%) rotate(20deg) scale(.72); }
+  28% { opacity: 1; }
+  68% { opacity: 1; transform: translate(-130%, -50%) rotate(-10deg) scale(1.05); }
+  100% { opacity: 0; transform: translate(-180%, -50%) rotate(-15deg) scale(.9); }
+}
+@keyframes skill-effect-lock-frame {
+  0% { opacity: 0; transform: scaleX(1.25); }
+  36%, 78% { opacity: 1; transform: scaleX(1); box-shadow: inset 0 0 58px rgb(255 34 75 / .2), 0 0 32px rgb(255 34 75 / .38); }
+  100% { opacity: 0; transform: scaleX(.98); }
+}
+@keyframes skill-effect-door-left {
+  0% { opacity: 0; transform: translate(-180%, -50%); }
+  44%, 82% { opacity: .82; transform: translate(-100%, -50%); }
+  100% { opacity: 0; transform: translate(-100%, -50%); }
+}
+@keyframes skill-effect-door-right {
+  0% { opacity: 0; transform: translate(80%, -50%); }
+  44%, 82% { opacity: .82; transform: translate(0, -50%); }
+  100% { opacity: 0; transform: translate(0, -50%); }
+}
+@keyframes skill-effect-eye-open {
+  0% { opacity: 0; transform: rotate(45deg) scaleX(.1); }
+  42%, 78% { opacity: 1; transform: rotate(45deg) scaleX(1); }
+  100% { opacity: 0; transform: rotate(45deg) scaleX(.05); }
+}
+@keyframes skill-effect-null-void {
+  0% { opacity: 0; transform: rotate(-90deg) scale(1.5); filter: blur(0); }
+  46% { opacity: 1; transform: rotate(0) scale(.78); filter: blur(1px); }
+  76% { opacity: 1; transform: rotate(90deg) scale(.35); filter: blur(3px); }
+  100% { opacity: 0; transform: rotate(180deg) scale(.02); filter: blur(9px); }
+}
+@keyframes skill-effect-fortune-converge {
+  0% { opacity: 0; transform: scale(1.7) rotate(-35deg); }
+  52% { opacity: 1; transform: scale(.72) rotate(0); }
+  74% { transform: scale(1.08) rotate(12deg); }
+  100% { opacity: 0; transform: scale(1.25) rotate(20deg); }
+}
+@keyframes skill-effect-branch-converge {
+  0% { opacity: 0; scale: .08 1; translate: -38% 0; }
+  48% { opacity: 1; scale: 1 1; translate: 0 0; }
+  100% { opacity: 0; scale: .2 1; translate: 38% 0; }
+}
+@keyframes skill-effect-destiny-seal {
+  0% { opacity: 0; transform: translateY(-28px) scale(1.4); }
+  42%, 76% { opacity: 1; transform: translateY(0) scale(1); box-shadow: 0 0 32px var(--fx-accent), inset 0 0 22px var(--fx-secondary); }
+  100% { opacity: 0; transform: translateY(4px) scale(.94); }
+}
+@keyframes skill-effect-energy-credit {
+  0% { opacity: 0; transform: rotate(-160deg) scale(.6); }
+  42%, 78% { opacity: 1; transform: rotate(0) scale(1); }
+  100% { opacity: 0; transform: rotate(180deg) scale(.72); }
+}
+@keyframes skill-effect-alert-wave {
+  0% { opacity: 0; transform: scale(.34); }
+  42% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.55); }
+}
+@keyframes skill-effect-retreat-open {
+  0% { opacity: 0; transform: scale(.72) rotate(70deg); }
+  44%, 76% { opacity: 1; transform: scale(1) rotate(0); }
+  100% { opacity: 0; transform: scale(1.24) rotate(-80deg); }
+}
+@keyframes skill-effect-restart-card-a {
+  0% { opacity: 0; transform: translate(-150%, -50%) rotate(-12deg); }
+  28% { opacity: 1; }
+  48% { transform: translate(-50%, -50%) rotate(360deg) scale(.48); }
+  68% { transform: translate(-50%, -50%) rotate(600deg) scale(.2); }
+  84% { opacity: 1; transform: translate(-135%, -50%) rotate(-8deg) scale(1); }
+  100% { opacity: 0; transform: translate(-135%, -50%) rotate(-8deg); }
+}
+@keyframes skill-effect-restart-card-b {
+  0% { opacity: 0; transform: translate(50%, -50%) rotate(12deg); }
+  28% { opacity: 1; }
+  48% { transform: translate(-50%, -50%) rotate(-360deg) scale(.48); }
+  68% { transform: translate(-50%, -50%) rotate(-600deg) scale(.2); }
+  84% { opacity: 1; transform: translate(35%, -50%) rotate(8deg) scale(1); }
+  100% { opacity: 0; transform: translate(35%, -50%) rotate(8deg); }
+}
+@keyframes skill-effect-restart-deck {
+  0%, 35% { opacity: 0; transform: translate(-50%, -50%) scale(.2); }
+  55%, 72% { opacity: 1; transform: translate(-50%, -50%) scale(.8) rotate(8deg); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(.15); }
+}
+@keyframes skill-effect-probe-mark {
+  0% { opacity: 0; transform: scale(1.6); }
+  44%, 80% { opacity: 1; transform: scale(.82); }
+  100% { opacity: 0; transform: scale(.74); }
+}
+@keyframes skill-effect-veil {
+  0% { opacity: 0; transform: scaleY(.05); filter: blur(0); }
+  36% { opacity: 1; transform: scaleY(1); filter: blur(1px); }
+  72% { opacity: .86; filter: blur(4px); }
+  100% { opacity: 0; transform: scaleY(1.04); filter: blur(8px); }
+}
+@keyframes skill-effect-protocol-outline {
+  0% { opacity: 0; transform: perspective(500px) rotateX(68deg) scale(.65); }
+  42%, 78% { opacity: 1; transform: perspective(500px) rotateX(0) scale(1); box-shadow: inset 0 0 44px rgb(244 209 103 / .13), 0 0 34px rgb(244 209 103 / .36); }
+  100% { opacity: 0; transform: scale(1.08); }
+}
+@keyframes skill-effect-protocol-card {
+  0% { opacity: 0; translate: 0 28px; }
+  40%, 78% { opacity: 1; translate: 0 0; }
+  100% { opacity: 0; translate: 0 -8px; }
+}
+@keyframes skill-effect-table-shake {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  18% { transform: translate3d(-2px, 1px, 0); }
+  35% { transform: translate3d(2px, -1px, 0); }
+  54% { transform: translate3d(-1px, 1px, 0); }
+  72% { transform: translate3d(1px, 0, 0); }
+}
+@keyframes skill-effect-reduced-fade {
+  0%, 100% { opacity: 0; }
+  20%, 78% { opacity: 1; }
+}
