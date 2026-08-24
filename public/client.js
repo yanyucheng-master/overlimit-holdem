@@ -1792,7 +1792,7 @@ function skillFxTierForPayload(payload, { publicEvent = false, resultOnly = fals
   const id = String(payload?.skillId || "").toUpperCase();
   if (id === "DEFENSE" && resultOnly) return "FX3";
   if (id === "COUNTER" && !publicEvent) return "FX1";
-  if (id === "PROBE" && !resultOnly) return "FX1";
+  if (id === "PROBE" && !resultOnly) return "FX2";
   if (id === "DESPERATION") return resultOnly ? "FX3" : "FX2";
   if (id === "RETREAT" && !resultOnly) return "FX2";
   if (id === "LOAN" && String(payload?.publicData?.mode || "").toLowerCase() === "chip") return "FX3";
@@ -1978,7 +1978,8 @@ function announceSkillResolved(payload) {
   // ledger, so the preliminary socket event cannot create a duplicate pulse.
   if (payload.skillId === "DEFENSE" && publicEvent && resultOnly) return;
   getSkillFxManager()?.play({
-    eventId: payload.requestId ? `resolved:${payload.requestId}` : `resolved:${payload.skillId}:${payload.casterId}:${payload.status || "SUCCESS"}:${payload.at || Date.now()}`,
+    eventId: payload.eventId || payload.requestId
+      || `resolved:${payload.skillId}:${payload.casterId}:${payload.status || "SUCCESS"}:${payload.at || Date.now()}`,
     requestId: payload.requestId,
     handNo: state.handNo,
     skillId: payload.skillId,
@@ -2008,7 +2009,8 @@ function announcePrivateSkillResult(payload) {
   const deepBreathRefund = payload.skillId === "DEEP_BREATH"
     && String(payload.status || "").toUpperCase() === "REFUNDED";
   getSkillFxManager()?.play({
-    eventId: payload.resultId ? `private:${payload.resultId}` : `private:${payload.skillId}:${payload.at || Date.now()}`,
+    eventId: payload.eventId || payload.requestId || payload.resultId
+      || `private:${payload.skillId}:${payload.at || Date.now()}`,
     resultId: payload.resultId,
     handNo: state.handNo,
     skillId: payload.skillId,
@@ -2028,8 +2030,11 @@ function announcePrivateSkillResult(payload) {
     effectLabel: skillFxEffectLabel(payload, meta, message),
     ...elements,
     variant: deepBreathRefund ? "refund" : elements.variant,
+    presentation: deepBreathRefund ? "result" : undefined,
+    context: deepBreathRefund ? "settlement" : undefined,
+    broadcast: deepBreathRefund ? false : undefined,
     impactGlyph: deepBreathRefund && Number(payload.amount) > 0 ? `+${Number(payload.amount)}` : undefined,
-    stageCaption: deepBreathRefund ? false : undefined,
+    stageCaption: deepBreathRefund ? true : undefined,
     at: payload.at,
   });
 }
@@ -3076,6 +3081,16 @@ function updateSkillPrepUi() {
   el.protocolCards?.forEach((card) => {
     const needsSkill = card.dataset.skillMode === "abyss";
     card.classList.toggle("locked-abyss", needsSkill && !ready);
+    if (!needsSkill) return;
+    const description = card.querySelector(".protocol-desc");
+    if (!description) return;
+    const copyKey = ready ? "readyCopy" : "lockedCopy";
+    const englishKey = ready ? "readyEn" : "lockedEn";
+    const copy = description.dataset[copyKey];
+    const english = description.dataset[englishKey];
+    if (copy) description.textContent = copy;
+    if (english) description.dataset.currentEn = english;
+    if (copy && english) card.setAttribute("aria-description", `${copy} / ${english}`);
   });
 }
 
@@ -5450,12 +5465,29 @@ function renderOpponentSkillIntel() {
 function skillFeedIdentity(entry) {
   return [
     entry?.scope || "public",
+    entry?.handNo || "",
+    entry?.requestId || "",
     entry?.resultId || "",
     entry?.casterId || "",
     entry?.skillId || "",
     entry?.status || "",
     entry?.publicSummary || "",
   ].join("|");
+}
+
+function isProbeActivationFeed(entry) {
+  if (String(entry?.scope || "") !== "self" || String(entry?.skillId || "").toUpperCase() !== "PROBE") {
+    return false;
+  }
+  const summary = String(entry?.publicSummary || "");
+  return summary.includes("发动了「试探」") || summary.includes("试探已秘密生效");
+}
+
+function skillFeedDisplayIdentity(entry) {
+  if (isProbeActivationFeed(entry)) {
+    return ["self", entry?.handNo || state.handNo || "hand", "PROBE", "ARMED"].join("|");
+  }
+  return skillFeedIdentity(entry);
 }
 
 function isGenericSecretSummary(summary) {
@@ -5466,6 +5498,8 @@ function rememberSkillFeedEntry(entry) {
   if (!entry?.publicSummary && !entry?.skillId) return;
   if (isGenericSecretSummary(entry.publicSummary)) return;
   const normalized = {
+    handNo: Number(entry.handNo || state.handNo || 0),
+    requestId: entry.requestId || "",
     at: Number(entry.at || Date.now()),
     casterId: entry.casterId || null,
     skillId: entry.skillId || null,
@@ -5491,6 +5525,8 @@ function rememberPrivateSkillFeed(payload) {
   if (!message) return;
   const resultId = payload.resultId ? String(payload.resultId) : "";
   const normalized = {
+    handNo: Number(payload.handNo || state.handNo || 0),
+    requestId: payload.requestId || "",
     at: Number(payload.at || Date.now()),
     casterId: payload.casterId || state.playerId || null,
     skillId: payload.skillId || null,
@@ -5501,6 +5537,21 @@ function rememberPrivateSkillFeed(payload) {
   };
   const list = state.skillSelfLog || [];
   if (resultId && list.some((item) => item.resultId === resultId)) return;
+  const displayKey = skillFeedDisplayIdentity(normalized);
+  const displayIndex = list.findIndex((item) => skillFeedDisplayIdentity(item) === displayKey);
+  if (displayIndex >= 0 && isProbeActivationFeed(normalized)) {
+    const next = [...list];
+    const existing = next[displayIndex];
+    const preferIncoming = normalized.publicSummary.includes("已秘密生效")
+      || !String(existing.publicSummary || "").includes("已秘密生效");
+    next[displayIndex] = {
+      ...existing,
+      ...normalized,
+      publicSummary: preferIncoming ? normalized.publicSummary : existing.publicSummary,
+    };
+    state.skillSelfLog = next.slice(-16);
+    return;
+  }
   const key = skillFeedIdentity(normalized);
   state.skillSelfLog = [
     ...list.filter((item) => skillFeedIdentity(item) !== key),

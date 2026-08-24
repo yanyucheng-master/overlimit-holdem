@@ -8,8 +8,8 @@ const CAPTURE_DIR = process.env.SKILL_FX_CAPTURE_DIR || "";
 const EXPECTED_SKILLS = 23;
 const EXPECTED_OPTIONS = EXPECTED_SKILLS + 1;
 const REPRESENTATIVE_CAPTURES = [
-  "DEEP_BREATH", "BLOOD_BATTLE", "FAIRNESS", "CHEAT", "NULLIFICATION",
-  "DESTINY", "RESTART", "DISGUISE", "DEAD_END",
+  "DEEP_BREATH", "PROBE", "RECYCLE", "ALERT", "FAIRNESS", "INTIMIDATION",
+  "BLOOD_BATTLE", "CHEAT", "NULLIFICATION", "DESTINY", "RESTART", "DISGUISE", "DEAD_END",
 ];
 
 const profileIdFor = (skillId) => skillId.startsWith("PROTOCOL_") ? "PROTOCOL_SHOWDOWN" : skillId;
@@ -35,6 +35,8 @@ async function inspectInstance(instance) {
     const impact = node.querySelector(".skill-effect-impact");
     const route = node.querySelector(".skill-effect-route");
     const caption = node.querySelector(".skill-effect-caption");
+    const layerRect = node.parentElement.getBoundingClientRect();
+    const captionRect = caption?.getBoundingClientRect();
     return {
       skill: node.dataset.skill,
       family: node.dataset.effect,
@@ -43,6 +45,9 @@ async function inspectInstance(instance) {
       identity: node.dataset.identity,
       quality: node.dataset.quality,
       motion: node.dataset.motion,
+      presentation: node.dataset.presentation,
+      context: node.dataset.context,
+      durationMs: numberVar("--fx-duration"),
       hasRoute: node.dataset.hasRoute,
       stageX: numberVar("--fx-stage-x"),
       stageY: numberVar("--fx-stage-y"),
@@ -58,6 +63,8 @@ async function inspectInstance(instance) {
       routeDisplay: route ? getComputedStyle(route).display : "none",
       captionDisplay: caption ? getComputedStyle(caption).display : "none",
       captionText: caption?.textContent || "",
+      captionInsideLayer: !captionRect
+        || (captionRect.top >= layerRect.top - 1 && captionRect.bottom <= layerRect.bottom + 1),
     };
   });
 }
@@ -141,6 +148,11 @@ async function main() {
     fairness: await anchorAudit(page, "FAIRNESS", "#skill-fx-gallery-stage"),
   };
 
+  const alertPulse = await inspectInstance(await selectAndReplay(page, "ALERT"));
+  const deepBreathRefund = await inspectInstance(await selectAndReplay(page, "DEEP_BREATH", {
+    variant: "refund", status: "REFUNDED", disclosure: "self",
+  }));
+
   const secrecy = await page.evaluate(() => {
     const gallery = window.OverlimitSkillFxGallery;
     gallery.manager.clear();
@@ -176,6 +188,67 @@ async function main() {
     const restored = gallery.manager.play({ eventId: "verify:restored", skillId: "CHEAT", audience: "self", disclosure: "self", restored: true, force: true });
     const replay = gallery.manager.play({ eventId: "verify:replay", skillId: "CHEAT", audience: "self", disclosure: "self", replay: true, force: true });
     return { dedupe, endgame, restored, replay };
+  });
+
+  const eventAdmission = await page.evaluate(() => {
+    const makeQueued = () => {
+      const instance = new window.OverlimitSkillFx.SkillFxManager();
+      instance.busy = true;
+      return instance;
+    };
+    const copies = makeQueued();
+    const copyEvent = { eventId: "evt-copy", skillId: "FAIRNESS", casterId: "P1", handNo: 4 };
+    const duplicateCopies = [
+      copies.play({ ...copyEvent, audience: "public", disclosure: "public" }),
+      copies.play({ ...copyEvent, audience: "self", disclosure: "self" }),
+    ];
+
+    const loans = makeQueued();
+    const loanBase = {
+      skillId: "LOAN", casterId: "P1", handNo: 5, phase: "pre_flop",
+      targetKey: "chip", audience: "self", disclosure: "self", status: "SUCCESS",
+    };
+    const loanRequests = [
+      loans.play({ ...loanBase, requestId: "loan-a" }),
+      loans.play({ ...loanBase, requestId: "loan-b" }),
+    ];
+
+    const fallbacks = makeQueued();
+    const fallbackBase = {
+      skillId: "NULLIFICATION", casterId: "P1", phase: "turn", at: 7000,
+      audience: "self", disclosure: "self",
+    };
+    const fallbackVariants = [
+      fallbacks.play({ ...fallbackBase, handNo: 6, targetKey: "board:3", status: "SUCCESS" }),
+      fallbacks.play({ ...fallbackBase, handNo: 7, targetKey: "board:3", status: "SUCCESS" }),
+      fallbacks.play({ ...fallbackBase, handNo: 7, targetKey: "board:4", status: "SUCCESS" }),
+      fallbacks.play({ ...fallbackBase, handNo: 7, targetKey: "board:4", status: "REVEALED", resultOnly: true }),
+    ];
+
+    const capacity = makeQueued();
+    for (let index = 0; index < 8; index += 1) {
+      capacity.play({
+        requestId: `capacity-${index}`, skillId: "ALERT", casterId: "P1",
+        audience: "self", disclosure: "self", handNo: 8,
+      });
+    }
+    const retryEvent = {
+      requestId: "capacity-retry", skillId: "ALERT", casterId: "P1",
+      audience: "self", disclosure: "self", handNo: 8,
+    };
+    const rejected = capacity.play(retryEvent);
+    const markedWhileRejected = capacity.dedupeKeys.has("capacity-retry");
+    capacity.queue.shift();
+    const retried = capacity.play(retryEvent);
+    return {
+      duplicateCopies,
+      copyQueue: copies.queue.length,
+      loanRequests,
+      loanQueue: loans.queue.map((job) => job.event.requestId),
+      fallbackVariants,
+      fallbackQueue: fallbacks.queue.length,
+      capacity: { rejected, markedWhileRejected, retried, queue: capacity.queue.length },
+    };
   });
 
   const directorInteractions = await page.evaluate(() => {
@@ -312,19 +385,29 @@ async function main() {
     await page.locator("#skill-fx-gallery-show-target").uncheck();
     for (const skillId of REPRESENTATIVE_CAPTURES) {
       const instance = await selectAndReplay(page, skillId);
-      const tier = await instance.getAttribute("data-tier");
-      await page.waitForTimeout(tier === "FX4" ? 650 : tier === "FX3" ? 520 : 300);
+      const duration = await instance.evaluate((node) => Number.parseFloat(node.style.getPropertyValue("--fx-duration")) || 650);
+      await page.waitForTimeout(Math.max(280, Math.min(680, Math.round(duration * .55))));
       const capturePath = path.join(CAPTURE_DIR, `${skillId.toLowerCase()}.png`);
       await page.locator("#skill-fx-gallery-stage").screenshot({ path: capturePath });
       captures.push(capturePath);
     }
+    const refundInstance = await selectAndReplay(page, "DEEP_BREATH", {
+      variant: "refund", status: "REFUNDED", disclosure: "self",
+    });
+    const refundDuration = await refundInstance.evaluate((node) => Number.parseFloat(node.style.getPropertyValue("--fx-duration")) || 820);
+    await page.waitForTimeout(Math.round(refundDuration * .5));
+    const refundCapturePath = path.join(CAPTURE_DIR, "deep_breath_refund.png");
+    await page.locator("#skill-fx-gallery-stage").screenshot({ path: refundCapturePath });
+    captures.push(refundCapturePath);
   }
 
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForTimeout(120);
   const mobileInstance = await selectAndReplay(page, "DESTINY");
   const mobile = await mobileInstance.evaluate((node) => {
-    const panel = document.querySelector(".skill-fx-gallery-panel").getBoundingClientRect();
+    const modalNode = document.getElementById("skill-fx-gallery-modal");
+    const panelNode = document.querySelector(".skill-fx-gallery-panel");
+    const panel = panelNode.getBoundingClientRect();
     const stage = document.getElementById("skill-fx-gallery-stage").getBoundingClientRect();
     const stageAnchor = document.querySelector('[data-fx-gallery-anchor="stageCenter"]').getBoundingClientRect();
     const stageY = Number.parseFloat(node.style.getPropertyValue("--fx-stage-y"));
@@ -334,6 +417,8 @@ async function main() {
       stageInsidePanel: stage.left >= panel.left - 1 && stage.right <= panel.right + 1,
       stageVerticallyVisible: stage.top >= panel.top - 1 && stage.bottom <= panel.bottom + 1,
       pageHorizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+      modalOverflowX: getComputedStyle(modalNode).overflowX,
+      panelOverflowX: getComputedStyle(panelNode).overflowX,
       replayUsable: document.getElementById("btn-replay-skill-fx").getBoundingClientRect().height >= 40,
       stageCentral: Number.isFinite(stageY) && Math.abs(stageY - (stageAnchor.top + stageAnchor.height / 2 - layer.top)) <= 3,
       coreWidth: node.querySelector(".skill-effect-core").getBoundingClientRect().width,
@@ -359,6 +444,7 @@ async function main() {
     if (!effect.family || !effect.tier || !effect.impactType) failures.push(`incomplete director metadata: ${effect.skill}`);
     if (effect.heroNodes > 20 || effect.particleNodes > 12 || effect.impactNodes > 12 || effect.routeNodes > 4) failures.push(`DOM budget exceeded: ${effect.skill}`);
     if (effect.stageDisplay === "none" || effect.coreDisplay === "none" || effect.impactDisplay === "none") failures.push(`stage/impact missing: ${effect.skill}`);
+    if (effect.presentation === "journey" && effect.durationMs < 650) failures.push(`journey readability budget too short: ${effect.skill}`);
   });
   Object.entries(stageAudits).forEach(([name, audit]) => {
     if (!auditMatchesAnchors(audit)) failures.push(`stage/target anchor mismatch: ${name}`);
@@ -368,9 +454,22 @@ async function main() {
   if (stageAudits.nullification.impactType !== "card") failures.push("Nullification lost card-slot impact");
   if (stageAudits.loanEnergy.impactType !== "energy" || stageAudits.loanChip.impactType !== "chip") failures.push("Loan branch impact types are incorrect");
   if (stageAudits.fairness.impactType !== "board") failures.push("Fairness lost board impact");
+  const timingBySkill = Object.fromEntries(effects.map((effect) => [effect.skill, effect]));
+  if (timingBySkill.DEEP_BREATH?.tier !== "FX2" || timingBySkill.DEEP_BREATH?.durationMs !== 680) failures.push("Deep Breath launch timing is not 680ms FX2");
+  if (timingBySkill.PROBE?.tier !== "FX2" || timingBySkill.PROBE?.durationMs !== 680) failures.push("Probe launch timing is not 680ms FX2");
+  if (timingBySkill.RECYCLE?.tier !== "FX2" || timingBySkill.RECYCLE?.durationMs !== 650) failures.push("Recycle launch timing is not 650ms FX2");
+  if (alertPulse.tier !== "FX1" || alertPulse.presentation !== "pulse" || alertPulse.hasRoute !== "false"
+    || alertPulse.routeDisplay !== "none" || !alertPulse.captionInsideLayer
+    || alertPulse.durationMs !== 460) failures.push("Alert no longer behaves as a contained 460ms single-point FX1 pulse");
+  if (deepBreathRefund.durationMs !== 820 || deepBreathRefund.context !== "settlement"
+    || deepBreathRefund.captionText.indexOf("ENERGY RETURN +2") < 0) failures.push("Deep Breath private refund result timing/caption failed");
   if (secrecy.accepted || secrecy.after !== secrecy.before || secrecy.publicVisible || secrecy.privateVisible) failures.push("opponent secret event produced a visual side channel");
   if (resultOnly.identity !== "result-only" || /绝密|TOP SECRET/i.test(resultOnly.caption) || resultOnly.title !== "ACCESS DENIED") failures.push("result-only stage leaked a secret skill identity");
   if (dedupeAndPriority.dedupe[0] !== true || dedupeAndPriority.dedupe[1] !== false) failures.push("duplicate requestId was not suppressed");
+  if (eventAdmission.duplicateCopies[0] !== true || eventAdmission.duplicateCopies[1] !== false || eventAdmission.copyQueue !== 1) failures.push("public/private event copies were not merged by eventId");
+  if (eventAdmission.loanRequests.some((value) => !value) || eventAdmission.loanQueue.join(",") !== "loan-a,loan-b") failures.push("different Loan requestIds did not both enter the FX queue");
+  if (eventAdmission.fallbackVariants.some((value) => !value) || eventAdmission.fallbackQueue !== 4) failures.push("fallback identity merged a different hand, target or result stage");
+  if (eventAdmission.capacity.rejected !== false || eventAdmission.capacity.markedWhileRejected || !eventAdmission.capacity.retried || eventAdmission.capacity.queue !== 8) failures.push("queue rejection poisoned the FX dedupe cache");
   if (dedupeAndPriority.endgame || dedupeAndPriority.restored || dedupeAndPriority.replay) failures.push("Endgame/reconnect/replay entered ordinary StageFX");
   if (directorInteractions.blood.accepted.some((value) => !value)
     || directorInteractions.blood.instances !== 1
@@ -390,7 +489,8 @@ async function main() {
   if (Object.values(pointerSafety).some((value) => value !== "none")) failures.push("an FX layer blocks pointer input");
   if (orphanCleanup.effects || orphanCleanup.states) failures.push("manager clear left orphan FX nodes");
   if (!mobile.panelInsideViewport || !mobile.stageInsidePanel || !mobile.stageVerticallyVisible
-    || mobile.pageHorizontalOverflow || !mobile.replayUsable || !mobile.stageCentral
+    || mobile.pageHorizontalOverflow || mobile.modalOverflowX !== "hidden" || mobile.panelOverflowX !== "hidden"
+    || !mobile.replayUsable || !mobile.stageCentral
     || mobile.coreWidth > 390 * .89) failures.push("mobile gallery or central stage contract failed");
   if (consoleErrors.length) failures.push("browser console errors");
   if (requestErrors.length) failures.push("same-origin resource requests failed");
@@ -405,7 +505,8 @@ async function main() {
     externalConsoleErrors,
     requestErrors,
     report: {
-      optionCount: optionIds.length, effects, stageAudits, secrecy, resultOnly, dedupeAndPriority, directorInteractions,
+      optionCount: optionIds.length, effects, stageAudits, alertPulse, deepBreathRefund,
+      secrecy, resultOnly, dedupeAndPriority, eventAdmission, directorInteractions,
       stateMarkers, lowPerformance, reducedMotion, captionless, graphicalSignatures, guides,
       pointerSafety, orphanCleanup, mobile, captures,
     },

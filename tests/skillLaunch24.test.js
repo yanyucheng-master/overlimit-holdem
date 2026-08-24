@@ -258,6 +258,24 @@ describe("重启", () => {
 });
 
 describe("试探", () => {
+  test("公开确认与私有详情共享请求 ID，客户端可只合并同一次传输副本", () => {
+    const { io, engine, room, a } = setupRoom({
+      loadoutA: ["PROBE", "RECYCLE"],
+      loadoutB: ["DEFENSE", "RECYCLE"],
+    });
+    expect(use(engine, room, a, "PROBE", {}, "probe-fx-copy")).toMatchObject({ status: "SUCCESS" });
+    const privateResult = io.emits.find((entry) => (
+      entry.target === "s1"
+      && entry.event === "skill:private-result"
+      && entry.payload?.skillId === "PROBE"
+    ));
+    expect(privateResult?.payload).toMatchObject({
+      requestId: "probe-fx-copy",
+      skillId: "PROBE",
+      message: "试探已秘密生效。",
+    });
+  });
+
   test("对手普通 Fold 先 +50 再倍率；自己 Fold 不触发；公平可清除", () => {
     const { engine, room, a, b } = setupRoom({ loadoutA: ["PROBE", "BLOOD_BATTLE"], loadoutB: ["DEFENSE", "RECYCLE"] });
     a.skillRuntime.abyssEnergy = 8;

@@ -769,7 +769,13 @@
               <input type="radio" name="protocol" value="standard-abyss" tabindex="-1" />
               <strong>标准局 <small>超限技能</small></strong>
               <div class="protocol-mid">
-                <span class="protocol-desc">需先完成技能构筑</span>
+                <span
+                  class="protocol-desc"
+                  data-locked-copy="需先完成技能构筑"
+                  data-ready-copy="使用已保存的技能构筑"
+                  data-locked-en="Complete a skill build first"
+                  data-ready-en="Saved skill build ready"
+                >需先完成技能构筑</span>
                 <span class="protocol-note">标准牌桌 · 技能改写局势</span>
               </div>
               <div class="protocol-actions">
@@ -783,7 +789,13 @@
               <input type="radio" name="protocol" value="overdrive-abyss" tabindex="-1" />
               <strong>高爆局 <small>超限技能</small></strong>
               <div class="protocol-mid">
-                <span class="protocol-desc">高爆 + 技能同开</span>
+                <span
+                  class="protocol-desc"
+                  data-locked-copy="需先完成技能构筑"
+                  data-ready-copy="高爆 + 已保存技能构筑"
+                  data-locked-en="Complete a skill build first"
+                  data-ready-en="Overdrive with saved skill build"
+                >需先完成技能构筑</span>
                 <span class="protocol-note">极限节奏 · 技能与牌面齐飞</span>
               </div>
               <div class="protocol-actions">
@@ -1293,7 +1305,7 @@
             <label><span>结算状态</span><select id="skill-fx-gallery-status">
               <option value="SUCCESS">成功</option><option value="TRIGGERED">触发</option>
               <option value="REVEALED">揭示</option><option value="FAILED">失败</option>
-              <option value="COUNTERED">被反制</option>
+              <option value="COUNTERED">被反制</option><option value="REFUNDED">返能</option>
             </select></label>
             <label><span>作用目标</span><select id="skill-fx-gallery-target">
               <option value="profile">配置默认</option><option value="self">我方状态</option>
@@ -1304,7 +1316,7 @@
             <label><span>分支</span><select id="skill-fx-gallery-variant">
               <option value="default">默认</option><option value="chip">筹码</option>
               <option value="energy">能量</option><option value="board">公共牌</option>
-              <option value="hole">底牌</option>
+              <option value="hole">底牌</option><option value="refund">返能结果</option>
             </select></label>
             <label><span>质量</span><select id="skill-fx-gallery-quality">
               <option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option>

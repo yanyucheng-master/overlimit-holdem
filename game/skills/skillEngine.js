@@ -735,6 +735,11 @@ class SkillEngine {
         if (!debtLock) this.settleRecycle(room, player);
         this.applyResourceFortune(room, player);
       }
+      // The private result is durable in privateResults; both temporary BREATH
+      // flags belong only to the hand that just finished. Clearing them here
+      // also makes endHand idempotent with respect to the +2 restoration.
+      runtime.breathArmed = false;
+      runtime.breathBroken = false;
       this.refreshLoanCreditFromResiduals(player, room);
       // Public opponent energy updates only after every end-of-hand resource
       // settlement (restore, Fairness suppression, loans, Fortune) has finished.
@@ -1008,7 +1013,13 @@ class SkillEngine {
       publicSummary: result.publicSummary,
       publicData: result.publicData,
     });
-    if (result.privateResult) this.notifyPrivate(player, { skillId: skill.id, ...result.privateResult });
+    if (result.privateResult) {
+      // The resolved acknowledgement and its private detail are two delivery
+      // views of one activation. Sharing requestId lets the client merge only
+      // those transport copies while keeping genuinely separate results (for
+      // example, end-of-hand Deep Breath restoration) distinct by resultId.
+      this.notifyPrivate(player, { requestId, skillId: skill.id, ...result.privateResult });
+    }
     if (result.cardsChanged) {
       room.players.forEach((candidate) => this.emitToPlayer(candidate, "your_cards", { cards: candidate.cards }));
       this.gameEngine?.emitPrivateHandHints(room);

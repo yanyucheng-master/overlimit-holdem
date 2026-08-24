@@ -9,6 +9,7 @@
 
   const SHAKE_ALLOWLIST = new Set(["FAIRNESS", "DEAD_END", "BLOOD_BATTLE"]);
   const MAX_DEDUPE_KEYS = 192;
+  const MAX_QUEUE_LENGTH = 8;
   const RECENT_FINGERPRINT_MS = 760;
 
   function normalizeQuality(value) {
@@ -27,13 +28,35 @@
     if (explicit) return cleanToken(explicit);
     return [
       cleanToken(event.handId || event.handNo || "hand"),
-      cleanToken(event.skillId || "skill"),
       cleanToken(event.casterId || "caster"),
-      cleanToken(event.status || "SUCCESS"),
-      cleanToken(event.disclosure || "public"),
-      Number(event.at || 0),
+      cleanToken(event.skillId || "skill"),
       cleanToken(event.targetKey || ""),
+      cleanToken(event.phase || ""),
+      cleanToken(event.status || event.state || "SUCCESS"),
+      cleanToken(event.disclosure || "public"),
+      cleanToken(event.context || "table"),
+      event.resultOnly ? "result" : "event",
+      Number(event.sequence ?? event.at ?? 0),
     ].join(":");
+  }
+
+  function fallbackSkillFxFingerprint(event) {
+    return [
+      cleanToken(event.handId || event.handNo || "hand"),
+      cleanToken(event.casterId || "caster"),
+      cleanToken(event.skillId || "skill"),
+      cleanToken(event.targetKey || event.anchor || "target"),
+      cleanToken(event.phase || "phase"),
+      cleanToken(event.status || event.state || "SUCCESS"),
+      cleanToken(event.disclosure || "public"),
+      cleanToken(event.context || "table"),
+      event.resultOnly ? "result" : "event",
+      Number(event.sequence ?? event.at ?? 0),
+    ].join("|");
+  }
+
+  function hasExplicitSkillFxId(event) {
+    return Boolean(event?.eventId || event?.requestId || event?.resultId);
   }
 
   function isElement(value) {
@@ -118,21 +141,29 @@
       return true;
     }
 
-    isRecentDuplicate(event) {
-      const now = Date.now();
-      const fingerprint = [
-        cleanToken(event.skillId),
-        cleanToken(event.casterId),
-        cleanToken(event.audience),
-        cleanToken(event.disclosure),
-        cleanToken(event.status),
-      ].join("|");
-      const previous = this.recentFingerprints.get(fingerprint) || 0;
-      this.recentFingerprints.set(fingerprint, now);
+    pruneRecentFingerprints(now = Date.now()) {
       this.recentFingerprints.forEach((time, key) => {
         if (now - time > 5000) this.recentFingerprints.delete(key);
       });
+    }
+
+    isRecentDuplicate(event) {
+      if (hasExplicitSkillFxId(event)) return false;
+      const now = Date.now();
+      const fingerprint = fallbackSkillFxFingerprint(event);
+      const previous = this.recentFingerprints.get(fingerprint) || 0;
+      this.pruneRecentFingerprints(now);
       return now - previous < RECENT_FINGERPRINT_MS;
+    }
+
+    rememberAcceptedEvent(event, key) {
+      if (!this.rememberKey(key)) return false;
+      if (!hasExplicitSkillFxId(event)) {
+        const now = Date.now();
+        this.recentFingerprints.set(fallbackSkillFxFingerprint(event), now);
+        this.pruneRecentFingerprints(now);
+      }
+      return true;
     }
 
     play(rawEvent = {}) {
@@ -144,13 +175,21 @@
         return false;
       }
       const requestedTier = cleanToken(event.tier).toUpperCase();
-      const profile = /^FX[1-4]$/.test(requestedTier)
-        ? Object.freeze({ ...baseProfile, tier: requestedTier })
+      const requestedPresentation = cleanToken(event.presentation).toLowerCase();
+      const presentation = Object.values(profilesApi?.FX_PRESENTATION || {}).includes(requestedPresentation)
+        ? requestedPresentation
+        : baseProfile.presentation;
+      const profile = /^FX[1-4]$/.test(requestedTier) || presentation !== baseProfile.presentation
+        ? Object.freeze({
+            ...baseProfile,
+            ...(/^FX[1-4]$/.test(requestedTier) ? { tier: requestedTier } : {}),
+            presentation,
+          })
         : baseProfile;
       const key = semanticSkillFxKey(event);
-      if (!event.force && (!this.rememberKey(key) || this.isRecentDuplicate(event))) return false;
+      if (!event.force && (this.dedupeKeys.has(key) || this.isRecentDuplicate(event))) return false;
       const settings = this.settings();
-      const duration = profilesApi.fxDuration(profile, settings.quality, settings.reduceMotion);
+      const duration = profilesApi.fxDuration(profile, settings.quality, settings.reduceMotion, event.variant);
       const job = { event, profile, settings, duration, key };
       if (profile.id === "BLOOD_BATTLE") {
         const existingBlood = this.activeJob?.profile?.id === "BLOOD_BATTLE"
@@ -176,21 +215,13 @@
             if (impactGlyph) impactGlyph.textContent = "×4";
             if (result) result.textContent = "STAKES ×4";
           }
+          if (!event.force) this.rememberAcceptedEvent(event, key);
           return true;
         }
       }
-      if (profile.tier === "FX1") {
-        const replaceIndex = this.queue.findIndex((queued) => queued.profile.tier === "FX1"
-          && queued.event.audience === event.audience
-          && queued.event.casterId === event.casterId);
-        if (replaceIndex >= 0) this.queue.splice(replaceIndex, 1);
-      }
-      if (this.queue.length >= 8) {
-        const replaceIndex = this.queue.findIndex((queued) => queued.profile.tier === "FX1");
-        if (replaceIndex >= 0) this.queue.splice(replaceIndex, 1);
-        else return false;
-      }
+      if (this.queue.length >= MAX_QUEUE_LENGTH) return false;
       this.queue.push(job);
+      if (!event.force) this.rememberAcceptedEvent(event, key);
       if (profile.id === "COUNTER" && profile.tier === "FX3" && this.activeNode
         && this.activeJob?.profile?.id !== "COUNTER") {
         this.activeNode.classList.add("is-counter-cut");
@@ -241,6 +272,9 @@
 
     resolveStage(job) {
       const anchors = this.getAnchors() || {};
+      if (job.profile.presentation === profilesApi?.FX_PRESENTATION?.PULSE) {
+        return this.resolveTarget(job);
+      }
       if (isElement(job.event.stageElement)) return job.event.stageElement;
       return anchors.stageCenter || anchors.tableCenter || anchors.community || anchors.board || this.effectLayer;
     }
@@ -325,6 +359,7 @@
       node.dataset.status = cleanToken(event.status || "SUCCESS").toLowerCase();
       node.dataset.variant = cleanToken(event.variant || event.mode || "default").toLowerCase();
       node.dataset.context = cleanToken(event.context || "table").toLowerCase();
+      node.dataset.presentation = cleanToken(profile.presentation || "journey").toLowerCase();
       const compositeSkills = Array.isArray(event.compositeSkills)
         ? event.compositeSkills.map((value) => cleanToken(value).toUpperCase()).filter(Boolean).slice(0, 6)
         : [];
@@ -563,6 +598,8 @@
     createSkillFxManager,
     semanticSkillFxKey,
     normalizeQuality,
+    fallbackSkillFxFingerprint,
+    MAX_QUEUE_LENGTH,
     SHAKE_ALLOWLIST,
   });
 });

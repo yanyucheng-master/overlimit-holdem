@@ -6,6 +6,14 @@ const manager = require("../public/skill-fx-manager");
 
 const publicDir = path.join(__dirname, "..", "public");
 
+function createQueuedFxManager() {
+  const instance = new manager.SkillFxManager();
+  // Keep jobs observable without a DOM. Production pump semantics are covered
+  // by the Gallery verification; these tests exercise admission and identity.
+  instance.busy = true;
+  return instance;
+}
+
 describe("launch skill FX system contract", () => {
   test("exactly 23 non-Endgame launch skills have data-driven profiles", () => {
     const entries = Object.values(profiles.SKILL_FX_PROFILES);
@@ -27,8 +35,27 @@ describe("launch skill FX system contract", () => {
     });
   });
 
+  test("journey readability budgets and the Deep Breath refund budget are data driven", () => {
+    const deepBreath = profiles.getSkillFxProfile("DEEP_BREATH");
+    const recycle = profiles.getSkillFxProfile("RECYCLE");
+    const probe = profiles.getSkillFxProfile("PROBE");
+    const alert = profiles.getSkillFxProfile("ALERT");
+    expect(deepBreath).toMatchObject({ tier: "FX2", durationMs: 680, presentation: "journey" });
+    expect(recycle).toMatchObject({ tier: "FX2", durationMs: 650, presentation: "journey" });
+    expect(probe).toMatchObject({ tier: "FX2", durationMs: 680, presentation: "journey" });
+    expect(alert).toMatchObject({ tier: "FX1", presentation: "pulse" });
+    [deepBreath, recycle, probe].forEach((profile) => {
+      expect(profiles.fxDuration(profile, "high", false)).toBeGreaterThanOrEqual(profiles.JOURNEY_MIN_MS);
+      expect(profiles.fxDuration(profile, "low", false)).toBeGreaterThanOrEqual(profiles.JOURNEY_MIN_MS);
+    });
+    expect(profiles.fxDuration(deepBreath, "high", false, "refund")).toBe(820);
+    expect(profiles.fxDuration(deepBreath, "low", false, "refund")).toBeGreaterThanOrEqual(750);
+    expect(profiles.fxDuration(deepBreath, "high", true, "refund")).toBeLessThanOrEqual(360);
+    expect(profiles.fxDuration(alert, "high", false)).toBe(460);
+  });
+
   test("approved launch hierarchy uses the intended tiers and physical anchors", () => {
-    expect(profiles.getSkillFxProfile("DEEP_BREATH")).toMatchObject({ tier: "FX1", anchor: "energy", impact: "energy" });
+    expect(profiles.getSkillFxProfile("DEEP_BREATH")).toMatchObject({ tier: "FX2", anchor: "energy", impact: "energy" });
     expect(profiles.getSkillFxProfile("PERCEPTION")).toMatchObject({ tier: "FX2", anchor: "target" });
     expect(profiles.getSkillFxProfile("INTEL_ONE")).toMatchObject({ tier: "FX3", anchor: "target" });
     expect(profiles.getSkillFxProfile("BLOOD_BATTLE")).toMatchObject({ tier: "FX3", anchor: "pot" });
@@ -92,6 +119,70 @@ describe("launch skill FX system contract", () => {
     expect(manager.semanticSkillFxKey(base)).toBe(manager.semanticSkillFxKey({
       ...base, safeMessage: "任意玩家文案变化不应改变去重键",
     }));
+    expect(manager.semanticSkillFxKey(base)).not.toBe(manager.semanticSkillFxKey({ ...base, handNo: 5 }));
+    expect(manager.semanticSkillFxKey(base)).not.toBe(manager.semanticSkillFxKey({ ...base, targetKey: "river" }));
+    expect(manager.semanticSkillFxKey(base)).not.toBe(manager.semanticSkillFxKey({ ...base, status: "REFUNDED" }));
+  });
+
+  test("FX-DEDUPE-01 one server event public/self delivery copies render once", () => {
+    const fx = createQueuedFxManager();
+    const shared = { eventId: "evt-shared", skillId: "FAIRNESS", casterId: "P1", handNo: 7 };
+    expect(fx.play({ ...shared, audience: "public", disclosure: "public" })).toBe(true);
+    expect(fx.play({ ...shared, audience: "self", disclosure: "self" })).toBe(false);
+    expect(fx.queue).toHaveLength(1);
+  });
+
+  test("FX-DEDUPE-02 different Loan request IDs are both admitted", () => {
+    const fx = createQueuedFxManager();
+    const base = {
+      skillId: "LOAN", casterId: "P1", handNo: 8, audience: "self", disclosure: "self",
+      phase: "pre_flop", status: "SUCCESS", targetKey: "chip",
+    };
+    expect(fx.play({ ...base, requestId: "loan-v2-a" })).toBe(true);
+    expect(fx.play({ ...base, requestId: "loan-v2-b" })).toBe(true);
+    expect(fx.queue.map((job) => job.event.requestId)).toEqual(["loan-v2-a", "loan-v2-b"]);
+  });
+
+  test("FX-DEDUPE-03 the same fallback event shape in different hands is not merged", () => {
+    const fx = createQueuedFxManager();
+    const base = {
+      skillId: "FAIRNESS", casterId: "P1", audience: "public", disclosure: "public",
+      phase: "flop", status: "SUCCESS", targetKey: "board", at: 9000,
+    };
+    expect(fx.play({ ...base, handNo: 9 })).toBe(true);
+    expect(fx.play({ ...base, handNo: 10 })).toBe(true);
+    expect(fx.queue).toHaveLength(2);
+  });
+
+  test("FX-DEDUPE-04 different targets and result stages remain distinct", () => {
+    const fx = createQueuedFxManager();
+    const base = {
+      handNo: 11, skillId: "NULLIFICATION", casterId: "P1", audience: "self", disclosure: "self",
+      phase: "turn", at: 9100,
+    };
+    expect(fx.play({ ...base, targetKey: "board:3", status: "SUCCESS" })).toBe(true);
+    expect(fx.play({ ...base, targetKey: "board:4", status: "SUCCESS" })).toBe(true);
+    expect(fx.play({ ...base, targetKey: "board:4", status: "REVEALED", resultOnly: true })).toBe(true);
+    expect(fx.queue).toHaveLength(3);
+  });
+
+  test("FX-DEDUPE-05 queue rejection does not mark an event as played", () => {
+    const fx = createQueuedFxManager();
+    for (let index = 0; index < manager.MAX_QUEUE_LENGTH; index += 1) {
+      expect(fx.play({
+        requestId: `queue-${index}`, skillId: "ALERT", casterId: "P1",
+        audience: "self", disclosure: "self", handNo: 12,
+      })).toBe(true);
+    }
+    const rejected = {
+      requestId: "queue-retry", skillId: "ALERT", casterId: "P1",
+      audience: "self", disclosure: "self", handNo: 12,
+    };
+    expect(fx.play(rejected)).toBe(false);
+    expect(fx.dedupeKeys.has("queue-retry")).toBe(false);
+    fx.queue.shift();
+    expect(fx.play(rejected)).toBe(true);
+    expect(fx.dedupeKeys.has("queue-retry")).toBe(true);
   });
 
   test("CSS implements every registered effect family and reduced-motion fallback", () => {
@@ -131,7 +222,7 @@ describe("launch skill FX system contract", () => {
     const client = fs.readFileSync(path.join(publicDir, "client.js"), "utf8");
     expect(client).toContain("stageCenter: el.tableCenter || el.community || el.board");
     expect(client).toContain('["DEEP_BREATH", "RECYCLE"].includes(id)) targetElement = casterEnergy');
-    expect(profiles.getSkillFxProfile("DEEP_BREATH")).toMatchObject({ tier: "FX1", impact: "energy" });
+    expect(profiles.getSkillFxProfile("DEEP_BREATH")).toMatchObject({ tier: "FX2", impact: "energy" });
   });
 
   test("FX-STAGE-03 Cheat retains an exact card target after the central stage", () => {

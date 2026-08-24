@@ -181,6 +181,16 @@ describe("Deep Breath 秘密主动技能契约", () => {
     });
     io.emits.length = 0;
     engine.skillEngine.endHand(room, { reason: "showdown", winner: a, tie: false });
+    const refundPacket = lastPacket(io, a, "skill:private-result");
+    expect(refundPacket?.payload).toMatchObject({
+      skillId: "DEEP_BREATH",
+      status: "REFUNDED",
+      amount: 2,
+      message: "深呼吸：恢复 2 点能量。",
+    });
+    expect(a.skillRuntime.breathArmed).toBe(false);
+    expect(a.skillRuntime.breathBroken).toBe(false);
+    expect(getSelfSkillSummary(a).breathArmed).toBe(false);
     engine.skillEngine.broadcastSkillState(room);
     engine.broadcastRoomState(room);
     expect(getRealEnergy(a)).toBe(5);
@@ -189,6 +199,39 @@ describe("Deep Breath 秘密主动技能契约", () => {
       .skills.abyssEnergy).toBe(5);
     expectNoDeepBreathIdentity(packetsFor(io, b));
     expect(JSON.stringify(packetsFor(io, b))).not.toContain("+2");
+    engine.skillEngine.endHand(room, { reason: "showdown", winner: a, tie: false });
+    expect(getRealEnergy(a)).toBe(5);
+    expect(a.skillRuntime.privateResults.filter((result) => (
+      result.skillId === "DEEP_BREATH" && result.status === "REFUNDED"
+    ))).toHaveLength(1);
+  });
+
+  test("DB-SETTLEMENT-01 对手 socket、公共日志、房间状态和结算载荷均无返能身份细节", () => {
+    const { io, engine, room, a, b } = setupRoom();
+    expect(use(engine, room, a, "DEEP_BREATH", {}, "db-public-settlement")).toMatchObject({
+      status: "SUCCESS",
+    });
+    io.emits.length = 0;
+    a.status = "active";
+    b.status = "folded";
+    engine.settleByFold(room);
+
+    const opponentPackets = packetsFor(io, b);
+    const handResult = lastPacket(io, b, "hand_result")?.payload;
+    expect(handResult).toBeTruthy();
+    expectNoDeepBreathIdentity(opponentPackets);
+    expectNoDeepBreathIdentity(getPublicRoomSkillSnapshot(room, b).recentLog);
+    expectNoDeepBreathIdentity(engine.getRoomSnapshot(room, b));
+    expectNoDeepBreathIdentity(handResult);
+    expect((handResult.skillSettlement?.effects || []).map((effect) => effect.skillId)).not.toContain("DEEP_BREATH");
+    expect(JSON.stringify(opponentPackets)).not.toMatch(/恢复 2|返能|"amount":2/);
+    expect(lastPacket(io, a, "skill:private-result")?.payload).toMatchObject({
+      skillId: "DEEP_BREATH",
+      status: "REFUNDED",
+      amount: 2,
+    });
+    expect(a.skillRuntime.breathArmed).toBe(false);
+    engine.abortPendingRoomWork(room);
   });
 
   test("DB-ALERT-01 警觉监听深呼吸，但只给出通用私有提示", () => {

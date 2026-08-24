@@ -145,6 +145,7 @@
     const skillId = controls.skill.value;
     const isProtocol = profilesApi.isProtocolSkillId(skillId);
     const profile = profilesApi.getSkillFxProfile(skillId);
+    const deepBreathRefund = skillId === "DEEP_BREATH" && controls.variant.value === "refund";
     const event = {
       force: true,
       eventId: `gallery:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`,
@@ -162,21 +163,26 @@
       toElement: anchor("self"),
       variant: controls.variant.value,
       mode: controls.variant.value,
-      context: isProtocol || controls.target.value === "settlement" || controls.phase.value === "showdown"
+      context: deepBreathRefund || isProtocol || controls.target.value === "settlement" || controls.phase.value === "showdown"
         ? "settlement"
         : "table",
       resultOnly: isProtocol || disclosure === "result",
       revealIdentity: disclosure === "public" || disclosure === "self",
       stageCaption: controls.showCaption?.checked !== false,
-      broadcast: isProtocol ? false : undefined,
+      broadcast: isProtocol || deepBreathRefund ? false : undefined,
+      presentation: deepBreathRefund ? "result" : undefined,
+      glyph: deepBreathRefund ? "+2" : undefined,
+      impactGlyph: deepBreathRefund ? "+2" : undefined,
       stageLines: skillId === "DISGUISE"
         ? ["1000", "POT 150", "CALL 50"]
         : skillId === "LOAN" && controls.variant.value === "chip"
           ? ["CREDIT +100"]
           : [],
-      effectLabel: skillId === "LOAN" && controls.variant.value === "chip"
-        ? "CHIP CREDIT +100"
-        : profile?.resultLabel,
+      effectLabel: deepBreathRefund
+        ? "ENERGY RETURN +2"
+        : skillId === "LOAN" && controls.variant.value === "chip"
+          ? "CHIP CREDIT +100"
+          : profile?.resultLabel,
       safeMessage: controls.status.value === "FAILED"
         ? "RESOLUTION FAILED"
         : controls.status.value === "COUNTERED"

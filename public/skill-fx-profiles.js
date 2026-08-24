@@ -13,6 +13,17 @@
     FX5: Object.freeze({ min: 1400, max: 3000, defaultMs: 2400 }),
   });
 
+  const FX_PRESENTATION = Object.freeze({
+    JOURNEY: "journey",
+    PULSE: "pulse",
+    RESULT: "result",
+  });
+
+  // A three-beat presentation needs enough time for title recognition, route
+  // travel and the physical target impact. FX1 remains reserved for a pulse
+  // that starts and lands on the same target.
+  const JOURNEY_MIN_MS = 650;
+
   const VISIBILITY = Object.freeze({
     PUBLIC: "PUBLIC",
     SECRET: "SECRET",
@@ -36,6 +47,9 @@
     haptics: null,
     persistent: null,
     resultLabel: "RESOLVED",
+    presentation: FX_PRESENTATION.JOURNEY,
+    durationMs: null,
+    resultDurations: null,
     ...value,
   });
 
@@ -44,13 +58,16 @@
   const SKILL_FX_PROFILES = Object.freeze({
     DEEP_BREATH: profile({
       id: "DEEP_BREATH", name: "深呼吸", english: "DEEP BREATH",
-      tier: "FX1", family: "breath", anchor: "energy", impact: "energy", visibility: VISIBILITY.SECRET,
+      tier: "FX2", durationMs: 680,
+      resultDurations: Object.freeze({ refund: Object.freeze({ min: 750, max: 850, defaultMs: 820 }) }),
+      family: "breath", anchor: "energy", impact: "energy", visibility: VISIBILITY.SECRET,
       accent: "#55f4db", secondary: "#42bfff", glyph: "∿", sound: "breath",
       persistent: "BREATH", resultLabel: "RESOURCE CYCLE ARMED",
     }),
     RECYCLE: profile({
       id: "RECYCLE", name: "回收利用", english: "RECYCLE",
-      tier: "FX1", family: "recycle", anchor: "energy", impact: "energy", accent: "#70f1c4",
+      tier: "FX2", durationMs: 650,
+      family: "recycle", anchor: "energy", impact: "energy", accent: "#70f1c4",
       secondary: "#f4bd5e", glyph: "↻", sound: "recycle", resultLabel: "ENERGY RETURN",
     }),
     INTIMIDATION: profile({
@@ -151,7 +168,8 @@
     }),
     ALERT: profile({
       id: "ALERT", name: "警觉", english: "ALERT",
-      tier: "FX1", family: "alert", anchor: "self", impact: "hud", visibility: VISIBILITY.SECRET,
+      tier: "FX1", presentation: FX_PRESENTATION.PULSE,
+      family: "alert", anchor: "self", impact: "hud", visibility: VISIBILITY.SECRET,
       accent: "#72f5e3", secondary: "#f1d777", glyph: "⌁", sound: "alert",
       resultLabel: "HIDDEN ACTIVITY",
     }),
@@ -169,9 +187,10 @@
     }),
     PROBE: profile({
       id: "PROBE", name: "试探", english: "PROBE",
-      tier: "FX1", family: "probe", anchor: "opponent", impact: "player", visibility: VISIBILITY.SECRET,
+      tier: "FX2", durationMs: 680,
+      family: "probe", anchor: "opponent", impact: "player", visibility: VISIBILITY.SECRET,
       accent: "#e7c965", secondary: "#4ce5dd", glyph: "+50", sound: "probe",
-      persistent: "PROBE", resultLabel: "PRESSURE BONUS",
+      persistent: "PROBE", resultLabel: "PRESSURE MARK ARMED",
     }),
     DISGUISE: profile({
       id: "DISGUISE", name: "伪装", english: "DISGUISE",
@@ -221,17 +240,28 @@
     return false;
   }
 
-  function fxDuration(profileValue, quality, reduceMotion) {
+  function fxDuration(profileValue, quality, reduceMotion, variant = "") {
     const selected = profileValue || FX_TIERS.FX2;
     const tier = FX_TIERS[selected.tier] || FX_TIERS.FX2;
-    if (reduceMotion) return Math.min(360, tier.defaultMs);
+    const variantKey = String(variant || "").trim().toLowerCase();
+    const resultBudget = selected.resultDurations?.[variantKey] || null;
+    const defaultMs = Number(resultBudget?.defaultMs ?? selected.durationMs ?? tier.defaultMs);
+    if (reduceMotion) return Math.min(360, defaultMs);
     const mode = String(quality || "high").toLowerCase();
     const scale = mode === "low" ? 0.68 : mode === "medium" ? 0.84 : 1;
-    return Math.max(tier.min, Math.min(tier.max, Math.round(tier.defaultMs * scale)));
+    if (resultBudget) {
+      return Math.max(resultBudget.min, Math.min(resultBudget.max, Math.round(defaultMs * scale)));
+    }
+    const readableMin = selected.presentation === FX_PRESENTATION.JOURNEY
+      ? Math.max(tier.min, JOURNEY_MIN_MS)
+      : tier.min;
+    return Math.max(readableMin, Math.min(tier.max, Math.round(defaultMs * scale)));
   }
 
   return Object.freeze({
     FX_TIERS,
+    FX_PRESENTATION,
+    JOURNEY_MIN_MS,
     VISIBILITY,
     SKILL_FX_PROFILES,
     PROTOCOL_SHOWDOWN_PROFILE,

@@ -7,7 +7,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -15,6 +15,11 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - run: npx playwright install --with-deps chromium
       - run: npm test -- --ci
+      - run: npm run verify:skill-fx
+      - run: npm run verify:ui
+      - run: npm run verify:interactions
+      - run: npm run verify:online
       - run: node scripts/simulate-chip-economy.js 80
       - run: node scripts/simulate-overdrive.js 100

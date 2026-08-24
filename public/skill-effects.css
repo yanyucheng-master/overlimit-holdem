@@ -197,6 +197,16 @@
   animation: skill-effect-route-phase var(--fx-duration) linear both;
 }
 
+.skill-effect-instance[data-presentation="pulse"] .skill-effect-route {
+  display: none;
+  opacity: 0;
+  animation: none;
+}
+
+.skill-effect-instance[data-presentation="pulse"][data-tier="FX1"] .skill-effect-caption {
+  top: clamp(64px, calc(var(--fx-stage-y) - 82px), calc(100dvh - 64px));
+}
+
 .skill-effect-route .route-line {
   position: absolute;
   inset: 3px 0 auto;
@@ -468,7 +478,27 @@
 }
 .skill-effect-instance[data-effect="breath"][data-variant="refund"] .skill-effect-glyph {
   display: block;
-  font-size: 24px;
+  font-size: clamp(32px, 5vw, 62px);
+}
+.skill-effect-instance[data-effect="breath"][data-variant="refund"] {
+  animation: skill-effect-refund-root var(--fx-duration) linear both;
+}
+.skill-effect-instance[data-effect="breath"][data-variant="refund"] .skill-effect-core,
+.skill-effect-instance[data-effect="breath"][data-variant="refund"] .skill-effect-glyph,
+.skill-effect-instance[data-effect="breath"][data-variant="refund"] .skill-effect-impact,
+.skill-effect-instance[data-effect="breath"][data-variant="refund"] .skill-effect-caption {
+  opacity: 1;
+  animation: none;
+}
+.skill-effect-instance[data-effect="breath"][data-variant="refund"] .skill-impact-ring,
+.skill-effect-instance[data-effect="breath"][data-variant="refund"] .skill-impact-outline,
+.skill-effect-instance[data-effect="breath"][data-variant="refund"] .skill-impact-glyph {
+  opacity: 1;
+  animation: none;
+}
+.skill-effect-instance[data-effect="breath"][data-variant="refund"] .skill-effect-result {
+  color: color-mix(in srgb, var(--fx-accent) 76%, #fff);
+  text-shadow: 0 0 14px var(--fx-accent);
 }
 
 /* 02 Recycle: broken amber fragments reverse into a cool complete loop. */
@@ -718,8 +748,7 @@
 .skill-effect-instance[data-effect="loan"][data-variant="energy"] .skill-effect-route { opacity: .72; }
 .skill-effect-instance[data-effect="loan"][data-variant="energy"] .halo-a { animation-name: skill-effect-energy-credit; }
 
-/* 19 Alert: an opponent-origin wave resolves only when the observer is prompted. */
-.skill-effect-instance[data-effect="alert"] .skill-effect-route { opacity: 1; }
+/* 19 Alert: a local HUD pulse resolves only when the observer is prompted. */
 .skill-effect-instance[data-effect="alert"] .route-packet { border-radius: 50%; }
 .skill-effect-instance[data-effect="alert"] .skill-effect-line,
 .skill-effect-instance[data-effect="alert"] .skill-effect-card { display: none; }
@@ -1104,6 +1133,10 @@ body[data-screen="game"] .skill-fx-gallery-launcher {
   overflow: hidden;
 }
 
+.skill-fx-gallery-modal {
+  overflow-x: hidden;
+}
+
 .skill-fx-gallery-workspace {
   display: grid;
   grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
@@ -1381,7 +1414,10 @@ body[data-screen="game"] .skill-fx-gallery-launcher {
 }
 
 @media (max-width: 860px) {
-  .skill-fx-gallery-panel { overflow: auto; }
+  .skill-fx-gallery-panel {
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
   .skill-fx-gallery-workspace { grid-template-columns: 1fr; height: auto; }
   .skill-fx-gallery-controls { grid-template-columns: 1fr 1fr; max-height: none; }
   .skill-fx-gallery-controls label { grid-template-columns: 72px 1fr; }
@@ -1427,6 +1463,11 @@ body[data-screen="game"] .skill-fx-gallery-launcher {
 @keyframes skill-effect-instance-fade {
   0% { opacity: 0; }
   8%, 76% { opacity: 1; }
+  100% { opacity: 0; }
+}
+@keyframes skill-effect-refund-root {
+  0% { opacity: 0; }
+  3%, 97% { opacity: 1; }
   100% { opacity: 0; }
 }
 @keyframes skill-effect-core-arrive {

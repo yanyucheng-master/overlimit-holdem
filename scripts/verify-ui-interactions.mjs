@@ -2,7 +2,7 @@ import { chromium } from "playwright";
 import playwrightRuntime from "./playwright-runtime.js";
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:3002";
-const LOADOUT = ["DEEP_BREATH", "RECYCLE", "BLOOD_BATTLE", "DEFENSE"];
+const LOADOUT = ["DEEP_BREATH", "RECYCLE", "BLOOD_BATTLE", "PROBE"];
 
 async function visible(page, selector) {
   return page.locator(selector).isVisible().catch(() => false);
@@ -204,6 +204,15 @@ async function main() {
   await page.goto(BASE + "/?verify-interactions=1", { waitUntil: "domcontentloaded" });
   await page.waitForSelector("#screen-auth.active", { timeout: 10000 });
   await page.waitForSelector("#btn-open-skill-lab:not([disabled])", { timeout: 10000 });
+  report.lobby.skillModeCopyLocked = await page.evaluate(() => {
+    const description = document.querySelector(
+      '.protocol-card[data-game-mode="standard"][data-skill-mode="abyss"] .protocol-desc'
+    );
+    return {
+      zh: description?.textContent?.trim() || "",
+      en: description?.dataset.currentEn || "",
+    };
+  });
 
   await page.waitForSelector("#quickstart-modal", { state: "hidden", timeout: 5000 });
   report.quickstart.autoStart = await page.evaluate(() => ({
@@ -369,6 +378,15 @@ async function main() {
   report.lab.saveEnabled = await page.locator("#btn-save-loadout").isEnabled();
   await page.click("#btn-save-loadout");
   await page.waitForSelector("#screen-auth.active");
+  report.lobby.skillModeCopyReady = await page.evaluate(() => {
+    const description = document.querySelector(
+      '.protocol-card[data-game-mode="standard"][data-skill-mode="abyss"] .protocol-desc'
+    );
+    return {
+      zh: description?.textContent?.trim() || "",
+      en: description?.dataset.currentEn || "",
+    };
+  });
 
   report.room.doubleClickGate = await page.evaluate(() => {
     const button = document.querySelector(
@@ -382,6 +400,14 @@ async function main() {
   });
   await page.waitForSelector("#screen-game.active", { timeout: 20000 });
   await page.waitForTimeout(500);
+  await page.waitForFunction(() => {
+    const probe = document.querySelector('[data-skill-use-id="PROBE"]');
+    return probe && !probe.disabled;
+  }, null, { timeout: 10000 });
+  await page.click('[data-skill-use-id="PROBE"]');
+  await page.waitForTimeout(900);
+  report.game.probeFeed = await page.locator("#skill-log .skill-feed-entry").allInnerTexts()
+    .then((entries) => entries.filter((entry) => entry.includes("试探")));
 
   await page.click("#btn-settings");
   report.game.settingsLobbyVisible = await visible(page, "#btn-settings-lobby");
@@ -586,6 +612,14 @@ async function main() {
     failures.push("ALL IN style picker or preview failed");
   }
   if (report.lobby.hitAudit.failures.length) failures.push("lobby button hit targets blocked");
+  if (
+    report.lobby.skillModeCopyLocked.zh !== "需先完成技能构筑" ||
+    report.lobby.skillModeCopyLocked.en !== "Complete a skill build first" ||
+    report.lobby.skillModeCopyReady.zh !== "使用已保存的技能构筑" ||
+    report.lobby.skillModeCopyReady.en !== "Saved skill build ready"
+  ) {
+    failures.push("skill-mode readiness copy did not update in Chinese and English");
+  }
   if (report.lab.cards < 12 || report.lab.zoomButtons !== report.lab.cards) failures.push("skill zoom buttons incomplete");
   if (!report.lab.previewOpened || !report.lab.previewClosed || !report.lab.zoomDidNotSelect) {
     failures.push("skill preview interaction failed");
@@ -612,6 +646,9 @@ async function main() {
   }
   if (!report.game.settingsLobbyVisible || !report.game.settingsLobbyConfirmation) {
     failures.push("settings return-to-lobby flow failed");
+  }
+  if (report.game.probeFeed.length !== 1 || !report.game.probeFeed[0].includes("试探已秘密生效")) {
+    failures.push("Probe tactical feed displayed duplicate activation records");
   }
   if (report.game.hitAudit.failures.length) failures.push("game button hit targets blocked");
   if (!report.game.actionGate.found || !report.game.actionGate.allDisabledAfterFirst) {
