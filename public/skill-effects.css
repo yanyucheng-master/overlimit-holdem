@@ -27,6 +27,14 @@
 }
 
 .skill-effect-instance {
+  --fx-stage-x: 50vw;
+  --fx-stage-y: 50vh;
+  --fx-stage-w: 220px;
+  --fx-stage-h: 120px;
+  --fx-target-x: 50vw;
+  --fx-target-y: 50vh;
+  --fx-target-w: 120px;
+  --fx-target-h: 80px;
   --fx-x: 50vw;
   --fx-y: 50vh;
   --fx-w: 220px;
@@ -48,10 +56,17 @@
   animation: skill-effect-instance-fade var(--fx-duration) linear both;
 }
 
+.skill-effect-stage {
+  position: absolute;
+  z-index: 3;
+  inset: 0;
+  pointer-events: none;
+}
+
 .skill-effect-core {
   position: absolute;
-  left: var(--fx-x);
-  top: var(--fx-y);
+  left: var(--fx-stage-x);
+  top: var(--fx-stage-y);
   width: clamp(132px, calc(var(--fx-w) * 1.32), 540px);
   height: clamp(104px, calc(var(--fx-h) * 1.45), 360px);
   transform: translate(-50%, -50%);
@@ -167,6 +182,7 @@
 
 .skill-effect-route {
   position: absolute;
+  z-index: 2;
   left: var(--fx-from-x);
   top: var(--fx-from-y);
   width: var(--fx-route-length);
@@ -174,6 +190,11 @@
   transform: rotate(var(--fx-route-angle));
   transform-origin: 0 50%;
   opacity: 0;
+}
+
+.skill-effect-instance[data-has-route="true"] .skill-effect-route {
+  opacity: 1;
+  animation: skill-effect-route-phase var(--fx-duration) linear both;
 }
 
 .skill-effect-route .route-line {
@@ -198,24 +219,141 @@
 
 .skill-effect-route .packet-b { animation-delay: 110ms; }
 
+.skill-effect-impact {
+  position: absolute;
+  z-index: 4;
+  left: var(--fx-target-x);
+  top: var(--fx-target-y);
+  width: clamp(54px, calc(var(--fx-target-w) + 18px), 240px);
+  height: clamp(48px, calc(var(--fx-target-h) + 14px), 180px);
+  transform: translate(-50%, -50%);
+  color: var(--fx-accent);
+  filter: drop-shadow(0 0 13px color-mix(in srgb, var(--fx-accent) 48%, transparent));
+  animation: skill-effect-impact-arrive var(--fx-duration) cubic-bezier(.2, .76, .2, 1) both;
+}
+
+.skill-impact-outline,
+.skill-impact-ring,
+.skill-impact-flash,
+.skill-impact-glyph {
+  position: absolute;
+  display: block;
+  pointer-events: none;
+}
+
+.skill-impact-outline {
+  inset: 3px;
+  border: 2px solid color-mix(in srgb, var(--fx-accent) 76%, transparent);
+  border-radius: 12px;
+  box-shadow:
+    inset 0 0 18px color-mix(in srgb, var(--fx-secondary) 13%, transparent),
+    0 0 18px color-mix(in srgb, var(--fx-accent) 22%, transparent);
+}
+
+.skill-impact-ring {
+  inset: 17%;
+  border: 1px solid color-mix(in srgb, var(--fx-secondary) 82%, transparent);
+  border-radius: 50%;
+  animation: skill-effect-impact-ring var(--fx-duration) ease-out both;
+}
+
+.skill-impact-flash {
+  inset: 30%;
+  border-radius: 50%;
+  background: radial-gradient(circle, #fff, color-mix(in srgb, var(--fx-accent) 58%, transparent) 32%, transparent 70%);
+  mix-blend-mode: screen;
+  animation: skill-effect-impact-flash var(--fx-duration) ease-out both;
+}
+
+.skill-impact-glyph {
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  color: #fff;
+  font: 900 clamp(15px, 1.9vw, 27px)/1 "Orbitron", "Rajdhani", sans-serif;
+  text-shadow: 0 0 10px #fff, 0 0 20px var(--fx-accent);
+}
+
+.skill-effect-instance[data-impact="card"] .skill-effect-impact {
+  width: clamp(58px, calc(var(--fx-target-w) + 14px), 126px);
+  height: clamp(82px, calc(var(--fx-target-h) + 14px), 172px);
+}
+.skill-effect-instance[data-impact="card"] .skill-impact-outline {
+  border-radius: 10px;
+  clip-path: polygon(0 0, 34% 0, 34% 4%, 5% 4%, 5% 30%, 0 30%, 0 0, 100% 0, 100% 30%, 95% 30%, 95% 4%, 66% 4%, 66% 0, 100% 0, 100% 100%, 66% 100%, 66% 96%, 95% 96%, 95% 70%, 100% 70%, 100% 100%, 0 100%, 0 70%, 5% 70%, 5% 96%, 34% 96%, 34% 100%, 0 100%);
+}
+.skill-effect-instance[data-impact="energy"] .skill-effect-impact {
+  width: clamp(70px, calc(var(--fx-target-w) + 16px), 176px);
+  height: clamp(46px, calc(var(--fx-target-h) + 12px), 88px);
+}
+.skill-effect-instance[data-impact="energy"] .skill-impact-outline {
+  border-radius: 999px;
+}
+.skill-effect-instance[data-impact="chip"] .skill-effect-impact {
+  width: clamp(72px, calc(var(--fx-target-w) + 18px), 156px);
+  height: clamp(72px, calc(var(--fx-target-h) + 18px), 156px);
+}
+.skill-effect-instance[data-impact="chip"] .skill-impact-outline {
+  border-radius: 50%;
+  border-style: double;
+}
+.skill-effect-instance[data-impact="player"] .skill-effect-impact {
+  width: min(calc(var(--fx-target-w) + 22px), min(68vw, 620px));
+  min-width: 140px;
+  height: clamp(72px, calc(var(--fx-target-h) + 16px), 158px);
+}
+.skill-effect-instance[data-impact="player"] .skill-impact-outline {
+  border-radius: 18px 18px 38px 38px;
+  clip-path: polygon(8% 0, 92% 0, 100% 18%, 94% 76%, 50% 100%, 6% 76%, 0 18%);
+}
+.skill-effect-instance[data-impact="board"] .skill-effect-impact {
+  width: min(calc(var(--fx-target-w) + 26px), min(88vw, 760px));
+  min-width: 260px;
+  height: min(calc(var(--fx-target-h) + 18px), 330px);
+  min-height: 130px;
+}
+.skill-effect-instance[data-impact="board"] .skill-impact-outline {
+  border-radius: 26px;
+}
+.skill-effect-instance[data-impact="hud"] .skill-effect-impact {
+  width: min(calc(var(--fx-target-w) + 18px), min(72vw, 560px));
+  min-width: 120px;
+  height: clamp(62px, calc(var(--fx-target-h) + 14px), 150px);
+}
+.skill-effect-instance[data-impact="hud"] .skill-impact-outline {
+  border-radius: 8px;
+  background: repeating-linear-gradient(90deg, transparent 0 12px, color-mix(in srgb, var(--fx-accent) 9%, transparent) 12px 13px);
+}
+.skill-effect-instance[data-impact="interrupt"] .skill-effect-impact {
+  width: clamp(110px, calc(var(--fx-target-w) + 20px), 220px);
+  height: clamp(82px, calc(var(--fx-target-h) + 16px), 170px);
+}
+.skill-effect-instance[data-impact="interrupt"] .skill-impact-outline {
+  border-radius: 4px;
+  transform: rotate(-8deg) skewX(-10deg);
+  border-color: var(--fx-secondary);
+}
+
 .skill-effect-caption {
   position: absolute;
-  left: var(--fx-x);
-  top: calc(var(--fx-y) + max(76px, calc(var(--fx-h) * .85)));
+  z-index: 5;
+  left: var(--fx-stage-x);
+  top: calc(var(--fx-stage-y) + 126px);
+  display: grid;
+  justify-items: center;
   width: min(78vw, 430px);
   transform: translate(-50%, -50%);
   text-align: center;
-  text-transform: uppercase;
   text-shadow: 0 2px 18px #02030b;
   animation: skill-effect-caption-in var(--fx-duration) cubic-bezier(.18, .82, .22, 1) both;
 }
 
-.skill-effect-instance[data-placement="above"] .skill-effect-caption {
-  top: calc(var(--fx-y) - max(76px, calc(var(--fx-h) * .85)));
-}
-
 .skill-effect-caption > * {
   display: block;
+}
+
+.skill-effect-instance[data-caption="hidden"] .skill-effect-caption {
+  display: none;
 }
 
 .skill-effect-kicker {
@@ -226,12 +364,18 @@
 }
 
 .skill-effect-title {
-  margin-top: 3px;
   color: #fff;
-  font-family: "Orbitron", "Rajdhani", sans-serif;
+  font-family: "Rajdhani", "Microsoft YaHei", sans-serif;
   font-size: clamp(16px, 2vw, 26px);
-  letter-spacing: .11em;
+  font-weight: 900;
+  letter-spacing: .08em;
   text-shadow: 0 0 18px var(--fx-accent);
+}
+
+.skill-effect-kicker {
+  margin-top: 3px;
+  font-family: "Orbitron", "Rajdhani", sans-serif;
+  text-transform: uppercase;
 }
 
 .skill-effect-result {
@@ -273,11 +417,11 @@
 }
 
 .skill-effect-instance[data-context="settlement"] .skill-effect-caption {
-  top: min(calc(var(--fx-y) + 148px), calc(100dvh - 78px));
+  top: min(calc(var(--fx-stage-y) + 148px), calc(100dvh - 78px));
 }
 
 .skill-effect-instance[data-effect="protocol"] .skill-effect-caption {
-  top: calc(var(--fx-y) - 132px);
+  top: calc(var(--fx-stage-y) - 132px);
 }
 
 /* 01 Deep Breath: a controlled inhale/exhale with energy motes returning. */
@@ -311,6 +455,20 @@
   height: 7px;
   border-radius: 50%;
   animation-name: skill-effect-particle-in;
+}
+.skill-effect-instance[data-effect="breath"][data-variant="refund"] .skill-effect-core {
+  width: 110px;
+  height: 84px;
+}
+.skill-effect-instance[data-effect="breath"][data-variant="refund"] .skill-effect-halo,
+.skill-effect-instance[data-effect="breath"][data-variant="refund"] .skill-effect-line,
+.skill-effect-instance[data-effect="breath"][data-variant="refund"] .skill-effect-card,
+.skill-effect-instance[data-effect="breath"][data-variant="refund"] .skill-effect-particles {
+  display: none;
+}
+.skill-effect-instance[data-effect="breath"][data-variant="refund"] .skill-effect-glyph {
+  display: block;
+  font-size: 24px;
 }
 
 /* 02 Recycle: broken amber fragments reverse into a cool complete loop. */
@@ -521,11 +679,22 @@
 .skill-effect-instance[data-effect="nullification"] .line-b { transform: rotate(-45deg); }
 .skill-effect-instance[data-effect="nullification"] .line-c,
 .skill-effect-instance[data-effect="nullification"] .skill-effect-card { display: none; }
+.skill-effect-instance[data-effect="nullification"][data-variant="reveal"] .halo-b,
+.skill-effect-instance[data-effect="nullification"][data-variant="reveal"] .skill-effect-line,
+.skill-effect-instance[data-effect="nullification"][data-variant="reveal"] .skill-effect-particles { display: none; }
 
 /* 16 Fortune: several probability branches converge on one gold outcome. */
 .skill-effect-instance[data-effect="fortune"] .halo-a { border-color: var(--fx-accent); animation-name: skill-effect-fortune-converge; }
 .skill-effect-instance[data-effect="fortune"] .halo-b { border-color: var(--fx-secondary); }
-.skill-effect-instance[data-effect="fortune"] .skill-effect-card { display: none; }
+.skill-effect-instance[data-effect="fortune"] .skill-effect-card {
+  display: block;
+  opacity: 1;
+  width: 48px;
+  animation: skill-effect-fortune-card var(--fx-duration) cubic-bezier(.18,.78,.2,1) both;
+}
+.skill-effect-instance[data-effect="fortune"] .card-a { --fortune-offset: -112px; animation-delay: 0ms; }
+.skill-effect-instance[data-effect="fortune"] .card-b { --fortune-offset: 62px; animation-delay: 38ms; }
+.skill-effect-instance[data-effect="fortune"] .card-c { --fortune-offset: -24px; animation-delay: 74ms; }
 .skill-effect-instance[data-effect="fortune"] .skill-effect-line {
   transform-origin: 100% 50%;
   animation-name: skill-effect-branch-converge;
@@ -546,7 +715,7 @@
 .skill-effect-instance[data-effect="loan"] .skill-effect-route { opacity: 1; }
 .skill-effect-instance[data-effect="loan"] .skill-effect-card { display: none; }
 .skill-effect-instance[data-effect="loan"] .halo-a { border-left-color: var(--fx-secondary); border-right-color: var(--fx-accent); }
-.skill-effect-instance[data-effect="loan"][data-variant="energy"] .skill-effect-route { display: none; }
+.skill-effect-instance[data-effect="loan"][data-variant="energy"] .skill-effect-route { opacity: .72; }
 .skill-effect-instance[data-effect="loan"][data-variant="energy"] .halo-a { animation-name: skill-effect-energy-credit; }
 
 /* 19 Alert: an opponent-origin wave resolves only when the observer is prompted. */
@@ -556,9 +725,8 @@
 .skill-effect-instance[data-effect="alert"] .skill-effect-card { display: none; }
 .skill-effect-instance[data-effect="alert"] .halo-a { border-left-color: transparent; animation-name: skill-effect-alert-wave; }
 
-/* 20 Retreat: contribution packets reverse from the pot toward both players. */
-.skill-effect-instance[data-effect="retreat"] .skill-effect-route { opacity: 1; transform: rotate(calc(var(--fx-route-angle) + 180deg)); }
-.skill-effect-instance[data-effect="retreat"] .route-packet { animation-direction: reverse; }
+/* 20 Retreat: the central verdict opens a clean withdrawal lane toward its owner. */
+.skill-effect-instance[data-effect="retreat"] .skill-effect-route { opacity: 1; transform: rotate(var(--fx-route-angle)); }
 .skill-effect-instance[data-effect="retreat"] .skill-effect-card,
 .skill-effect-instance[data-effect="retreat"] .skill-effect-line { display: none; }
 .skill-effect-instance[data-effect="retreat"] .halo-a { border-right-color: transparent; animation-name: skill-effect-retreat-open; }
@@ -590,6 +758,81 @@
 .skill-effect-instance[data-effect="disguise"] .halo-b { display: none; }
 .skill-effect-instance[data-effect="disguise"] .skill-effect-line { background: linear-gradient(90deg, transparent, var(--fx-secondary), var(--fx-accent), transparent); }
 .skill-effect-instance[data-effect="disguise"] .skill-effect-card { display: none; }
+
+.skill-effect-stage-data {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 3;
+  display: grid;
+  min-width: min(76%, 260px);
+  gap: 4px;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+}
+
+.skill-effect-data-line {
+  display: block;
+  color: color-mix(in srgb, var(--fx-accent) 72%, #fff);
+  font: 800 clamp(10px, 1.25vw, 16px)/1 "Orbitron", "Rajdhani", sans-serif;
+  letter-spacing: .14em;
+  text-shadow: 0 0 12px var(--fx-accent);
+  animation: skill-effect-data-scramble var(--fx-duration) steps(2, end) both;
+}
+
+.skill-effect-data-line:nth-child(2) { animation-delay: 24ms; }
+.skill-effect-data-line:nth-child(3) { animation-delay: 52ms; }
+.skill-effect-instance[data-effect="disguise"] .skill-effect-glyph { opacity: .22; }
+.skill-effect-instance[data-effect="loan"] .skill-effect-stage-data { top: 67%; }
+
+/* Tier scale is intentionally declared after all family artwork. Families
+   retain distinct geometry, while the director owns the actual hero footprint. */
+.skill-effect-instance[data-tier="FX1"] .skill-effect-core {
+  width: 156px;
+  height: 132px;
+}
+.skill-effect-instance[data-tier="FX2"] .skill-effect-core {
+  width: 230px;
+  height: 176px;
+}
+.skill-effect-instance[data-tier="FX3"] .skill-effect-core {
+  width: 340px;
+  height: 238px;
+}
+.skill-effect-instance[data-tier="FX4"] .skill-effect-core {
+  width: min(540px, 86vw);
+  height: min(330px, 52vh);
+}
+
+.skill-effect-instance[data-tier="FX1"] .skill-effect-caption { top: calc(var(--fx-stage-y) + 82px); }
+.skill-effect-instance[data-tier="FX2"] .skill-effect-caption { top: calc(var(--fx-stage-y) + 112px); }
+.skill-effect-instance[data-tier="FX3"] .skill-effect-caption { top: calc(var(--fx-stage-y) + 148px); }
+.skill-effect-instance[data-tier="FX4"] .skill-effect-caption { top: calc(var(--fx-stage-y) + min(206px, 27vh)); }
+.skill-effect-instance[data-tier="FX1"] .skill-effect-title { font-size: 14px; }
+.skill-effect-instance[data-tier="FX1"] .skill-effect-kicker { font-size: 8px; letter-spacing: .2em; }
+.skill-effect-instance[data-tier="FX1"] .skill-effect-result { display: none; }
+.skill-effect-instance[data-tier="FX4"] .skill-effect-title { font-size: clamp(24px, 3vw, 38px); }
+
+.skill-effect-instance.is-upgraded .skill-effect-core {
+  animation: skill-effect-upgrade-pulse 260ms cubic-bezier(.16,.84,.18,1) both;
+}
+
+.skill-effect-instance.is-counter-cut .skill-effect-stage::before,
+.skill-effect-instance.is-counter-cut .skill-effect-stage::after {
+  content: "";
+  position: absolute;
+  z-index: 12;
+  left: var(--fx-stage-x);
+  top: var(--fx-stage-y);
+  width: min(420px, 70vw);
+  height: 5px;
+  transform: translate(-50%, -50%) rotate(34deg);
+  background: linear-gradient(90deg, transparent, #ff4f7e, #fff, #4cecff, transparent);
+  box-shadow: 0 0 18px #ff4f7e, 0 0 28px #4cecff;
+  animation: skill-effect-counter-cut 150ms ease-out both;
+}
+.skill-effect-instance.is-counter-cut .skill-effect-stage::after { transform: translate(-50%, -50%) rotate(-34deg); }
 
 /* Shared showdown protocol template. */
 .skill-effect-instance[data-effect="protocol"] .skill-effect-core {
@@ -750,6 +993,15 @@ body.skill-fx-shake-soft #screen-game.active {
   filter: none;
 }
 
+.skill-effect-layer[data-fx-quality="low"] .skill-effect-impact {
+  filter: none;
+}
+
+.skill-effect-layer[data-fx-quality="low"] .route-packet,
+.skill-effect-layer[data-fx-quality="low"] .skill-impact-flash {
+  display: none;
+}
+
 .skill-effect-layer[data-fx-motion="reduced"] .skill-effect-instance,
 .skill-effect-layer[data-fx-motion="reduced"] .skill-effect-core,
 .skill-effect-layer[data-fx-motion="reduced"] .skill-effect-halo,
@@ -757,6 +1009,10 @@ body.skill-fx-shake-soft #screen-game.active {
 .skill-effect-layer[data-fx-motion="reduced"] .skill-effect-card,
 .skill-effect-layer[data-fx-motion="reduced"] .skill-effect-glyph,
 .skill-effect-layer[data-fx-motion="reduced"] .skill-effect-route,
+.skill-effect-layer[data-fx-motion="reduced"] .skill-effect-impact,
+.skill-effect-layer[data-fx-motion="reduced"] .skill-impact-outline,
+.skill-effect-layer[data-fx-motion="reduced"] .skill-impact-ring,
+.skill-effect-layer[data-fx-motion="reduced"] .skill-impact-glyph,
 .skill-effect-layer[data-fx-motion="reduced"] .skill-effect-caption {
   animation: skill-effect-reduced-fade var(--fx-duration) ease both !important;
 }
@@ -765,6 +1021,10 @@ body.skill-fx-shake-soft #screen-game.active {
 .skill-effect-layer[data-fx-motion="reduced"] .skill-effect-line,
 .skill-effect-layer[data-fx-motion="reduced"] .skill-effect-route,
 .skill-effect-layer[data-fx-motion="reduced"] .skill-effect-card {
+  display: none !important;
+}
+
+.skill-effect-layer[data-fx-motion="reduced"] .skill-impact-flash {
   display: none !important;
 }
 
@@ -793,9 +1053,18 @@ body.low-performance.skill-fx-shake-soft #screen-game.active {
   .skill-effect-instance[data-effect="fairness"] .skill-effect-core,
   .skill-effect-instance[data-effect="dead-end"] .skill-effect-core,
   .skill-effect-instance[data-effect="disguise"] .skill-effect-core {
-    width: 94vw;
-    height: 58vh;
+    width: min(88vw, 430px);
+    height: min(26vh, 220px);
   }
+  .skill-effect-instance[data-tier="FX1"] .skill-effect-core { width: 124px; height: 104px; }
+  .skill-effect-instance[data-tier="FX2"] .skill-effect-core { width: 184px; height: 142px; }
+  .skill-effect-instance[data-tier="FX3"] .skill-effect-core { width: min(272px, 78vw); height: 190px; }
+  .skill-effect-instance[data-tier="FX4"] .skill-effect-core { width: min(88vw, 430px); height: min(26vh, 220px); }
+  .skill-effect-instance[data-tier="FX1"] .skill-effect-caption { top: calc(var(--fx-stage-y) + 66px); }
+  .skill-effect-instance[data-tier="FX2"] .skill-effect-caption { top: calc(var(--fx-stage-y) + 92px); }
+  .skill-effect-instance[data-tier="FX3"] .skill-effect-caption { top: calc(var(--fx-stage-y) + 120px); }
+  .skill-effect-instance[data-tier="FX4"] .skill-effect-caption { top: calc(var(--fx-stage-y) + min(100px, 12vh)); }
+  .skill-effect-instance[data-impact="board"] .skill-effect-impact { min-width: min(88vw, 300px); }
   .skill-state-marker { padding: 2px 5px; font-size: 8px; }
 }
 
@@ -831,7 +1100,7 @@ body[data-screen="game"] .skill-fx-gallery-launcher {
 
 .skill-fx-gallery-panel {
   width: min(1480px, calc(100vw - 34px));
-  height: min(900px, calc(100dvh - 34px));
+  height: min(900px, calc(100dvh - var(--safe-top) - var(--safe-bottom) - 48px));
   overflow: hidden;
 }
 
@@ -840,7 +1109,8 @@ body[data-screen="game"] .skill-fx-gallery-launcher {
   grid-template-columns: minmax(220px, 280px) minmax(0, 1fr);
   gap: 16px;
   min-height: 0;
-  height: calc(100% - 76px);
+  height: calc(100% - 84px);
+  margin-top: 8px;
 }
 
 .skill-fx-gallery-controls {
@@ -927,6 +1197,58 @@ body[data-screen="game"] .skill-fx-gallery-launcher {
   mask-image: radial-gradient(circle, #000, transparent 76%);
 }
 
+.skill-fx-gallery-stage-center,
+.skill-fx-gallery-target-marker {
+  position: absolute;
+  z-index: 7;
+  left: 50%;
+  top: 45%;
+  width: 26px;
+  height: 26px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.skill-fx-gallery-stage-center {
+  border: 1px dashed rgb(95 236 244 / .72);
+  box-shadow: 0 0 0 5px rgb(57 225 238 / .07), 0 0 16px rgb(57 225 238 / .24);
+}
+
+.skill-fx-gallery-stage-center::before,
+.skill-fx-gallery-target-marker::before {
+  content: "STAGE";
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 6px);
+  transform: translateX(-50%);
+  color: #71edf2;
+  font: 800 8px/1 "Orbitron", sans-serif;
+  letter-spacing: .14em;
+  white-space: nowrap;
+}
+
+.skill-fx-gallery-target-marker {
+  border: 1px dashed rgb(245 204 99 / .88);
+  border-radius: 9px;
+  box-shadow: 0 0 0 4px rgb(245 204 99 / .06), 0 0 14px rgb(245 204 99 / .22);
+}
+
+.skill-fx-gallery-target-marker::before {
+  content: "TARGET";
+  color: #f3d477;
+}
+
+.skill-fx-gallery-stage.show-stage-anchor .skill-fx-gallery-stage-center,
+.skill-fx-gallery-stage.show-target-anchor .skill-fx-gallery-target-marker {
+  opacity: 1;
+}
+
+.skill-fx-gallery-stage.show-target-anchor .skill-fx-gallery-target-marker.is-empty {
+  opacity: 0;
+}
+
 .skill-fx-gallery-player {
   position: absolute;
   left: 50%;
@@ -994,8 +1316,8 @@ body[data-screen="game"] .skill-fx-gallery-launcher {
 
 .skill-fx-gallery-pot {
   position: absolute;
-  left: 50%;
-  top: 65%;
+  left: 78%;
+  top: 54%;
   display: grid;
   place-items: center;
   width: 78px;
@@ -1014,7 +1336,7 @@ body[data-screen="game"] .skill-fx-gallery-launcher {
 .skill-fx-gallery-settlement {
   position: absolute;
   right: 20px;
-  bottom: 18px;
+  bottom: 102px;
   padding: 8px 12px;
   border-radius: 8px;
   background: rgb(237 199 93 / .08);
@@ -1028,6 +1350,13 @@ body[data-screen="game"] .skill-fx-gallery-launcher {
   width: 100%;
   height: 100%;
   z-index: 6;
+}
+
+.skill-fx-gallery-state-layer {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  z-index: 5;
 }
 
 .skill-fx-gallery-broadcast {
@@ -1059,13 +1388,37 @@ body[data-screen="game"] .skill-fx-gallery-launcher {
   .skill-fx-gallery-stage { min-height: 520px; }
 }
 
+@media (max-height: 760px) and (min-width: 721px) {
+  .skill-effect-instance[data-tier="FX4"] .skill-effect-core,
+  .skill-effect-instance[data-effect="fairness"] .skill-effect-core,
+  .skill-effect-instance[data-effect="dead-end"] .skill-effect-core,
+  .skill-effect-instance[data-effect="disguise"] .skill-effect-core {
+    width: min(480px, 76vw);
+    height: min(260px, 38vh);
+  }
+
+  .skill-effect-instance[data-tier="FX4"] .skill-effect-caption {
+    top: calc(var(--fx-stage-y) + 115px);
+  }
+}
+
 @media (max-width: 560px) {
-  .skill-fx-gallery-panel { width: calc(100vw - 16px); height: calc(100dvh - 16px); }
-  .skill-fx-gallery-controls { grid-template-columns: 1fr; }
-  .skill-fx-gallery-player { width: 82%; }
+  .skill-fx-gallery-panel {
+    width: calc(100vw - 16px);
+    height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 24px);
+  }
+  .skill-fx-gallery-workspace { display: flex; flex-direction: column; }
+  .skill-fx-gallery-stage { order: -1; flex: 0 0 420px; min-height: 420px; }
+  .skill-fx-gallery-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .skill-fx-gallery-controls label { grid-template-columns: 1fr; align-content: start; gap: 4px; }
+  .skill-fx-gallery-actions,
+  .skill-fx-gallery-status-text { grid-column: 1 / -1; }
+  .skill-fx-gallery-player { width: 92%; gap: 6px; padding: 8px 10px; }
+  .skill-fx-gallery-pot { left: 82%; top: 65%; width: 62px; }
+  .skill-fx-gallery-settlement { top: 96px; right: 8px; bottom: auto; }
   .skill-fx-gallery-board-row { gap: 4px; }
   .skill-fx-gallery-cards i,
-  .skill-fx-gallery-board-row i { width: 38px; }
+  .skill-fx-gallery-board-row i { width: 34px; }
   .skill-effect-instance[data-effect="protocol"] .skill-effect-caption {
     top: calc(var(--fx-y) - 104px);
   }
@@ -1116,10 +1469,33 @@ body[data-screen="game"] .skill-fx-gallery-launcher {
   100% { opacity: 0; transform: translate(-50%, -50%) rotate(var(--particle-angle)) translateX(4px) scale(1); }
 }
 @keyframes skill-effect-packet {
-  0%, 14% { opacity: 0; left: 0; }
-  24% { opacity: 1; }
-  80% { opacity: 1; }
+  0%, 32% { opacity: 0; left: 0; }
+  40% { opacity: 1; }
+  82% { opacity: 1; }
   100% { opacity: 0; left: calc(100% - 8px); }
+}
+@keyframes skill-effect-route-phase {
+  0%, 27% { opacity: 0; clip-path: inset(0 100% 0 0); }
+  43% { opacity: .9; clip-path: inset(0 48% 0 0); }
+  66% { opacity: .82; clip-path: inset(0 0 0 0); }
+  100% { opacity: 0; clip-path: inset(0 0 0 0); }
+}
+@keyframes skill-effect-impact-arrive {
+  0%, 42% { opacity: 0; transform: translate(-50%, -50%) scale(1.24); }
+  58% { opacity: 1; transform: translate(-50%, -50%) scale(.94); }
+  70%, 86% { opacity: .92; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(1.04); }
+}
+@keyframes skill-effect-impact-ring {
+  0%, 46% { opacity: 0; transform: scale(.35); }
+  62% { opacity: 1; transform: scale(.9); }
+  100% { opacity: 0; transform: scale(1.58); }
+}
+@keyframes skill-effect-impact-flash {
+  0%, 48% { opacity: 0; transform: scale(.18); }
+  58% { opacity: .9; transform: scale(1); }
+  76% { opacity: .25; transform: scale(1.6); }
+  100% { opacity: 0; transform: scale(1.9); }
 }
 @keyframes skill-effect-caption-in {
   0%, 16% { opacity: 0; transform: translate(-50%, calc(-50% + 12px)); letter-spacing: .32em; }
@@ -1246,6 +1622,13 @@ body[data-screen="game"] .skill-fx-gallery-launcher {
   48% { opacity: 1; scale: 1 1; translate: 0 0; }
   100% { opacity: 0; scale: .2 1; translate: 38% 0; }
 }
+@keyframes skill-effect-fortune-card {
+  0%, 10% { opacity: 0; transform: translate(var(--fortune-offset), -50%) rotate(-14deg) scale(.72); }
+  34% { opacity: .66; transform: translate(var(--fortune-offset), -50%) rotate(7deg) scale(.92); }
+  68% { opacity: 1; transform: translate(-50%, -50%) rotate(0) scale(.56); }
+  86% { opacity: .9; transform: translate(-50%, -50%) rotate(0) scale(1.04); }
+  100% { opacity: 0; transform: translate(-50%, -50%) rotate(0) scale(.92); }
+}
 @keyframes skill-effect-destiny-seal {
   0% { opacity: 0; transform: translateY(-28px) scale(1.4); }
   42%, 76% { opacity: 1; transform: translateY(0) scale(1); box-shadow: 0 0 32px var(--fx-accent), inset 0 0 22px var(--fx-secondary); }
@@ -1297,6 +1680,24 @@ body[data-screen="game"] .skill-fx-gallery-launcher {
   36% { opacity: 1; transform: scaleY(1); filter: blur(1px); }
   72% { opacity: .86; filter: blur(4px); }
   100% { opacity: 0; transform: scaleY(1.04); filter: blur(8px); }
+}
+@keyframes skill-effect-data-scramble {
+  0%, 12% { opacity: 0; transform: translateX(-14px); filter: blur(0); }
+  28% { opacity: 1; transform: translateX(10px); }
+  44% { transform: translateX(-6px); letter-spacing: .3em; }
+  62% { opacity: .9; transform: translateX(3px); filter: blur(1px); }
+  78% { color: transparent; text-shadow: 0 0 7px var(--fx-accent); background: repeating-linear-gradient(90deg, var(--fx-accent) 0 10px, transparent 10px 14px); }
+  100% { opacity: 0; transform: translateX(0); filter: blur(5px); }
+}
+@keyframes skill-effect-upgrade-pulse {
+  0% { opacity: 1; transform: translate(-50%, -50%) scale(.94); }
+  46% { opacity: 1; transform: translate(-50%, -50%) scale(1.12); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+@keyframes skill-effect-counter-cut {
+  0% { opacity: 0; scale: .1 1; }
+  42% { opacity: 1; scale: 1 1; }
+  100% { opacity: 0; scale: 1.08 1; }
 }
 @keyframes skill-effect-protocol-outline {
   0% { opacity: 0; transform: perspective(500px) rotateX(68deg) scale(.65); }

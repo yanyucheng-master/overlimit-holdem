@@ -1022,7 +1022,7 @@
             <p class="intel-privacy">标记只保存在本机，不会同步或影响结算。</p>
           </aside>
 
-          <section class="table-center" aria-label="行动倒计时与公共牌">
+          <section class="table-center" id="table-center" aria-label="行动倒计时与公共牌">
             <div class="board-stage-line">
               <div class="turn-clock-block board-turn-clock">
                 <span class="instrument-label">TURN TIME</span>
@@ -1310,6 +1310,9 @@
               <option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option>
             </select></label>
             <label class="skill-fx-gallery-check"><span>Reduce Motion</span><input id="skill-fx-gallery-reduced" type="checkbox" /></label>
+            <label class="skill-fx-gallery-check"><span>Stage Anchor</span><input id="skill-fx-gallery-show-stage" type="checkbox" checked /></label>
+            <label class="skill-fx-gallery-check"><span>Target Anchor</span><input id="skill-fx-gallery-show-target" type="checkbox" checked /></label>
+            <label class="skill-fx-gallery-check"><span>Stage Caption</span><input id="skill-fx-gallery-show-caption" type="checkbox" checked /></label>
             <div class="skill-fx-gallery-actions">
               <button id="btn-replay-skill-fx" class="button button-primary" type="button">REPLAY</button>
               <button id="btn-stop-skill-fx" class="button button-ghost" type="button">STOP</button>
@@ -1318,6 +1321,8 @@
           </form>
           <div id="skill-fx-gallery-stage" class="skill-fx-gallery-stage" aria-label="技能特效预览舞台">
             <div class="skill-fx-gallery-grid" aria-hidden="true"></div>
+            <div data-fx-gallery-anchor="stageCenter" class="skill-fx-gallery-stage-center" aria-hidden="true"></div>
+            <div id="skill-fx-gallery-target-marker" class="skill-fx-gallery-target-marker" aria-hidden="true"></div>
             <div data-fx-gallery-anchor="opponent" class="skill-fx-gallery-player gallery-opponent">
               <span>OPPONENT</span><strong>950</strong>
               <span data-fx-gallery-anchor="opponentEnergy" class="skill-fx-gallery-energy">EN <b>4/8</b></span>
@@ -1335,6 +1340,7 @@
             </div>
             <div data-fx-gallery-anchor="settlement" class="skill-fx-gallery-settlement">SHOWDOWN RESULT</div>
             <div id="skill-fx-gallery-effect-layer" class="skill-effect-layer skill-fx-gallery-effect-layer" aria-hidden="true"></div>
+            <div id="skill-fx-gallery-state-layer" class="skill-state-layer skill-fx-gallery-state-layer" aria-hidden="true"></div>
             <div id="skill-fx-gallery-public" class="skill-fx skill-fx-public skill-fx-gallery-broadcast hidden" aria-hidden="true">
               <div class="skfx-dim"></div><div class="skfx-vignette"></div>
               <div class="skfx-slash slash-a"></div><div class="skfx-slash slash-b"></div><div class="skfx-spark"></div>

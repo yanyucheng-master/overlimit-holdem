@@ -39,6 +39,9 @@
     variant: byId("skill-fx-gallery-variant"),
     quality: byId("skill-fx-gallery-quality"),
     reduced: byId("skill-fx-gallery-reduced"),
+    showStage: byId("skill-fx-gallery-show-stage"),
+    showTarget: byId("skill-fx-gallery-show-target"),
+    showCaption: byId("skill-fx-gallery-show-caption"),
     replay: byId("btn-replay-skill-fx"),
     stop: byId("btn-stop-skill-fx"),
     close: byId("btn-close-skill-fx-gallery"),
@@ -56,14 +59,18 @@
   controls.skill.appendChild(protocolOption);
 
   const anchor = (name) => stage.querySelector(`[data-fx-gallery-anchor="${name}"]`);
+  const targetMarker = byId("skill-fx-gallery-target-marker");
   const gallerySettings = { quality: "high", reduceMotion: false, lowPerformance: false };
   const manager = managerApi.createSkillFxManager({
     effectLayer: byId("skill-fx-gallery-effect-layer"),
+    stateLayer: byId("skill-fx-gallery-state-layer"),
     broadcastLayer: byId("skill-fx-gallery-public"),
     privateLayer: byId("skill-fx-gallery-private"),
     getSettings: () => gallerySettings,
     getAnchors: () => ({
       board: stage,
+      stageCenter: anchor("stageCenter"),
+      tableCenter: anchor("stageCenter"),
       self: anchor("self"),
       opponent: anchor("opponent"),
       selfEnergy: anchor("energy"),
@@ -73,7 +80,7 @@
       community: anchor("community"),
       river: anchor("river"),
       pot: anchor("pot"),
-      settlement: anchor("community"),
+      settlement: anchor("settlement") || anchor("community"),
       target: anchor("river"),
     }),
     playSound: (kind, job) => root.dispatchEvent(new CustomEvent("overlimit:skill-fx-sound", {
@@ -87,10 +94,46 @@
 
   function selectedTarget() {
     const target = controls.target.value;
-    if (target === "profile") return null;
+    if (target === "profile") {
+      const skillId = controls.skill.value;
+      if (["DEEP_BREATH", "RECYCLE"].includes(skillId)) return anchor("energy");
+      if (skillId === "LOAN") return controls.variant.value === "energy" ? anchor("energy") : anchor("self");
+      if (["CHEAT", "FORTUNE", "RESTART"].includes(skillId)) return anchor("selfCards");
+      if (skillId === "TOP_SECRET") return anchor("selfCards");
+      if (["PERCEPTION", "INTEL_ONE"].includes(skillId)) return anchor("opponentCards");
+      if (["CLAIRVOYANCE", "PROBE"].includes(skillId)) return anchor("opponent");
+      if (["DEFENSE", "COUNTER", "ALERT", "DESPERATION"].includes(skillId)) return anchor("self");
+      if (skillId === "BLOOD_BATTLE") return anchor("pot");
+      if (skillId === "RETREAT") return anchor("self");
+      if (skillId === "DESTINY") return anchor("river");
+      if (profilesApi.isProtocolSkillId(skillId)) return anchor("settlement") || anchor("community");
+      return stage;
+    }
     if (target === "river") return anchor("river");
     if (target === "cards") return anchor("selfCards");
     return anchor(target) || stage;
+  }
+
+  function syncAnchorGuides() {
+    stage.classList.toggle("show-stage-anchor", Boolean(controls.showStage?.checked));
+    stage.classList.toggle("show-target-anchor", Boolean(controls.showTarget?.checked));
+    if (!targetMarker) return;
+    const node = byId("skill-fx-gallery-effect-layer")?.querySelector(".skill-effect-instance");
+    if (!node) {
+      targetMarker.classList.add("is-empty");
+      targetMarker.style.removeProperty("left");
+      targetMarker.style.removeProperty("top");
+      return;
+    }
+    targetMarker.classList.remove("is-empty");
+    const x = Number.parseFloat(node.style.getPropertyValue("--fx-target-x"));
+    const y = Number.parseFloat(node.style.getPropertyValue("--fx-target-y"));
+    const width = Number.parseFloat(node.style.getPropertyValue("--fx-target-w"));
+    const height = Number.parseFloat(node.style.getPropertyValue("--fx-target-h"));
+    if (Number.isFinite(x)) targetMarker.style.left = `${x}px`;
+    if (Number.isFinite(y)) targetMarker.style.top = `${y}px`;
+    if (Number.isFinite(width)) targetMarker.style.width = `${Math.max(24, Math.min(180, width))}px`;
+    if (Number.isFinite(height)) targetMarker.style.height = `${Math.max(24, Math.min(120, height))}px`;
   }
 
   function replay() {
@@ -101,6 +144,7 @@
     const disclosure = controls.disclosure.value;
     const skillId = controls.skill.value;
     const isProtocol = profilesApi.isProtocolSkillId(skillId);
+    const profile = profilesApi.getSkillFxProfile(skillId);
     const event = {
       force: true,
       eventId: `gallery:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`,
@@ -112,6 +156,7 @@
       casterId: "GALLERY_CASTER",
       viewerId: perspective === "self" ? "GALLERY_CASTER" : "GALLERY_VIEWER",
       casterLabel: perspective === "self" ? "你" : "对手",
+      stageElement: anchor("stageCenter"),
       targetElement: selectedTarget(),
       fromElement: anchor("opponent"),
       toElement: anchor("self"),
@@ -121,7 +166,17 @@
         ? "settlement"
         : "table",
       resultOnly: isProtocol || disclosure === "result",
+      revealIdentity: disclosure === "public" || disclosure === "self",
+      stageCaption: controls.showCaption?.checked !== false,
       broadcast: isProtocol ? false : undefined,
+      stageLines: skillId === "DISGUISE"
+        ? ["1000", "POT 150", "CALL 50"]
+        : skillId === "LOAN" && controls.variant.value === "chip"
+          ? ["CREDIT +100"]
+          : [],
+      effectLabel: skillId === "LOAN" && controls.variant.value === "chip"
+        ? "CHIP CREDIT +100"
+        : profile?.resultLabel,
       safeMessage: controls.status.value === "FAILED"
         ? "RESOLUTION FAILED"
         : controls.status.value === "COUNTERED"
@@ -129,9 +184,16 @@
           : "VISUAL CONTRACT PREVIEW",
     };
     statusText.dataset.tone = "ready";
-    statusText.textContent = manager.play(event)
+    const accepted = manager.play(event);
+    statusText.textContent = accepted
       ? `${event.skillId} // ${perspective.toUpperCase()} // ${disclosure.toUpperCase()}`
       : "SUPPRESSED // 此视角无权看到该事件";
+    requestAnimationFrame(() => {
+      syncAnchorGuides();
+      if (root.matchMedia?.("(max-width: 560px)").matches) {
+        stage.scrollIntoView({ block: "start", behavior: "auto" });
+      }
+    });
   }
 
   function openGallery() {
@@ -159,6 +221,7 @@
   controls.replay.addEventListener("click", replay);
   controls.stop.addEventListener("click", () => {
     manager.clear();
+    syncAnchorGuides();
     statusText.textContent = "STOPPED";
   });
   controls.skill.addEventListener("change", () => {
@@ -170,7 +233,8 @@
     replay();
   });
   [controls.phase, controls.disclosure, controls.status, controls.target, controls.variant,
-    controls.quality, controls.reduced].forEach((control) => control.addEventListener("change", replay));
+    controls.quality, controls.reduced, controls.showStage, controls.showTarget,
+    controls.showCaption].forEach((control) => control?.addEventListener("change", replay));
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape" && !modal.classList.contains("hidden")) closeGallery();
   });

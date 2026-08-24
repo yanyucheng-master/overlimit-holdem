@@ -414,6 +414,7 @@ const el = {
   gameConnection: byId("game-connection"),
   fairnessSummary: byId("fairness-summary"),
   board: byId("board"),
+  tableCenter: byId("table-center"),
   opponentArea: byId("opponent-area"),
   overdriveStage: byId("overdrive-stage"),
   opponentName: byId("opponent-name"),
@@ -1792,7 +1793,9 @@ function skillFxTierForPayload(payload, { publicEvent = false, resultOnly = fals
   if (id === "DEFENSE" && resultOnly) return "FX3";
   if (id === "COUNTER" && !publicEvent) return "FX1";
   if (id === "PROBE" && !resultOnly) return "FX1";
-  if (id === "DESPERATION" && !resultOnly) return "FX2";
+  if (id === "DESPERATION") return resultOnly ? "FX3" : "FX2";
+  if (id === "RETREAT" && !resultOnly) return "FX2";
+  if (id === "LOAN" && String(payload?.publicData?.mode || "").toLowerCase() === "chip") return "FX3";
   return undefined;
 }
 
@@ -1812,6 +1815,8 @@ function getSkillFxManager() {
     }),
     getAnchors: () => ({
       board: el.board,
+      stageCenter: el.tableCenter || el.community || el.board,
+      tableCenter: el.tableCenter || el.community || el.board,
       self: el.selfArea,
       opponent: el.opponentArea,
       selfEnergy: el.selfEnergy?.closest(".skill-energy-row") || el.selfArea,
@@ -1872,6 +1877,14 @@ function resolveSkillFxElements(skillId, meta, payload = {}) {
   const id = String(skillId || "").toUpperCase();
   const target = meta?.target || {};
   const zone = String(target.zone || target.mode || payload.publicData?.mode || "").toLowerCase();
+  const casterIsSelf = payload.casterId === state.playerId || !payload.casterId;
+  const casterArea = casterIsSelf ? el.selfArea : el.opponentArea;
+  const casterCards = casterIsSelf ? el.selfCards : el.opponentCards;
+  const casterEnergy = casterIsSelf
+    ? (el.selfEnergy?.closest(".skill-energy-row") || el.selfArea)
+    : (el.opponentEnergy?.parentElement || el.opponentArea);
+  const opposingArea = casterIsSelf ? el.opponentArea : el.selfArea;
+  const opposingCards = casterIsSelf ? el.opponentCards : el.selfCards;
   let targetElement = null;
   if (id === "DESTINY") targetElement = skillFxBoardTarget(4);
   if (["INTEL_ONE", "NULLIFICATION"].includes(id)) {
@@ -1885,25 +1898,34 @@ function resolveSkillFxElements(skillId, meta, payload = {}) {
     else if (zone === "opponent") targetElement = el.opponentCards?.children?.[Number(target.index)] || el.opponentCards;
     else targetElement = el.selfCards?.children?.[Number(target.ownIndex)] || el.selfCards;
   }
-  if (["FORTUNE", "RESTART"].includes(id)) targetElement = el.selfCards;
-  if (["DEEP_BREATH", "RECYCLE"].includes(id)) targetElement = el.selfEnergy?.closest(".skill-energy-row") || el.selfArea;
-  if (["DEFENSE", "COUNTER", "ALERT"].includes(id)) targetElement = el.selfArea;
-  if (id === "TOP_SECRET") targetElement = payload.casterId === state.playerId ? el.selfArea : el.opponentArea;
-  if (["PERCEPTION", "CLAIRVOYANCE", "PROBE"].includes(id)) targetElement = el.opponentCards || el.opponentArea;
-  if (id === "LOAN") targetElement = zone === "energy"
-    ? (el.selfEnergy?.closest(".skill-energy-row") || el.selfArea)
-    : el.potCore;
-  if (["BLOOD_BATTLE", "RETREAT"].includes(id)) targetElement = el.potCore;
+  if (["FORTUNE", "RESTART"].includes(id)) targetElement = casterCards;
+  if (["DEEP_BREATH", "RECYCLE"].includes(id)) targetElement = casterEnergy;
+  if (["DEFENSE", "COUNTER", "ALERT"].includes(id)) targetElement = casterArea;
+  if (id === "TOP_SECRET") targetElement = casterCards || casterArea;
+  if (["PERCEPTION", "INTEL_ONE"].includes(id) && !targetElement) targetElement = opposingCards || opposingArea;
+  if (id === "CLAIRVOYANCE") targetElement = opposingArea;
+  if (id === "PROBE") targetElement = opposingArea;
+  if (id === "LOAN") targetElement = zone === "energy" ? casterEnergy : casterArea;
+  if (id === "BLOOD_BATTLE") targetElement = el.potCore;
+  if (id === "RETREAT") targetElement = casterArea;
   if (["INTIMIDATION", "FAIRNESS", "DEAD_END", "DISGUISE"].includes(id)) targetElement = el.board;
-  if (id === "DESPERATION") targetElement = payload.casterId === state.playerId ? el.selfArea : el.opponentArea;
+  if (id === "DESPERATION") targetElement = casterArea;
+  const stageLines = id === "DISGUISE"
+    ? [
+        String(el.selfChips?.textContent || "DATA"),
+        `POT ${el.pot?.textContent || "—"}`,
+        `CALL ${el.currentBet?.textContent || "—"}`,
+      ]
+    : id === "LOAN" && payload.publicData?.mode === "chip" && payload.publicData?.take != null
+      ? [`CREDIT +${payload.publicData.take}`]
+      : [];
   return {
     targetElement,
-    fromElement: id === "RETREAT" ? el.potCore : el.opponentArea,
-    toElement: id === "LOAN" && zone === "chip"
-      ? (payload.casterId === state.playerId ? el.selfArea : el.opponentArea)
-      : el.selfArea,
+    fromElement: id === "RETREAT" ? el.potCore : opposingArea,
+    toElement: casterArea,
     variant: payload.publicData?.mode || target.mode || target.zone || "default",
     targetKey: [zone, target.boardIndex ?? target.index ?? target.ownIndex ?? ""].join(":"),
+    stageLines,
   };
 }
 
@@ -1969,6 +1991,7 @@ function announceSkillResolved(payload) {
     phase: state.phase,
     tier: skillFxTierForPayload(payload, { publicEvent, resultOnly }),
     resultOnly,
+    revealIdentity: publicEvent && (!resultOnly || String(payload.visibility || "").toUpperCase() === "PUBLIC"),
     safeMessage: publicEvent ? "" : `你发动了「${skillDefinition(payload.skillId).name}」`,
     effectLabel: skillFxEffectLabel(payload, meta),
     at: payload.at,
@@ -1982,6 +2005,8 @@ function announcePrivateSkillResult(payload) {
   const message = String(payload.message || "").trim();
   const meta = skillFxMetaFor(payload);
   const elements = resolveSkillFxElements(payload.skillId, meta, payload);
+  const deepBreathRefund = payload.skillId === "DEEP_BREATH"
+    && String(payload.status || "").toUpperCase() === "REFUNDED";
   getSkillFxManager()?.play({
     eventId: payload.resultId ? `private:${payload.resultId}` : `private:${payload.skillId}:${payload.at || Date.now()}`,
     resultId: payload.resultId,
@@ -1995,13 +2020,17 @@ function announcePrivateSkillResult(payload) {
     status: payload.status || "SUCCESS",
     phase: state.phase,
     tier: skillFxTierForPayload(payload, { publicEvent: false, resultOnly: false }),
-    glyph: payload.skillId === "DEEP_BREATH" && Number(payload.amount) > 0
+    revealIdentity: true,
+    glyph: deepBreathRefund && Number(payload.amount) > 0
       ? `+${Number(payload.amount)}`
       : undefined,
     safeMessage: message || "仅你可见，技能已结算",
     effectLabel: skillFxEffectLabel(payload, meta, message),
-    at: payload.at,
     ...elements,
+    variant: deepBreathRefund ? "refund" : elements.variant,
+    impactGlyph: deepBreathRefund && Number(payload.amount) > 0 ? `+${Number(payload.amount)}` : undefined,
+    stageCaption: deepBreathRefund ? false : undefined,
+    at: payload.at,
   });
 }
 
@@ -2029,6 +2058,8 @@ function announceNullificationReveals(nextCodes) {
         audience: "public",
         disclosure: "result",
         status: "REVEALED",
+        tier: "FX2",
+        variant: "reveal",
         resultOnly: true,
         effectLabel: "BOARD CARD EXCLUDED",
         targetElement: skillFxBoardTarget(index) || el.community,
@@ -2512,13 +2543,16 @@ function playSettlementSkillFx(payload) {
     };
     const compositeSkills = [...new Set(settlementEffects.map((effect) => String(effect.skillId || "").toUpperCase()))];
     const compositeLabels = settlementEffects.map(labelFor);
+    const bloodCount = settlementEffects.filter((effect) => String(effect.skillId || "").toUpperCase() === "BLOOD_BATTLE").length;
     const sourceId = primary.source === "opponent" ? loserId : winnerId;
     const primaryId = String(primary.skillId || "").toUpperCase();
     const maxTier = settlementEffects.some((effect) => String(effect.skillId || "").toUpperCase() === "DEAD_END")
       ? "FX4"
       : settlementEffects.some((effect) => ["DEFENSE", "BLOOD_BATTLE", "DESPERATION"].includes(String(effect.skillId || "").toUpperCase()))
         ? "FX3"
-        : undefined;
+        : settlementEffects.some((effect) => String(effect.skillId || "").toUpperCase() === "PROBE")
+          ? "FX2"
+          : undefined;
     getSkillFxManager()?.play({
       eventId: `settlement:${payload.handNo || state.handNo}:${compositeSkills.join("+")}`,
       handNo: payload.handNo || state.handNo,
@@ -2532,8 +2566,11 @@ function playSettlementSkillFx(payload) {
       tier: maxTier,
       context: "settlement",
       resultOnly: true,
+      revealIdentity: true,
       broadcast: false,
       effectLabel: compositeLabels.join(" · "),
+      glyph: primaryId === "BLOOD_BATTLE" && bloodCount > 1 ? "×4" : undefined,
+      variant: primaryId === "BLOOD_BATTLE" && bloodCount > 1 ? "dual" : undefined,
       compositeSkills,
       compositeLabels,
       targetElement: primaryId.startsWith("PROTOCOL_")
@@ -2556,6 +2593,7 @@ function playSettlementSkillFx(payload) {
       status: "REVEALED",
       context: "settlement",
       resultOnly: true,
+      revealIdentity: true,
       broadcast: false,
       effectLabel: "CONTRIBUTIONS RETURNED",
       targetElement: el.settleChipLedger || el.handSettleModal,

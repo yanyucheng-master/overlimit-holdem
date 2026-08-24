@@ -58,6 +58,17 @@
     return node;
   }
 
+  function impactGlyphFor(profile, event) {
+    if (event.impactGlyph != null) return cleanToken(event.impactGlyph);
+    if (profile.impact === "energy") return "•";
+    if (profile.impact === "chip") return "◆";
+    if (profile.impact === "player") return "◇";
+    if (profile.impact === "board") return "⌗";
+    if (profile.impact === "hud") return "▦";
+    if (profile.impact === "interrupt") return "×";
+    return profile.glyph;
+  }
+
   class SkillFxManager {
     constructor(options = {}) {
       this.effectLayer = options.effectLayer || null;
@@ -141,12 +152,51 @@
       const settings = this.settings();
       const duration = profilesApi.fxDuration(profile, settings.quality, settings.reduceMotion);
       const job = { event, profile, settings, duration, key };
+      if (profile.id === "BLOOD_BATTLE") {
+        const existingBlood = this.activeJob?.profile?.id === "BLOOD_BATTLE"
+          ? this.activeJob
+          : this.queue.find((queued) => queued.profile.id === "BLOOD_BATTLE");
+        const existingHand = cleanToken(existingBlood?.event?.handId ?? existingBlood?.event?.handNo);
+        const incomingHand = cleanToken(event.handId ?? event.handNo);
+        const existingContext = cleanToken(existingBlood?.event?.context);
+        const incomingContext = cleanToken(event.context);
+        const sameBloodWindow = (!existingHand || !incomingHand || existingHand === incomingHand)
+          && (!existingContext || !incomingContext || existingContext === incomingContext);
+        if (existingBlood && sameBloodWindow && existingBlood.event.casterId !== event.casterId) {
+          existingBlood.event.glyph = "×4";
+          existingBlood.event.effectLabel = "STAKES ×4";
+          existingBlood.event.variant = "dual";
+          if (existingBlood === this.activeJob && this.activeNode) {
+            this.activeNode.dataset.variant = "dual";
+            this.activeNode.classList.add("is-upgraded");
+            const glyph = this.activeNode.querySelector(".skill-effect-glyph");
+            const impactGlyph = this.activeNode.querySelector(".skill-impact-glyph");
+            const result = this.activeNode.querySelector(".skill-effect-result");
+            if (glyph) glyph.textContent = "×4";
+            if (impactGlyph) impactGlyph.textContent = "×4";
+            if (result) result.textContent = "STAKES ×4";
+          }
+          return true;
+        }
+      }
+      if (profile.tier === "FX1") {
+        const replaceIndex = this.queue.findIndex((queued) => queued.profile.tier === "FX1"
+          && queued.event.audience === event.audience
+          && queued.event.casterId === event.casterId);
+        if (replaceIndex >= 0) this.queue.splice(replaceIndex, 1);
+      }
       if (this.queue.length >= 8) {
         const replaceIndex = this.queue.findIndex((queued) => queued.profile.tier === "FX1");
         if (replaceIndex >= 0) this.queue.splice(replaceIndex, 1);
         else return false;
       }
       this.queue.push(job);
+      if (profile.id === "COUNTER" && profile.tier === "FX3" && this.activeNode
+        && this.activeJob?.profile?.id !== "COUNTER") {
+        this.activeNode.classList.add("is-counter-cut");
+        if (this.timer) clearTimeout(this.timer);
+        this.timer = setTimeout(() => this.finishActive(), settings.reduceMotion ? 70 : 150);
+      }
       this.pump();
       return true;
     }
@@ -189,6 +239,12 @@
       if (typeof document !== "undefined") document.body?.classList.remove("skill-fx-public-on");
     }
 
+    resolveStage(job) {
+      const anchors = this.getAnchors() || {};
+      if (isElement(job.event.stageElement)) return job.event.stageElement;
+      return anchors.stageCenter || anchors.tableCenter || anchors.community || anchors.board || this.effectLayer;
+    }
+
     resolveTarget(job) {
       const { event, profile } = job;
       const anchors = this.getAnchors() || {};
@@ -212,7 +268,7 @@
       return anchors[anchor] || anchors.board || this.effectLayer;
     }
 
-    positionNode(node, target, job) {
+    positionNode(node, stage, target, job) {
       if (!node || !this.effectLayer) return;
       const layerRect = this.effectLayer.getBoundingClientRect();
       const fallback = {
@@ -221,36 +277,47 @@
         width: Math.max(120, layerRect.width * 0.22),
         height: Math.max(80, layerRect.height * 0.18),
       };
-      const targetBox = centerOf(target, fallback);
-      const localTargetY = targetBox.y - layerRect.top;
-      node.dataset.placement = localTargetY > layerRect.height * 0.68
-        ? "above"
-        : localTargetY < layerRect.height * 0.24
-          ? "below"
-          : "center";
-      node.style.setProperty("--fx-x", `${targetBox.x - layerRect.left}px`);
-      node.style.setProperty("--fx-y", `${targetBox.y - layerRect.top}px`);
-      node.style.setProperty("--fx-w", `${targetBox.width}px`);
-      node.style.setProperty("--fx-h", `${targetBox.height}px`);
+      const stageBox = centerOf(stage, fallback);
+      const targetBox = centerOf(target, stageBox);
+      const stageX = stageBox.x - layerRect.left;
+      const stageY = stageBox.y - layerRect.top;
+      const targetX = targetBox.x - layerRect.left;
+      const targetY = targetBox.y - layerRect.top;
+      node.style.setProperty("--fx-stage-x", `${stageX}px`);
+      node.style.setProperty("--fx-stage-y", `${stageY}px`);
+      node.style.setProperty("--fx-stage-w", `${stageBox.width}px`);
+      node.style.setProperty("--fx-stage-h", `${stageBox.height}px`);
+      node.style.setProperty("--fx-target-x", `${targetX}px`);
+      node.style.setProperty("--fx-target-y", `${targetY}px`);
+      node.style.setProperty("--fx-target-w", `${targetBox.width}px`);
+      node.style.setProperty("--fx-target-h", `${targetBox.height}px`);
+      // Compatibility aliases keep the existing family artwork centered on the
+      // new hero stage while impact/route use the target variables below.
+      node.style.setProperty("--fx-x", `${stageX}px`);
+      node.style.setProperty("--fx-y", `${stageY}px`);
+      node.style.setProperty("--fx-w", `${stageBox.width}px`);
+      node.style.setProperty("--fx-h", `${stageBox.height}px`);
 
-      const anchors = this.getAnchors() || {};
-      const from = centerOf(job.event.fromElement, centerOf(anchors.opponent, fallback));
-      const to = centerOf(job.event.toElement, centerOf(anchors.self, fallback));
-      const routeX = to.x - from.x;
-      const routeY = to.y - from.y;
-      node.style.setProperty("--fx-from-x", `${from.x - layerRect.left}px`);
-      node.style.setProperty("--fx-from-y", `${from.y - layerRect.top}px`);
-      node.style.setProperty("--fx-to-x", `${to.x - layerRect.left}px`);
-      node.style.setProperty("--fx-to-y", `${to.y - layerRect.top}px`);
-      node.style.setProperty("--fx-route-length", `${Math.max(24, Math.hypot(routeX, routeY))}px`);
+      const routeX = targetBox.x - stageBox.x;
+      const routeY = targetBox.y - stageBox.y;
+      const routeLength = Math.max(0, Math.hypot(routeX, routeY));
+      node.dataset.hasRoute = routeLength > 28 ? "true" : "false";
+      node.style.setProperty("--fx-from-x", `${stageX}px`);
+      node.style.setProperty("--fx-from-y", `${stageY}px`);
+      node.style.setProperty("--fx-to-x", `${targetX}px`);
+      node.style.setProperty("--fx-to-y", `${targetY}px`);
+      node.style.setProperty("--fx-route-length", `${Math.max(24, routeLength)}px`);
       node.style.setProperty("--fx-route-angle", `${Math.atan2(routeY, routeX) * 180 / Math.PI}deg`);
     }
 
     buildEffectNode(job) {
       const { event, profile, settings, duration } = job;
       const node = makeAtom("article", "skill-effect-instance");
+      const impactType = cleanToken(event.impact || event.impactType
+        || (profile.id === "LOAN" && String(event.variant).toLowerCase() === "energy" ? "energy" : profile.impact || "board")).toLowerCase();
       node.dataset.skill = profile.id;
       node.dataset.effect = profile.family;
+      node.dataset.impact = impactType;
       node.dataset.tier = profile.tier;
       node.dataset.quality = settings.quality;
       node.dataset.motion = settings.reduceMotion ? "reduced" : "full";
@@ -266,6 +333,7 @@
       node.style.setProperty("--fx-accent", profile.accent);
       node.style.setProperty("--fx-secondary", profile.secondary);
 
+      const stage = makeAtom("div", "skill-effect-stage");
       const core = makeAtom("div", "skill-effect-core");
       core.append(
         makeAtom("i", "skill-effect-halo halo-a"),
@@ -285,6 +353,18 @@
       }
       core.appendChild(particles);
 
+      const configuredStageLines = Array.isArray(event.stageLines)
+        ? event.stageLines
+        : Array.isArray(profile.stageLines)
+          ? profile.stageLines
+          : [];
+      if (configuredStageLines.length) {
+        const data = makeAtom("div", "skill-effect-stage-data");
+        configuredStageLines.slice(0, 4).forEach((value) => data.appendChild(makeAtom("span", "skill-effect-data-line", value)));
+        core.appendChild(data);
+      }
+      stage.appendChild(core);
+
       const route = makeAtom("div", "skill-effect-route");
       route.append(
         makeAtom("i", "route-line"),
@@ -292,10 +372,23 @@
         makeAtom("i", "route-packet packet-b")
       );
 
+      const impact = makeAtom("div", "skill-effect-impact");
+      impact.append(
+        makeAtom("i", "skill-impact-outline"),
+        makeAtom("i", "skill-impact-ring"),
+        makeAtom("i", "skill-impact-flash"),
+        makeAtom("strong", "skill-impact-glyph", impactGlyphFor({ ...profile, impact: impactType }, event))
+      );
+
       const caption = makeAtom("div", "skill-effect-caption");
+      const disclosure = String(event.disclosure || "public").toLowerCase();
+      const revealIdentity = event.revealIdentity === true
+        || (!event.resultOnly && (event.audience === "self" || disclosure === "public"));
+      node.dataset.identity = revealIdentity ? "revealed" : "result-only";
+      node.dataset.caption = event.stageCaption === false ? "hidden" : "visible";
       caption.append(
-        makeAtom("span", "skill-effect-kicker", event.resultOnly ? "PUBLIC RESULT" : profile.english),
-        makeAtom("strong", "skill-effect-title", event.resultOnly ? profile.resultLabel : profile.english),
+        makeAtom("strong", "skill-effect-title", revealIdentity ? profile.name : cleanToken(event.resultTitle || profile.resultLabel)),
+        makeAtom("span", "skill-effect-kicker", revealIdentity ? profile.english : (event.resultOnly ? "PUBLIC RESULT" : "TACTICAL RESULT")),
         makeAtom("em", "skill-effect-result", cleanToken(event.effectLabel || event.safeMessage || profile.resultLabel))
       );
       if (compositeSkills.length > 1) {
@@ -304,7 +397,7 @@
         labels.slice(0, 4).forEach((label) => modifiers.appendChild(makeAtom("i", "skill-effect-modifier", cleanToken(label))));
         caption.appendChild(modifiers);
       }
-      node.append(core, route, caption);
+      node.append(stage, route, impact, caption);
       return node;
     }
 
@@ -312,6 +405,11 @@
       const { event, profile, duration } = job;
       if (event.context === "settlement" || event.broadcast === false) return;
       const isSelfOnly = event.audience === "self" && ["self", "secret"].includes(String(event.disclosure));
+      // The center stage is now the primary identity surface. Private skills do
+      // not need a second floating confirmation card, and high-tier public
+      // skills would otherwise repeat the same title at the top of the screen.
+      if (isSelfOnly && event.privateConfirm !== true) return;
+      if (["FX3", "FX4"].includes(profile.tier) && event.stageCaption !== false) return;
       const broadcastMs = isSelfOnly
         ? Math.min(720, Math.max(360, duration))
         : Math.min(1100, Math.max(700, duration));
@@ -340,7 +438,7 @@
       if (who) who.textContent = event.resultOnly
         ? "PUBLIC RESULT"
         : cleanToken(event.casterLabel || (event.casterId === event.viewerId ? "你" : "对手"));
-      if (name) name.textContent = event.resultOnly ? profile.resultLabel : profile.name;
+      if (name) name.textContent = event.resultOnly ? profile.resultLabel : "战术已执行";
       if (tag) tag.textContent = cleanToken(event.effectLabel || event.safeMessage || profile.resultLabel);
       this.broadcastLayer.classList.remove("hidden");
       if (typeof document !== "undefined") document.body?.classList.add("skill-fx-public-on");
@@ -359,7 +457,7 @@
       const node = this.buildEffectNode(job);
       this.effectLayer.appendChild(node);
       this.activeNode = node;
-      this.positionNode(node, this.resolveTarget(job), job);
+      this.positionNode(node, this.resolveStage(job), this.resolveTarget(job), job);
       this.renderBroadcast(job);
       const bloodSettlement = job.profile.id !== "BLOOD_BATTLE"
         || job.event.context === "settlement"
@@ -375,7 +473,12 @@
 
     refreshPositions() {
       if (this.activeNode && this.activeJob) {
-        this.positionNode(this.activeNode, this.resolveTarget(this.activeJob), this.activeJob);
+        this.positionNode(
+          this.activeNode,
+          this.resolveStage(this.activeJob),
+          this.resolveTarget(this.activeJob),
+          this.activeJob
+        );
       }
       this.positionStateMarkers();
     }

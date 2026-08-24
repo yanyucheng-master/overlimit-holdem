@@ -28,12 +28,15 @@ describe("launch skill FX system contract", () => {
   });
 
   test("approved launch hierarchy uses the intended tiers and physical anchors", () => {
-    expect(profiles.getSkillFxProfile("DEEP_BREATH")).toMatchObject({ tier: "FX2", anchor: "energy" });
+    expect(profiles.getSkillFxProfile("DEEP_BREATH")).toMatchObject({ tier: "FX1", anchor: "energy", impact: "energy" });
     expect(profiles.getSkillFxProfile("PERCEPTION")).toMatchObject({ tier: "FX2", anchor: "target" });
     expect(profiles.getSkillFxProfile("INTEL_ONE")).toMatchObject({ tier: "FX3", anchor: "target" });
     expect(profiles.getSkillFxProfile("BLOOD_BATTLE")).toMatchObject({ tier: "FX3", anchor: "pot" });
     expect(profiles.getSkillFxProfile("DESTINY")).toMatchObject({ tier: "FX4", anchor: "river" });
     expect(profiles.getSkillFxProfile("RETREAT")).toMatchObject({ tier: "FX3", anchor: "pot" });
+    expect(profiles.getSkillFxProfile("INTIMIDATION")).toMatchObject({ tier: "FX4", impact: "board" });
+    expect(profiles.getSkillFxProfile("FAIRNESS")).toMatchObject({ tier: "FX4", impact: "board" });
+    expect(profiles.getSkillFxProfile("DEAD_END")).toMatchObject({ tier: "FX4", impact: "board" });
   });
 
   test("secret events are suppressed for ordinary opponents but public results remain visible", () => {
@@ -112,5 +115,108 @@ describe("launch skill FX system contract", () => {
     expect(gallery).toContain('query.get("skillfx") === "1"');
     expect(gallery).toContain("launcher.remove()");
     expect(gallery).toContain("SUPPRESSED // 此视角无权看到该事件");
+  });
+
+  test("FX-STAGE-01 manager separates the table stage from the physical target", () => {
+    const source = fs.readFileSync(path.join(publicDir, "skill-fx-manager.js"), "utf8");
+    expect(source).toContain("resolveStage(job)");
+    expect(source).toContain("resolveTarget(job)");
+    expect(source).toContain('setProperty("--fx-stage-x"');
+    expect(source).toContain('setProperty("--fx-target-x"');
+    expect(source).toContain('makeAtom("div", "skill-effect-stage")');
+    expect(source).toContain('makeAtom("div", "skill-effect-impact")');
+  });
+
+  test("FX-STAGE-02 Deep Breath stages centrally and follows through to energy", () => {
+    const client = fs.readFileSync(path.join(publicDir, "client.js"), "utf8");
+    expect(client).toContain("stageCenter: el.tableCenter || el.community || el.board");
+    expect(client).toContain('["DEEP_BREATH", "RECYCLE"].includes(id)) targetElement = casterEnergy');
+    expect(profiles.getSkillFxProfile("DEEP_BREATH")).toMatchObject({ tier: "FX1", impact: "energy" });
+  });
+
+  test("FX-STAGE-03 Cheat retains an exact card target after the central stage", () => {
+    const client = fs.readFileSync(path.join(publicDir, "client.js"), "utf8");
+    expect(client).toContain('if (id === "CHEAT")');
+    expect(client).toContain('el.opponentCards?.children?.[Number(target.index)]');
+    expect(profiles.getSkillFxProfile("CHEAT")).toMatchObject({ tier: "FX3", impact: "card" });
+  });
+
+  test("FX-STAGE-04 Nullification retains board-slot targeting", () => {
+    const client = fs.readFileSync(path.join(publicDir, "client.js"), "utf8");
+    expect(client).toContain('skillFxBoardTarget(index)');
+    expect(client).toContain('targetElement: skillFxBoardTarget(index) || el.community');
+    expect(profiles.getSkillFxProfile("NULLIFICATION")).toMatchObject({ impact: "card" });
+  });
+
+  test("FX-STAGE-05 Loan directs chip and energy branches to different targets", () => {
+    const client = fs.readFileSync(path.join(publicDir, "client.js"), "utf8");
+    expect(client).toContain('if (id === "LOAN") targetElement = zone === "energy" ? casterEnergy : casterArea');
+    expect(client).toContain('payload.publicData?.take');
+    expect(profiles.getSkillFxProfile("LOAN")).toMatchObject({ impact: "chip" });
+  });
+
+  test("FX-STAGE-06 Fairness uses a major central stage and board impact", () => {
+    expect(profiles.getSkillFxProfile("FAIRNESS")).toMatchObject({ tier: "FX4", anchor: "board", impact: "board" });
+    const css = fs.readFileSync(path.join(publicDir, "skill-effects.css"), "utf8");
+    expect(css).toContain('[data-effect="fairness"]');
+    expect(css).toContain('[data-impact="board"] .skill-effect-impact');
+  });
+
+  test("FX-STAGE-07 ordinary opponents receive no secret stage side channel", () => {
+    const secretIds = ["DEEP_BREATH", "CHEAT", "PERCEPTION", "INTEL_ONE", "DEFENSE", "NULLIFICATION", "DESTINY", "RESTART"];
+    secretIds.forEach((skillId) => {
+      expect(profiles.canRenderSkillFx({ skillId, audience: "opponent", disclosure: "secret" }, profiles.getSkillFxProfile(skillId))).toBe(false);
+    });
+  });
+
+  test("FX-STAGE-08 result-only captions use safe results unless identity is explicitly revealed", () => {
+    const source = fs.readFileSync(path.join(publicDir, "skill-fx-manager.js"), "utf8");
+    expect(source).toContain('node.dataset.identity = revealIdentity ? "revealed" : "result-only"');
+    expect(source).toContain('revealIdentity ? profile.name : cleanToken(event.resultTitle || profile.resultLabel)');
+    expect(source).toContain('event.revealIdentity === true');
+  });
+
+  test("FX-STAGE-09 persistent state markers remain target-positioned", () => {
+    const source = fs.readFileSync(path.join(publicDir, "skill-fx-manager.js"), "utf8");
+    expect(source).toContain("positionStateMarkers()");
+    expect(source).toContain('marker.style.setProperty("--state-x"');
+    expect(source).not.toContain('marker.style.setProperty("--fx-stage-x"');
+  });
+
+  test("FX-STAGE-10 Endgame remains outside the ordinary stage manager", () => {
+    const fakeManager = new manager.SkillFxManager();
+    expect(fakeManager.play({ skillId: "ENDGAME", force: true })).toBe(false);
+    expect(profiles.getSkillFxProfile("ENDGAME")).toBeNull();
+  });
+
+  test("FX-STAGE-11 Dead End still owns the forced All In presentation", () => {
+    const client = fs.readFileSync(path.join(publicDir, "client.js"), "utf8");
+    expect(client).toContain('getSkillFxManager()?.isPlaying("DEAD_END")');
+    expect(client).toContain("if (!deadEndOwnsPresentation) playAllInEffect(payload.playerId)");
+  });
+
+  test("FX-STAGE-12 semantic request IDs dedupe the entire stage job", () => {
+    const event = { requestId: "same-request", skillId: "FAIRNESS", casterId: "P1" };
+    expect(manager.semanticSkillFxKey(event)).toBe("same-request");
+    expect(manager.semanticSkillFxKey({ ...event, safeMessage: "changed" })).toBe("same-request");
+  });
+
+  test("FX-STAGE-13 restored and replayed events never enter the stage queue", () => {
+    const fakeManager = new manager.SkillFxManager();
+    expect(fakeManager.play({ skillId: "FAIRNESS", restored: true, force: true })).toBe(false);
+    expect(fakeManager.play({ skillId: "FAIRNESS", replay: true, force: true })).toBe(false);
+  });
+
+  test("FX-STAGE-14 reduced motion preserves stage and target impact", () => {
+    const css = fs.readFileSync(path.join(publicDir, "skill-effects.css"), "utf8");
+    expect(css).toContain('[data-fx-motion="reduced"] .skill-effect-impact');
+    expect(css).not.toContain('[data-fx-motion="reduced"] .skill-effect-stage {\n  display: none');
+  });
+
+  test("FX-STAGE-15 low performance preserves central identity and target impact", () => {
+    const css = fs.readFileSync(path.join(publicDir, "skill-effects.css"), "utf8");
+    expect(css).toContain('[data-fx-quality="low"] .skill-effect-impact');
+    expect(css).toContain('[data-fx-quality="low"] .route-packet');
+    expect(css).not.toContain('[data-fx-quality="low"] .skill-effect-stage {\n  display: none');
   });
 });
