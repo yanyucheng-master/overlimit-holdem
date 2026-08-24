@@ -109,9 +109,13 @@ describe("launch skill FX system contract", () => {
     expect(requestingShake).toEqual([...manager.SHAKE_ALLOWLIST].sort());
   });
 
-  test("dedupe keys prefer server correlation IDs and never depend on translated copy", () => {
-    expect(manager.semanticSkillFxKey({ requestId: "req_123", skillId: "CHEAT" })).toBe("req_123");
-    expect(manager.semanticSkillFxKey({ resultId: "result_456", skillId: "FORTUNE" })).toBe("result_456");
+  test("dedupe keys preserve event/request/result semantics and never depend on translated copy", () => {
+    expect(manager.semanticSkillFxKey({ eventId: "event_123", skillId: "CHEAT" })).toBe("event:event_123");
+    expect(manager.semanticSkillFxKey({ requestId: "req_123", skillId: "cheat" })).toBe("request:req_123:CHEAT");
+    expect(manager.semanticSkillFxKey({ resultId: "result_456", skillId: "FORTUNE" })).toBe("result:result_456");
+    expect(manager.semanticSkillFxKey({
+      requestId: "req_123", resultId: "private_copy", skillId: "CHEAT", status: "FAILED",
+    })).toBe("request:req_123:CHEAT");
     const base = {
       handNo: 4, skillId: "ALERT", casterId: "P2", status: "TRIGGERED",
       disclosure: "self", at: 1234, targetKey: "opponent",
@@ -124,18 +128,67 @@ describe("launch skill FX system contract", () => {
     expect(manager.semanticSkillFxKey(base)).not.toBe(manager.semanticSkillFxKey({ ...base, status: "REFUNDED" }));
   });
 
-  test("FX-DEDUPE-01 one server event public/self delivery copies render once", () => {
+  test("FX-ID-01 one server event public/self delivery copies render once", () => {
     const fx = createQueuedFxManager();
     const shared = { eventId: "evt-shared", skillId: "FAIRNESS", casterId: "P1", handNo: 7 };
     expect(fx.play({ ...shared, audience: "public", disclosure: "public" })).toBe(true);
     expect(fx.play({ ...shared, audience: "self", disclosure: "self" })).toBe(false);
     expect(fx.queue).toHaveLength(1);
+    expect(fx.queue[0].key).toBe("event:evt-shared");
   });
 
-  test("FX-DEDUPE-02 different Loan request IDs are both admitted", () => {
+  test("FX-ID-02 matching requestId and skillId merge resolved/private delivery copies", () => {
+    const fx = createQueuedFxManager();
+    const resolved = {
+      requestId: "probe-copy", skillId: "PROBE", casterId: "P1", handNo: 8,
+      audience: "self", disclosure: "self", status: "SUCCESS",
+    };
+    const privateResult = {
+      ...resolved, resultId: "probe-private-result", status: undefined, safeMessage: "试探已秘密生效。",
+    };
+    expect(fx.play(resolved)).toBe(true);
+    expect(fx.play(privateResult)).toBe(false);
+    expect(fx.queue).toHaveLength(1);
+    expect(fx.queue[0].key).toBe("request:probe-copy:PROBE");
+  });
+
+  test("FX-ID-03 matching requestId with different skillIds remains two visual events", () => {
+    const fx = createQueuedFxManager();
+    const shared = { requestId: "top-secret-chain", handNo: 9 };
+    expect(fx.play({
+      ...shared, skillId: "TOP_SECRET", casterId: "P2", audience: "opponent", disclosure: "public",
+      status: "TRIGGERED",
+    })).toBe(true);
+    expect(fx.play({
+      ...shared, skillId: "INTEL_ONE", casterId: "P1", audience: "self", disclosure: "self",
+      status: "FAILED",
+    })).toBe(true);
+    expect(fx.queue.map((job) => job.key)).toEqual([
+      "request:top-secret-chain:TOP_SECRET",
+      "request:top-secret-chain:INTEL_ONE",
+    ]);
+  });
+
+  test("FX-ID-05 Deep Breath activation and independent hand-end result are both admitted", () => {
+    const fx = createQueuedFxManager();
+    expect(fx.play({
+      requestId: "deep-breath-use", skillId: "DEEP_BREATH", casterId: "P1", handNo: 10,
+      audience: "self", disclosure: "self", status: "SUCCESS",
+    })).toBe(true);
+    expect(fx.play({
+      resultId: "deep-breath-refund", skillId: "DEEP_BREATH", casterId: "P1", handNo: 10,
+      audience: "self", disclosure: "self", status: "REFUNDED", resultOnly: true,
+    })).toBe(true);
+    expect(fx.queue.map((job) => job.key)).toEqual([
+      "request:deep-breath-use:DEEP_BREATH",
+      "result:deep-breath-refund",
+    ]);
+  });
+
+  test("FX-ID-06 different Loan request IDs are both admitted", () => {
     const fx = createQueuedFxManager();
     const base = {
-      skillId: "LOAN", casterId: "P1", handNo: 8, audience: "self", disclosure: "self",
+      skillId: "LOAN", casterId: "P1", handNo: 11, audience: "self", disclosure: "self",
       phase: "pre_flop", status: "SUCCESS", targetKey: "chip",
     };
     expect(fx.play({ ...base, requestId: "loan-v2-a" })).toBe(true);
@@ -143,13 +196,14 @@ describe("launch skill FX system contract", () => {
     expect(fx.queue.map((job) => job.event.requestId)).toEqual(["loan-v2-a", "loan-v2-b"]);
   });
 
-  test("FX-DEDUPE-03 the same fallback event shape in different hands is not merged", () => {
+  test("FX-ID-07 identical fallback copies merge while different hands remain distinct", () => {
     const fx = createQueuedFxManager();
     const base = {
       skillId: "FAIRNESS", casterId: "P1", audience: "public", disclosure: "public",
       phase: "flop", status: "SUCCESS", targetKey: "board", at: 9000,
     };
     expect(fx.play({ ...base, handNo: 9 })).toBe(true);
+    expect(fx.play({ ...base, handNo: 9 })).toBe(false);
     expect(fx.play({ ...base, handNo: 10 })).toBe(true);
     expect(fx.queue).toHaveLength(2);
   });
@@ -178,11 +232,12 @@ describe("launch skill FX system contract", () => {
       requestId: "queue-retry", skillId: "ALERT", casterId: "P1",
       audience: "self", disclosure: "self", handNo: 12,
     };
+    const rejectedKey = "request:queue-retry:ALERT";
     expect(fx.play(rejected)).toBe(false);
-    expect(fx.dedupeKeys.has("queue-retry")).toBe(false);
+    expect(fx.dedupeKeys.has(rejectedKey)).toBe(false);
     fx.queue.shift();
     expect(fx.play(rejected)).toBe(true);
-    expect(fx.dedupeKeys.has("queue-retry")).toBe(true);
+    expect(fx.dedupeKeys.has(rejectedKey)).toBe(true);
   });
 
   test("CSS implements every registered effect family and reduced-motion fallback", () => {
@@ -286,10 +341,21 @@ describe("launch skill FX system contract", () => {
     expect(client).toContain("if (!deadEndOwnsPresentation) playAllInEffect(payload.playerId)");
   });
 
-  test("FX-STAGE-12 semantic request IDs dedupe the entire stage job", () => {
+  test("FX-STAGE-12 semantic request identities dedupe the entire stage job", () => {
     const event = { requestId: "same-request", skillId: "FAIRNESS", casterId: "P1" };
-    expect(manager.semanticSkillFxKey(event)).toBe("same-request");
-    expect(manager.semanticSkillFxKey({ ...event, safeMessage: "changed" })).toBe("same-request");
+    expect(manager.semanticSkillFxKey(event)).toBe("request:same-request:FAIRNESS");
+    expect(manager.semanticSkillFxKey({ ...event, safeMessage: "changed" })).toBe("request:same-request:FAIRNESS");
+  });
+
+  test("network payload mapping keeps correlation fields separate instead of forging eventId", () => {
+    const client = fs.readFileSync(path.join(publicDir, "client.js"), "utf8");
+    expect(client.match(/eventId: payload\.eventId \|\| null/g)).toHaveLength(2);
+    expect(client.match(/requestId: payload\.requestId \|\| null/g)).toHaveLength(2);
+    expect(client.match(/resultId: payload\.resultId \|\| null/g)).toHaveLength(2);
+    expect(client).not.toContain("eventId: payload.eventId || payload.requestId");
+    expect(client).not.toContain("eventId: payload.eventId || payload.requestId || payload.resultId");
+    expect(client).toContain('if (status === "FAILED") return "RESOLUTION FAILED"');
+    expect(client).toContain('? `「${skillDefinition(payload.skillId).name}」结算失败`');
   });
 
   test("FX-STAGE-13 restored and replayed events never enter the stage queue", () => {

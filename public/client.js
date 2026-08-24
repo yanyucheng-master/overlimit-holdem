@@ -1931,6 +1931,8 @@ function resolveSkillFxElements(skillId, meta, payload = {}) {
 
 function skillFxEffectLabel(payload, meta, privateMessage = "") {
   const id = String(payload?.skillId || "").toUpperCase();
+  const status = String(payload?.status || "SUCCESS").toUpperCase();
+  if (status === "FAILED") return "RESOLUTION FAILED";
   const labels = {
     DEEP_BREATH: payload?.status === "REFUNDED"
       ? `ENERGY RETURN +${Math.max(0, Number(payload?.amount) || 0)}`
@@ -1978,9 +1980,9 @@ function announceSkillResolved(payload) {
   // ledger, so the preliminary socket event cannot create a duplicate pulse.
   if (payload.skillId === "DEFENSE" && publicEvent && resultOnly) return;
   getSkillFxManager()?.play({
-    eventId: payload.eventId || payload.requestId
-      || `resolved:${payload.skillId}:${payload.casterId}:${payload.status || "SUCCESS"}:${payload.at || Date.now()}`,
-    requestId: payload.requestId,
+    eventId: payload.eventId || null,
+    requestId: payload.requestId || null,
+    resultId: payload.resultId || null,
     handNo: state.handNo,
     skillId: payload.skillId,
     casterId: payload.casterId,
@@ -1993,7 +1995,11 @@ function announceSkillResolved(payload) {
     tier: skillFxTierForPayload(payload, { publicEvent, resultOnly }),
     resultOnly,
     revealIdentity: publicEvent && (!resultOnly || String(payload.visibility || "").toUpperCase() === "PUBLIC"),
-    safeMessage: publicEvent ? "" : `你发动了「${skillDefinition(payload.skillId).name}」`,
+    safeMessage: publicEvent
+      ? ""
+      : String(payload.status || "SUCCESS").toUpperCase() === "FAILED"
+        ? `「${skillDefinition(payload.skillId).name}」结算失败`
+        : `你发动了「${skillDefinition(payload.skillId).name}」`,
     effectLabel: skillFxEffectLabel(payload, meta),
     at: payload.at,
     ...elements,
@@ -2009,9 +2015,9 @@ function announcePrivateSkillResult(payload) {
   const deepBreathRefund = payload.skillId === "DEEP_BREATH"
     && String(payload.status || "").toUpperCase() === "REFUNDED";
   getSkillFxManager()?.play({
-    eventId: payload.eventId || payload.requestId || payload.resultId
-      || `private:${payload.skillId}:${payload.at || Date.now()}`,
-    resultId: payload.resultId,
+    eventId: payload.eventId || null,
+    requestId: payload.requestId || null,
+    resultId: payload.resultId || null,
     handNo: state.handNo,
     skillId: payload.skillId,
     casterId: state.playerId,

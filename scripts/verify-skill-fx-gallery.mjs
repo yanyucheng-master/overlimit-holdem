@@ -203,6 +203,44 @@ async function main() {
       copies.play({ ...copyEvent, audience: "self", disclosure: "self" }),
     ];
 
+    const requestCopies = makeQueued();
+    const requestCopyEvent = {
+      requestId: "request-copy", skillId: "PROBE", casterId: "P1", handNo: 4,
+      audience: "self", disclosure: "self",
+    };
+    const duplicateRequestCopies = [
+      requestCopies.play({ ...requestCopyEvent, status: "SUCCESS" }),
+      requestCopies.play({ ...requestCopyEvent, resultId: "request-copy-detail", safeMessage: "PRIVATE DETAIL" }),
+    ];
+
+    const topSecret = makeQueued();
+    const topSecretChains = ["INTEL_ONE", "CHEAT", "NULLIFICATION"].map((skillId) => {
+      const requestId = `top-secret-${skillId.toLowerCase()}`;
+      const accepted = [
+        topSecret.play({
+          requestId, skillId: "TOP_SECRET", casterId: "P2", handNo: 4,
+          audience: "opponent", disclosure: "public", status: "TRIGGERED",
+        }),
+        topSecret.play({
+          requestId, skillId, casterId: "P1", handNo: 4,
+          audience: "self", disclosure: "self", status: "FAILED",
+        }),
+      ];
+      return { skillId, requestId, accepted };
+    });
+
+    const deepBreath = makeQueued();
+    const deepBreathEvents = [
+      deepBreath.play({
+        requestId: "deep-breath-use", skillId: "DEEP_BREATH", casterId: "P1", handNo: 4,
+        audience: "self", disclosure: "self", status: "SUCCESS",
+      }),
+      deepBreath.play({
+        resultId: "deep-breath-refund", skillId: "DEEP_BREATH", casterId: "P1", handNo: 4,
+        audience: "self", disclosure: "self", status: "REFUNDED", resultOnly: true,
+      }),
+    ];
+
     const loans = makeQueued();
     const loanBase = {
       skillId: "LOAN", casterId: "P1", handNo: 5, phase: "pre_flop",
@@ -224,6 +262,9 @@ async function main() {
       fallbacks.play({ ...fallbackBase, handNo: 7, targetKey: "board:4", status: "SUCCESS" }),
       fallbacks.play({ ...fallbackBase, handNo: 7, targetKey: "board:4", status: "REVEALED", resultOnly: true }),
     ];
+    const fallbackDuplicate = fallbacks.play({
+      ...fallbackBase, handNo: 6, targetKey: "board:3", status: "SUCCESS",
+    });
 
     const capacity = makeQueued();
     for (let index = 0; index < 8; index += 1) {
@@ -237,15 +278,23 @@ async function main() {
       audience: "self", disclosure: "self", handNo: 8,
     };
     const rejected = capacity.play(retryEvent);
-    const markedWhileRejected = capacity.dedupeKeys.has("capacity-retry");
+    const retryKey = "request:capacity-retry:ALERT";
+    const markedWhileRejected = capacity.dedupeKeys.has(retryKey);
     capacity.queue.shift();
     const retried = capacity.play(retryEvent);
     return {
       duplicateCopies,
       copyQueue: copies.queue.length,
+      duplicateRequestCopies,
+      requestCopyQueue: requestCopies.queue.length,
+      topSecretChains,
+      topSecretKeys: topSecret.queue.map((job) => job.key),
+      deepBreathEvents,
+      deepBreathKeys: deepBreath.queue.map((job) => job.key),
       loanRequests,
       loanQueue: loans.queue.map((job) => job.event.requestId),
       fallbackVariants,
+      fallbackDuplicate,
       fallbackQueue: fallbacks.queue.length,
       capacity: { rejected, markedWhileRejected, retried, queue: capacity.queue.length },
     };
@@ -465,10 +514,17 @@ async function main() {
     || deepBreathRefund.captionText.indexOf("ENERGY RETURN +2") < 0) failures.push("Deep Breath private refund result timing/caption failed");
   if (secrecy.accepted || secrecy.after !== secrecy.before || secrecy.publicVisible || secrecy.privateVisible) failures.push("opponent secret event produced a visual side channel");
   if (resultOnly.identity !== "result-only" || /绝密|TOP SECRET/i.test(resultOnly.caption) || resultOnly.title !== "ACCESS DENIED") failures.push("result-only stage leaked a secret skill identity");
-  if (dedupeAndPriority.dedupe[0] !== true || dedupeAndPriority.dedupe[1] !== false) failures.push("duplicate requestId was not suppressed");
+  if (dedupeAndPriority.dedupe[0] !== true || dedupeAndPriority.dedupe[1] !== false) failures.push("duplicate eventId was not suppressed");
   if (eventAdmission.duplicateCopies[0] !== true || eventAdmission.duplicateCopies[1] !== false || eventAdmission.copyQueue !== 1) failures.push("public/private event copies were not merged by eventId");
+  if (eventAdmission.duplicateRequestCopies[0] !== true || eventAdmission.duplicateRequestCopies[1] !== false
+    || eventAdmission.requestCopyQueue !== 1) failures.push("resolved/private copies were not merged by requestId + skillId");
+  if (eventAdmission.topSecretChains.some((chain) => chain.accepted.some((value) => !value))
+    || eventAdmission.topSecretKeys.length !== 6) failures.push("Top Secret collided with a protected skill sharing its requestId");
+  if (eventAdmission.deepBreathEvents.some((value) => !value)
+    || eventAdmission.deepBreathKeys.join(",") !== "request:deep-breath-use:DEEP_BREATH,result:deep-breath-refund") failures.push("Deep Breath activation and refund identities collided");
   if (eventAdmission.loanRequests.some((value) => !value) || eventAdmission.loanQueue.join(",") !== "loan-a,loan-b") failures.push("different Loan requestIds did not both enter the FX queue");
-  if (eventAdmission.fallbackVariants.some((value) => !value) || eventAdmission.fallbackQueue !== 4) failures.push("fallback identity merged a different hand, target or result stage");
+  if (eventAdmission.fallbackVariants.some((value) => !value) || eventAdmission.fallbackDuplicate !== false
+    || eventAdmission.fallbackQueue !== 4) failures.push("fallback identity did not merge only the identical copy");
   if (eventAdmission.capacity.rejected !== false || eventAdmission.capacity.markedWhileRejected || !eventAdmission.capacity.retried || eventAdmission.capacity.queue !== 8) failures.push("queue rejection poisoned the FX dedupe cache");
   if (dedupeAndPriority.endgame || dedupeAndPriority.restored || dedupeAndPriority.replay) failures.push("Endgame/reconnect/replay entered ordinary StageFX");
   if (directorInteractions.blood.accepted.some((value) => !value)

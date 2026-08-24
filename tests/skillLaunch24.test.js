@@ -13,6 +13,7 @@ const {
 } = require("../game/skills/skillEngine");
 const { listSkillDefinitions } = require("../game/skills/definitions");
 const { computeFortuneChance } = require("../game/skills/fortuneConfig");
+const skillFxManager = require("../public/skill-fx-manager");
 const logger = require("../utils/logger");
 const eventBus = require("../utils/eventBus");
 
@@ -58,6 +59,12 @@ function zoneCodes(room, a, b) {
   ].map((card) => card.code);
 }
 
+function createQueuedFxManager() {
+  const instance = new skillFxManager.SkillFxManager();
+  instance.busy = true;
+  return instance;
+}
+
 describe("首发 24 技能冻结核对", () => {
   test("感知与强运仍为 FROZEN_V1，概率未改", () => {
     expect(SKILL_RULE_FREEZE.PERCEPTION.status).toBe("FROZEN_V1");
@@ -86,6 +93,57 @@ describe("首发 24 技能冻结核对", () => {
     expect(SKILL_CONFIG.MAX_SKILL_LOAD).toBe(8);
     expect(validateLoadout(["ENDGAME"]).ok).toBe(true);
     expect(validateLoadout(["ENDGAME", "CHEAT"]).ok).toBe(false);
+  });
+});
+
+describe("绝密 FX 请求链身份", () => {
+  test.each([
+    ["INTEL_ONE", { zone: "opponent" }],
+    ["CHEAT", { ownIndex: 0, zone: "opponent", index: 0 }],
+    ["NULLIFICATION", { mode: "hole" }],
+  ])("FX-ID-04 %s 与绝密共享 requestId 时仍分别进入 FX 队列", (skillId, target) => {
+    const { io, engine, room, a, b } = setupRoom({
+      loadoutA: [skillId, "RECYCLE"],
+      loadoutB: ["TOP_SECRET", "DEEP_BREATH"],
+    });
+    const requestId = `top-secret-${skillId.toLowerCase()}`;
+    room.currentPlayerIndex = room.players.indexOf(a);
+    if (skillId === "NULLIFICATION") room.phase = "flop";
+    a.skillRuntime.abyssEnergy = 8;
+    b.skillRuntime.abyssEnergy = 8;
+    io.emits.length = 0;
+
+    expect(use(engine, room, a, skillId, target, requestId)).toMatchObject({ status: "FAILED" });
+
+    const resolved = io.emits.filter((entry) => (
+      entry.event === "skill:resolved"
+      && entry.payload?.requestId === requestId
+      && ["TOP_SECRET", skillId].includes(entry.payload?.skillId)
+    ));
+    expect(resolved.map((entry) => entry.payload.skillId)).toEqual(["TOP_SECRET", skillId]);
+    expect(resolved.find((entry) => entry.payload.skillId === "TOP_SECRET")?.target).toBe(room.roomId);
+    expect(resolved.find((entry) => entry.payload.skillId === skillId)?.target).toBe(a.socketId);
+    expect(io.emits.some((entry) => (
+      entry.target === b.socketId
+      && entry.event === "skill:resolved"
+      && entry.payload?.skillId === skillId
+    ))).toBe(false);
+
+    const fx = createQueuedFxManager();
+    const accepted = resolved.map((entry) => {
+      const self = entry.payload.casterId === a.playerId;
+      return fx.play({
+        ...entry.payload,
+        handNo: room.handNo,
+        audience: self ? "self" : "opponent",
+        disclosure: self ? "self" : "public",
+      });
+    });
+    expect(accepted).toEqual([true, true]);
+    expect(fx.queue.map((job) => job.key)).toEqual([
+      `request:${requestId}:TOP_SECRET`,
+      `request:${requestId}:${skillId}`,
+    ]);
   });
 });
 
@@ -274,6 +332,21 @@ describe("试探", () => {
       skillId: "PROBE",
       message: "试探已秘密生效。",
     });
+    const resolved = io.emits.find((entry) => (
+      entry.target === "s1"
+      && entry.event === "skill:resolved"
+      && entry.payload?.requestId === "probe-fx-copy"
+      && entry.payload?.skillId === "PROBE"
+    ));
+    expect(resolved).toBeTruthy();
+    const fx = createQueuedFxManager();
+    expect(fx.play({
+      ...resolved.payload, handNo: room.handNo, audience: "self", disclosure: "self",
+    })).toBe(true);
+    expect(fx.play({
+      ...privateResult.payload, handNo: room.handNo, audience: "self", disclosure: "self",
+    })).toBe(false);
+    expect(fx.queue.map((job) => job.key)).toEqual(["request:probe-fx-copy:PROBE"]);
   });
 
   test("对手普通 Fold 先 +50 再倍率；自己 Fold 不触发；公平可清除", () => {

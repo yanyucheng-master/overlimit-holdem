@@ -5,6 +5,7 @@ const { RoomManager } = require("../game/roomManager");
 const { GameEngine } = require("../game/gameEngine");
 const { createDeck } = require("../utils/deck");
 const { getSkillDefinition } = require("../game/skills/definitions");
+const skillFxManager = require("../public/skill-fx-manager");
 const {
   setPlayerLoadout,
   getPublicSkillSummary,
@@ -76,6 +77,12 @@ function expectNoDeepBreathIdentity(value) {
   const text = JSON.stringify(value);
   expect(text).not.toContain("DEEP_BREATH");
   expect(text).not.toContain("深呼吸");
+}
+
+function createQueuedFxManager() {
+  const instance = new skillFxManager.SkillFxManager();
+  instance.busy = true;
+  return instance;
 }
 
 describe("Deep Breath 秘密主动技能契约", () => {
@@ -204,6 +211,42 @@ describe("Deep Breath 秘密主动技能契约", () => {
     expect(a.skillRuntime.privateResults.filter((result) => (
       result.skillId === "DEEP_BREATH" && result.status === "REFUNDED"
     ))).toHaveLength(1);
+  });
+
+  test("FX-ID-05 真实发动 requestId 与独立返能 resultId 都进入本人 FX 队列", () => {
+    const { io, engine, room, a } = setupRoom();
+    io.emits.length = 0;
+    expect(use(engine, room, a, "DEEP_BREATH", {}, "db-fx-activation")).toMatchObject({
+      status: "SUCCESS",
+    });
+    const activation = lastPacket(io, a, "skill:resolved");
+    expect(activation?.payload).toMatchObject({
+      requestId: "db-fx-activation",
+      skillId: "DEEP_BREATH",
+      status: "SUCCESS",
+    });
+
+    engine.skillEngine.endHand(room, { reason: "showdown", winner: a, tie: false });
+    const refund = lastPacket(io, a, "skill:private-result");
+    expect(refund?.payload).toMatchObject({
+      skillId: "DEEP_BREATH",
+      status: "REFUNDED",
+      amount: 2,
+    });
+    expect(refund.payload.requestId).toBeUndefined();
+    expect(typeof refund.payload.resultId).toBe("string");
+
+    const fx = createQueuedFxManager();
+    expect(fx.play({
+      ...activation.payload, handNo: room.handNo, audience: "self", disclosure: "self",
+    })).toBe(true);
+    expect(fx.play({
+      ...refund.payload, handNo: room.handNo, audience: "self", disclosure: "self", resultOnly: true,
+    })).toBe(true);
+    expect(fx.queue.map((job) => job.key)).toEqual([
+      "request:db-fx-activation:DEEP_BREATH",
+      `result:${refund.payload.resultId}`,
+    ]);
   });
 
   test("DB-SETTLEMENT-01 对手 socket、公共日志、房间状态和结算载荷均无返能身份细节", () => {

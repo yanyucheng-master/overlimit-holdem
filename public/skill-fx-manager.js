@@ -22,22 +22,25 @@
     return text.slice(0, 180);
   }
 
+  function explicitSkillFxKey(event) {
+    if (!event) return "";
+    const eventId = cleanToken(event.eventId);
+    if (eventId) return `event:${eventId}`;
+
+    const requestId = cleanToken(event.requestId);
+    const skillId = cleanToken(event.skillId).toUpperCase();
+    if (requestId && skillId) return `request:${requestId}:${skillId}`;
+
+    const resultId = cleanToken(event.resultId);
+    if (resultId) return `result:${resultId}`;
+    return "";
+  }
+
   function semanticSkillFxKey(event) {
     if (!event) return "";
-    const explicit = event.eventId || event.requestId || event.resultId;
-    if (explicit) return cleanToken(explicit);
-    return [
-      cleanToken(event.handId || event.handNo || "hand"),
-      cleanToken(event.casterId || "caster"),
-      cleanToken(event.skillId || "skill"),
-      cleanToken(event.targetKey || ""),
-      cleanToken(event.phase || ""),
-      cleanToken(event.status || event.state || "SUCCESS"),
-      cleanToken(event.disclosure || "public"),
-      cleanToken(event.context || "table"),
-      event.resultOnly ? "result" : "event",
-      Number(event.sequence ?? event.at ?? 0),
-    ].join(":");
+    const explicit = explicitSkillFxKey(event);
+    if (explicit) return explicit;
+    return `fallback:${fallbackSkillFxFingerprint(event)}`;
   }
 
   function fallbackSkillFxFingerprint(event) {
@@ -56,7 +59,7 @@
   }
 
   function hasExplicitSkillFxId(event) {
-    return Boolean(event?.eventId || event?.requestId || event?.resultId);
+    return Boolean(explicitSkillFxKey(event));
   }
 
   function isElement(value) {

@@ -17,9 +17,42 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm test -- --ci
-      - run: npm run verify:skill-fx
-      - run: npm run verify:ui
-      - run: npm run verify:interactions
-      - run: npm run verify:online
+      - name: Run browser and online verification
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          server_log="${RUNNER_TEMP}/overlimit-server.log"
+          PORT=3002 node server.js > "$server_log" 2>&1 &
+          server_pid=$!
+
+          cleanup() {
+            kill "$server_pid" 2>/dev/null || true
+            wait "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          ready=false
+          for attempt in {1..30}; do
+            if curl -fsS http://127.0.0.1:3002/healthz > /dev/null 2>&1; then
+              ready=true
+              break
+            fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then
+              break
+            fi
+            sleep 1
+          done
+
+          if [ "$ready" != "true" ]; then
+            echo "Local verification server failed to become ready."
+            cat "$server_log"
+            exit 1
+          fi
+
+          npm run verify:skill-fx
+          npm run verify:ui
+          npm run verify:interactions
+          npm run verify:online
       - run: node scripts/simulate-chip-economy.js 80
       - run: node scripts/simulate-overdrive.js 100
