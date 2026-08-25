@@ -275,7 +275,10 @@ describe("launch skill FX system contract", () => {
 
   test("FX-STAGE-02 Deep Breath stages centrally and follows through to energy", () => {
     const client = fs.readFileSync(path.join(publicDir, "client.js"), "utf8");
-    expect(client).toContain("stageCenter: el.tableCenter || el.community || el.board");
+    expect(client).toContain(
+      "stageCenter: el.skillFxStageAnchor || el.tableCenter || el.community || el.board"
+    );
+    expect(client).toContain("deck: el.deckFxAnchor || el.deckStack");
     expect(client).toContain('["DEEP_BREATH", "RECYCLE"].includes(id)) targetElement = casterEnergy');
     expect(profiles.getSkillFxProfile("DEEP_BREATH")).toMatchObject({ tier: "FX2", impact: "energy" });
   });

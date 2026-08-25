@@ -105,6 +105,154 @@ async function phoneTableLayout(page) {
   });
 }
 
+async function competitiveTableAudit(page, viewport) {
+  await page.setViewportSize(viewport);
+  await page.waitForTimeout(240);
+  return page.evaluate(({ width, height }) => {
+    const byId = (id) => document.getElementById(id);
+    const rect = (node) => node?.getBoundingClientRect();
+    const visible = (node) => {
+      if (!node) return false;
+      const style = getComputedStyle(node);
+      const bounds = rect(node);
+      return Boolean(
+        bounds &&
+        bounds.width > 1 &&
+        bounds.height > 1 &&
+        style.display !== "none" &&
+        style.visibility !== "hidden" &&
+        Number.parseFloat(style.opacity || "1") > 0.01 &&
+        bounds.right > 0 &&
+        bounds.left < innerWidth &&
+        bounds.bottom > 0 &&
+        bounds.top < innerHeight
+      );
+    };
+    const hidden = (node) => !visible(node);
+    const close = (left, right, tolerance = 1) => Math.abs(left - right) <= tolerance;
+    const topbar = document.querySelector("#screen-game .game-topbar");
+    const runtime = document.querySelector("#screen-game .table-runtime-data");
+    const connection = byId("game-connection");
+    const leftRail = byId("opponent-skill-field");
+    const rightRail = byId("table-telemetry");
+    const skillBroadcast = byId("skill-broadcast");
+    const tableCenter = byId("table-center");
+    const clock = rect(byId("action-countdown"));
+    const communityCards = [...document.querySelectorAll("#community-cards .card")].map(rect);
+    const skillSlots = [...document.querySelectorAll("#skill-bar .skill-slot")].map(rect);
+    const pokerLayer = rect(document.querySelector("#screen-game .poker-actions-layer"));
+    const skillHud = rect(byId("skill-hud"));
+    const turnStatus = rect(document.querySelector("#screen-game .turn-status"));
+    const deckAnchor = rect(byId("deck-fx-anchor"));
+    const stageAnchor = rect(byId("skill-fx-stage-anchor"));
+    const compact = matchMedia("(max-width: 760px), (max-height: 560px)").matches;
+    const telemetryVisibleChildren = [...(rightRail?.children || [])]
+      .filter(visible)
+      .map((node) => node.id || node.className);
+    const topbarText = topbar?.innerText.replace(/\s+/g, " ").trim() || "";
+    const board = rect(byId("board"));
+    const dock = rect(document.querySelector("#screen-game .action-dock"));
+    const leftRect = rect(leftRail);
+    const rightRect = rect(rightRail);
+    const selfMinimal = {
+      avatarHidden: hidden(byId("self-avatar")),
+      connectionHidden: hidden(byId("self-connection")),
+      betHidden: hidden(byId("self-bet")?.closest(".player-bet-metric")),
+      stateHidden: hidden(byId("self-state")),
+      cardsVisible: visible(byId("self-cards")),
+      nameVisible: visible(byId("self-name")),
+      chipsVisible: visible(byId("self-chips")),
+      handVisible: visible(byId("self-hand-type")),
+    };
+
+    return {
+      requested: { width, height },
+      actual: { width: innerWidth, height: innerHeight },
+      contracts: {
+        "TABLE-CLEAN-01": Boolean(
+          hidden(runtime) &&
+          !/标准局|高爆局|跟注\s*\d|牌堆|HAND|待锁/.test(topbarText) &&
+          connection?.textContent.trim() === "" &&
+          visible(byId("btn-back-game")) &&
+          visible(byId("btn-hand-history"))
+        ),
+        "TABLE-CLEAN-02": compact
+          ? hidden(leftRail) && hidden(rightRail)
+          : Boolean(
+              visible(leftRail) &&
+              visible(rightRail) &&
+              byId("opponent-skill-title")?.textContent.trim() === "对手技能" &&
+              byId("skill-broadcast-title")?.textContent.trim() === "战术播报" &&
+              telemetryVisibleChildren.length === 1 &&
+              telemetryVisibleChildren[0] === "skill-broadcast"
+            ),
+        "TABLE-CLEAN-03": Boolean(
+          byId("pot-core")?.closest("#table-center") === tableCenter &&
+          byId("phase-text")?.closest("#table-center") === tableCenter &&
+          byId("action-log")?.classList.contains("sr-only") &&
+          getComputedStyle(byId("deck-stack")).visibility === "hidden"
+        ),
+        "TABLE-CLEAN-04": Boolean(
+          clock &&
+          communityCards.length === 5 &&
+          clock.right <= Math.min(...communityCards.map((card) => card.left)) + 1
+        ),
+        "TABLE-CLEAN-05": Object.values(selfMinimal).every(Boolean),
+        "TABLE-CLEAN-06": Boolean(
+          visible(byId("opponent-name")) &&
+          visible(byId("opponent-chips")) &&
+          visible(byId("opponent-bet")) &&
+          visible(byId("opponent-cards"))
+        ),
+        "TABLE-CLEAN-07": Boolean(
+          pokerLayer &&
+          skillHud &&
+          turnStatus &&
+          turnStatus.bottom <= pokerLayer.top + 2 &&
+          pokerLayer.bottom <= skillHud.top + 2
+        ),
+        "TABLE-CLEAN-08": Boolean(
+          skillSlots.length === 4 &&
+          skillSlots.every((slot) => close(slot.top, skillSlots[0].top, 1))
+        ),
+        "TABLE-CLEAN-09": Boolean(
+          deckAnchor?.width > 20 &&
+          deckAnchor?.height > 20 &&
+          stageAnchor?.width > 20 &&
+          stageAnchor?.height > 20
+        ),
+        "TABLE-CLEAN-10": Boolean(
+          board &&
+          dock &&
+          board.bottom <= dock.top + 1 &&
+          document.documentElement.scrollWidth <= innerWidth + 1 &&
+          document.documentElement.scrollHeight <= innerHeight + 1
+        ),
+        "TABLE-CLEAN-11": compact
+          ? Boolean(
+              visible(byId("btn-toggle-opponent-intel")) &&
+              visible(byId("btn-toggle-skill-feed")) &&
+              leftRail?.getAttribute("aria-hidden") === "true" &&
+              skillBroadcast?.getAttribute("aria-hidden") === "true"
+            )
+          : Boolean(
+              hidden(byId("btn-toggle-opponent-intel")) &&
+              hidden(byId("btn-toggle-skill-feed"))
+            ),
+        "TABLE-CLEAN-12": compact
+          ? true
+          : Boolean(
+              leftRect?.width >= 249 &&
+              leftRect?.width <= 287 &&
+              rightRect?.width >= 219 &&
+              rightRect?.width <= 253
+            ),
+      },
+      selfMinimal,
+    };
+  }, viewport);
+}
+
 async function buttonHitAudit(page, scopeSelector) {
   return page.evaluate((scopeSelector) => {
     const scope = document.querySelector(scopeSelector) || document;
@@ -199,6 +347,7 @@ async function main() {
     landscape: {},
     smallLandscape: {},
     allin: {},
+    tableClean: [],
   };
 
   await page.goto(BASE + "/?verify-interactions=1", { waitUntil: "domcontentloaded" });
@@ -417,10 +566,30 @@ async function main() {
 
   report.game.skillGeometry = await skillGeometry(page);
   report.game.zoomButtons = await page.locator("#skill-bar .skill-zoom-button").count();
-  report.game.deckLabel = await page.locator(".fairness-stat > span").innerText();
+  report.game.deckAnchor = await page.evaluate(() => {
+    const anchor = document.getElementById("deck-fx-anchor")?.getBoundingClientRect();
+    const deckStyle = getComputedStyle(document.getElementById("deck-stack"));
+    return {
+      width: anchor?.width || 0,
+      height: anchor?.height || 0,
+      deckVisibility: deckStyle.visibility,
+    };
+  });
   await page.locator("#skill-bar .skill-zoom-button").first().click();
   report.game.previewOpened = await visible(page, "#skill-preview-modal:not(.hidden)");
   await page.click("#btn-skill-preview-done");
+  for (const viewport of [
+    { width: 1920, height: 1080 },
+    { width: 1440, height: 900 },
+    { width: 1366, height: 768 },
+    { width: 390, height: 844 },
+    { width: 360, height: 800 },
+    { width: 320, height: 700 },
+  ]) {
+    report.tableClean.push(await competitiveTableAudit(page, viewport));
+  }
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.waitForTimeout(120);
   report.game.hitAudit = await buttonHitAudit(page, "#screen-game");
 
   await page.waitForFunction(
@@ -641,8 +810,24 @@ async function main() {
   if (report.game.skillGeometry.count !== 4 || !report.game.skillGeometry.allInside || report.game.skillGeometry.overflows) {
     failures.push("desktop four-skill HUD overflow");
   }
-  if (report.game.zoomButtons !== 4 || report.game.deckLabel.trim() !== "牌堆" || !report.game.previewOpened) {
+  if (
+    report.game.zoomButtons !== 4 ||
+    report.game.deckAnchor.width <= 20 ||
+    report.game.deckAnchor.height <= 20 ||
+    report.game.deckAnchor.deckVisibility !== "hidden" ||
+    !report.game.previewOpened
+  ) {
     failures.push("game HUD controls failed");
+  }
+  for (const audit of report.tableClean) {
+    const failedContracts = Object.entries(audit.contracts)
+      .filter(([, passed]) => !passed)
+      .map(([id]) => id);
+    if (failedContracts.length) {
+      failures.push(
+        `competitive table contracts failed at ${audit.requested.width}x${audit.requested.height}: ${failedContracts.join(", ")}`
+      );
+    }
   }
   if (!report.game.settingsLobbyVisible || !report.game.settingsLobbyConfirmation) {
     failures.push("settings return-to-lobby flow failed");

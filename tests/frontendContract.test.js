@@ -60,7 +60,7 @@ describe("frontend DOM contract", () => {
     expect(html).toContain('id="skill-preview-modal"');
     expect(html).toContain('id="btn-close-skill-preview"');
     expect(html).toContain('id="btn-raise-options"');
-    expect(html).toContain('<span>牌堆</span>');
+    expect(html).toContain('id="deck-fx-anchor"');
     expect(client).toContain('className = "skill-zoom-button"');
     expect(client).toContain('className = "skill-selection-mark"');
     expect(client).toContain('className = "skill-slot is-"');
@@ -70,25 +70,36 @@ describe("frontend DOM contract", () => {
     expect(client).toContain("socket.connected &&");
   });
 
-  test("牌桌倒计时与底池语义分离，四技能与专家操作字号具备回归契约", () => {
+  test("牌桌中央只承载牌局核心，牌堆保留不可见 FX 锚点", () => {
     const boardStageStart = html.indexOf('<section class="table-center"');
     const boardStageEnd = html.indexOf('id="btn-toggle-skill-feed"', boardStageStart);
     const boardStageMarkup = html.slice(boardStageStart, boardStageEnd);
     expect(boardStageStart).toBeGreaterThan(-1);
     expect(boardStageMarkup).toContain('class="board-stage-line"');
+    expect(boardStageMarkup).toContain('id="phase-text"');
+    expect(boardStageMarkup).toContain('id="pot-core"');
     expect(boardStageMarkup).toContain('id="action-countdown"');
     expect(boardStageMarkup).toContain('id="community-cards"');
+    expect(boardStageMarkup).toContain('id="deck-fx-anchor"');
+    expect(boardStageMarkup).toContain('id="deck-stack"');
+    expect(boardStageMarkup).toContain('id="skill-fx-stage-anchor"');
+    expect(boardStageMarkup).toContain('id="action-log" class="action-log sr-only"');
+    expect(boardStageMarkup.indexOf('id="pot-core"')).toBeLessThan(
+      boardStageMarkup.indexOf('id="community-cards"')
+    );
     expect(boardStageMarkup.indexOf('id="action-countdown"')).toBeLessThan(
       boardStageMarkup.indexOf('id="community-cards"')
     );
 
-    const instrumentsStart = html.indexOf('<div class="round-instruments">');
-    const instrumentsEnd = html.indexOf('id="overdrive-profile"', instrumentsStart);
-    const instrumentsMarkup = html.slice(instrumentsStart, instrumentsEnd);
-    expect(instrumentsStart).toBeGreaterThan(-1);
-    expect(instrumentsMarkup).toContain('id="pot-core"');
-    expect(instrumentsMarkup).toContain('id="deck-stack"');
-    expect(instrumentsMarkup).not.toContain('id="action-countdown"');
+    const telemetryStart = html.indexOf('id="table-telemetry"');
+    const telemetryEnd = html.indexOf('id="self-area"', telemetryStart);
+    const telemetryMarkup = html.slice(telemetryStart, telemetryEnd);
+    expect(telemetryMarkup).toContain('id="skill-broadcast"');
+    expect(telemetryMarkup).toContain('id="skill-log"');
+    expect(telemetryMarkup).not.toContain('id="pot-core"');
+    expect(telemetryMarkup).not.toContain('id="phase-text"');
+    expect(telemetryMarkup).not.toContain('id="deck-stack"');
+    expect(telemetryMarkup).not.toContain('LIVE');
 
     expect(client).toContain('el.skillBar.dataset.count = String(equippedSkillIds.length)');
     expect(tableV2).toMatch(
@@ -99,6 +110,9 @@ describe("frontend DOM contract", () => {
     );
     expect(tableV2).toContain('font-size: clamp(0.92rem, 1.09vw, 1.16rem)');
     expect(tableV2).toContain('grid-template-rows: auto auto 0.85em');
+    expect(tableV2).toContain('TABLE V5 / COMPETITIVE CONVERGENCE');
+    expect(tableV2).toContain('grid-template-rows: 16px var(--table-command-row) var(--table-skill-row)');
+    expect(tableV2).toContain('grid-template-columns: repeat(4, minmax(0, 1fr))');
     expect(tableV2).not.toMatch(/\.self-cards \.card:nth-child\(2\)[^{]*\{[^}]*margin-left:\s*-/s);
     expect(tableV2).toMatch(/\.salon-ui #screen-game \.self-cards\s*\{[^}]*gap:\s*8px/s);
     expect(tableV2).toContain("min-width: calc(var(--card-w) * 2 + 8px)");

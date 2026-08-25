@@ -938,35 +938,37 @@
 
       <section id="screen-game" class="screen game-screen" aria-labelledby="table-title">
         <header class="game-topbar">
-          <button type="button" id="btn-back-game" class="button button-ghost back-button" aria-label="离开牌桌" title="离开牌桌">
-            <span class="game-exit-icon" aria-hidden="true">←</span><span class="game-exit-label">离开</span>
-          </button>
-          <div class="table-identity">
-            <p id="table-title" class="sr-only">超限牌桌</p>
-            <div class="table-identity-row">
-              <span id="game-room-id">——</span>
-              <span class="identity-sep" aria-hidden="true">·</span>
-              <span id="game-mode-badge" class="mode-pill standard">标准局</span>
-              <button id="btn-hand-history" class="history-chip" type="button" title="查看本局历史结算">
-                历史
-              </button>
-            </div>
-            <div class="fairness-detail compact" aria-live="polite">
-              <span id="fairness-hand-id">HAND —</span>
-              <span id="fairness-result">等待牌堆承诺</span>
+          <div class="table-tools-left">
+            <button type="button" id="btn-back-game" class="button button-ghost back-button" aria-label="离开牌桌" title="离开牌桌">
+              <span class="game-exit-icon" aria-hidden="true">←</span><span class="game-exit-label">离开</span>
+            </button>
+            <button id="btn-hand-history" class="history-chip" type="button" title="查看本局历史结算">
+              历史
+            </button>
+          </div>
+          <p id="table-title" class="sr-only">超限牌桌</p>
+          <div class="table-runtime-data" aria-hidden="true">
+            <span id="game-room-id">——</span>
+            <span id="game-mode-badge" class="mode-pill standard">标准局</span>
+            <span id="current-bet">0</span>
+            <span id="commitment-short">待定</span>
+            <span id="fairness-summary" title="牌堆承诺状态">待锁</span>
+            <span id="fairness-hand-id">HAND —</span>
+            <span id="fairness-result">等待牌堆承诺</span>
+            <div id="overdrive-profile" class="overdrive-profile hidden">
+              <span>高爆</span>
+              <strong id="overdrive-profile-label">高能牌局</strong>
             </div>
           </div>
           <div class="topbar-status">
-            <span class="table-stat inline-stat" title="当前跟注额">
-              <span>跟注</span>
-              <strong id="current-bet">0</strong>
-            </span>
-            <span class="table-stat inline-stat fairness-stat" title="牌堆校验摘要">
-              <span>牌堆</span>
-              <strong id="commitment-short">待定</strong>
-            </span>
-            <span id="game-connection" class="connection-chip"><i class="status-dot"></i>连接中</span>
-            <span id="fairness-summary" class="fairness-chip" title="牌堆承诺状态">待锁</span>
+            <span
+              id="game-connection"
+              class="connection-chip connection-dot-only"
+              role="status"
+              aria-live="polite"
+              aria-label="连接中"
+              title="连接中"
+            ><i class="status-dot"></i><span class="sr-only">连接中</span></span>
           </div>
         </header>
 
@@ -976,15 +978,15 @@
 
           <section id="opponent-area" class="player-zone opponent-zone" aria-label="对手状态">
             <div class="player-console">
-              <div id="opponent-avatar" class="player-avatar"><span>?</span><i></i></div>
+              <div id="opponent-avatar" class="player-avatar player-avatar-secondary"><span>?</span><i></i></div>
               <div class="player-main">
                 <div class="player-title-row">
                   <strong id="opponent-name">对手</strong>
-                  <span id="opponent-connection" class="mini-status"><i class="status-dot"></i>离线</span>
+                  <span id="opponent-connection" class="mini-status opponent-connection"><i class="status-dot"></i><span>离线</span></span>
                 </div>
                 <div class="player-metrics">
-                  <span>筹码 <strong id="opponent-chips">—</strong></span>
-                  <span>下注 <strong id="opponent-bet">0</strong></span>
+                  <span class="player-chip-metric">筹码 <strong id="opponent-chips">—</strong></span>
+                  <span class="player-bet-metric">下注 <strong id="opponent-bet">0</strong></span>
                   <button
                     id="btn-opponent-energy"
                     class="opponent-energy-metric hidden"
@@ -1016,37 +1018,56 @@
 
           <aside id="opponent-skill-field" class="table-side-rail opponent-skill-field" aria-labelledby="opponent-skill-title">
             <header class="rail-heading">
-              <div>
-                <span class="rail-eyebrow">OPPONENT DOSSIER</span>
-                <h2 id="opponent-skill-title">对手构筑</h2>
-              </div>
+              <h2 id="opponent-skill-title">对手技能</h2>
               <span id="opponent-build-status" class="intel-status">未确认</span>
             </header>
             <div class="intel-legend" aria-label="技能情报图例">
-              <span><i class="known"></i>系统确认</span>
-              <span><i class="suspected"></i>本地推测</span>
+              <span title="系统确认"><i class="known"></i><span class="sr-only">系统确认</span></span>
+              <span title="本地推测"><i class="suspected"></i><span class="sr-only">本地推测</span></span>
             </div>
             <div id="opponent-skill-bar" class="opponent-skill-bar" aria-label="对手已知与推测技能"></div>
-            <button id="btn-mark-opponent-skills" class="intel-edit-button" type="button">
+            <button id="btn-mark-opponent-skills" class="intel-edit-button" type="button" title="标记仅保存在本机，不会同步或影响结算">
               <span aria-hidden="true">＋</span>
               <span>标记推测</span>
             </button>
-            <p class="intel-privacy">标记只保存在本机，不会同步或影响结算。</p>
+            <p class="intel-privacy sr-only">标记只保存在本机，不会同步或影响结算。</p>
           </aside>
 
-          <section class="table-center" id="table-center" aria-label="行动倒计时与公共牌">
-            <div class="board-stage-line">
-              <div class="turn-clock-block board-turn-clock">
-                <span class="instrument-label">TURN TIME</span>
-                <div id="action-countdown" class="action-countdown" role="timer" aria-label="本回合剩余行动时间">
-                  <span id="action-countdown-value">—</span>
-                  <small class="turn-clock-unit" aria-hidden="true">SEC</small>
+          <section class="table-center" id="table-center" aria-label="底池、行动倒计时与公共牌">
+            <div class="board-core">
+              <div id="skill-fx-stage-anchor" class="skill-fx-stage-anchor" aria-hidden="true"></div>
+              <div class="board-potline">
+                <span id="phase-text" class="board-street">等待</span>
+                <div id="pot-core" class="pot-core" aria-label="当前底池 0">
+                  <div class="core-ring ring-outer"></div>
+                  <div class="core-ring ring-inner"></div>
+                  <div class="core-value">
+                    <span>底池</span>
+                    <strong id="pot-value">0</strong>
+                  </div>
                 </div>
               </div>
-              <div class="board-midline">
-                <div id="community-cards" class="community-row" aria-label="公共牌"></div>
+              <div class="board-stage-line">
+                <div class="turn-clock-block board-turn-clock">
+                  <span class="instrument-label">TURN</span>
+                  <div id="action-countdown" class="action-countdown" role="timer" aria-label="本回合剩余行动时间">
+                    <span id="action-countdown-value">—</span>
+                    <small class="turn-clock-unit" aria-hidden="true">SEC</small>
+                  </div>
+                </div>
+                <div class="board-midline">
+                  <div id="community-cards" class="community-row" aria-label="公共牌"></div>
+                  <div id="deck-fx-anchor" class="deck-fx-anchor" aria-hidden="true">
+                    <div id="deck-stack" class="deck-stack">
+                      <span class="deck-card"></span>
+                      <span class="deck-card"></span>
+                      <span class="deck-card face"></span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
+            <span id="action-log" class="action-log sr-only" aria-live="polite">同步中</span>
             <div id="skill-board-target-bar" class="skill-board-target-bar hidden" role="status" aria-live="polite">
               <strong>零化</strong>
               <button id="btn-cancel-skill-target" class="button button-ghost" type="button">取消</button>
@@ -1065,43 +1086,10 @@
             <small id="skill-feed-count">0</small>
           </button>
 
-          <aside id="table-telemetry" class="table-side-rail table-telemetry" aria-label="牌局遥测与技能播报">
-            <div class="street-telemetry">
-              <div>
-                <span class="rail-eyebrow">STREET</span>
-                <strong id="phase-text">等待</strong>
-              </div>
-              <span id="action-log" class="action-log" aria-live="polite">同步中</span>
-            </div>
-
-            <div class="round-instruments">
-              <div id="pot-core" class="pot-core" aria-label="当前底池 0">
-                <div class="core-ring ring-outer"></div>
-                <div class="core-ring ring-inner"></div>
-                <div class="core-value">
-                  <span>底池</span>
-                  <strong id="pot-value">0</strong>
-                </div>
-              </div>
-              <div id="deck-stack" class="deck-stack" aria-hidden="true">
-                <span class="deck-card"></span>
-                <span class="deck-card"></span>
-                <span class="deck-card face"></span>
-              </div>
-            </div>
-
-            <div id="overdrive-profile" class="overdrive-profile hidden">
-              <span>高爆</span>
-              <strong id="overdrive-profile-label">高能牌局</strong>
-            </div>
-
+          <aside id="table-telemetry" class="table-side-rail table-telemetry" aria-label="战术播报">
             <section id="skill-broadcast" class="skill-broadcast" aria-labelledby="skill-broadcast-title">
               <header>
-                <div>
-                  <span class="rail-eyebrow">TACTICAL FEED</span>
-                  <h2 id="skill-broadcast-title">技能播报</h2>
-                </div>
-                <span class="live-indicator"><i></i>LIVE</span>
+                <h2 id="skill-broadcast-title">战术播报</h2>
               </header>
               <div id="skill-log" class="skill-log" aria-live="polite"></div>
             </section>
@@ -1113,15 +1101,15 @@
                 <div id="self-cards" class="cards-row self-cards" aria-label="你的底牌"></div>
               </div>
               <div class="player-console">
-                <div id="self-avatar" class="player-avatar"><span>我</span><i></i></div>
+                <div id="self-avatar" class="player-avatar player-avatar-secondary"><span>我</span><i></i></div>
                 <div class="player-main">
                   <div class="player-title-row">
                     <strong id="self-name">你</strong>
-                    <span id="self-connection" class="mini-status online"><i class="status-dot online"></i>在线</span>
+                    <span id="self-connection" class="mini-status online self-connection"><i class="status-dot online"></i><span>在线</span></span>
                   </div>
                   <div class="player-metrics">
-                    <span>筹码 <strong id="self-chips">—</strong></span>
-                    <span>下注 <strong id="self-bet">0</strong></span>
+                    <span class="player-chip-metric">筹码 <strong id="self-chips">—</strong></span>
+                    <span class="player-bet-metric self-bet-metric">下注 <strong id="self-bet">0</strong></span>
                   </div>
                   <div class="hand-hint">
                     <span>牌力</span>
@@ -1135,78 +1123,79 @@
         </div>
 
         <section class="action-dock" aria-label="玩家操作">
-          <div id="skill-hud" class="skill-hud hidden">
-            <div class="skill-energy-row">
-              <span class="skill-hud-label">超限战术</span>
-              <span>能量 <strong id="self-energy">0</strong>/<span id="self-energy-cap">8</span></span>
-              <span>对手 <strong id="opponent-energy">0</strong></span>
-              <span id="skill-silence-flag" class="hidden">技能封锁</span>
-            </div>
-            <div id="skill-bar" class="skill-bar" aria-label="已装备技能"></div>
-          </div>
           <div class="turn-status">
             <div>
               <span id="turn-kicker">回合</span>
               <strong id="turn-message">等待行动</strong>
             </div>
           </div>
-
-          <div class="primary-actions">
-            <button data-action="fold" class="action-button fold" type="button">
-              <span class="action-zh">弃牌</span><span class="action-en">FOLD</span>
-            </button>
-            <button data-action="check" class="action-button check" type="button">
-              <span class="action-zh">过牌</span><span class="action-en">CHECK</span>
-            </button>
-            <button data-action="call" class="action-button call" type="button">
-              <span class="action-zh" id="call-label">跟注</span>
-              <span class="action-en">CALL</span>
-              <small id="call-amount" class="action-amt">—</small>
-            </button>
-            <button data-action="allin" class="action-button allin" type="button">
-              <span class="action-zh">全押</span><span class="action-en">ALL IN</span>
-            </button>
-          </div>
-          <div id="endgame-window-actions" class="endgame-window-actions hidden">
-            <button id="btn-endgame-fire" class="action-button allin" type="button">
-              <span class="action-zh">发动终局</span><span class="action-en">ENDGAME</span>
-            </button>
-            <button id="btn-endgame-skip" class="action-button fold" type="button">
-              <span class="action-zh">放弃</span><span class="action-en">SKIP</span>
-            </button>
-          </div>
-
-          <div class="raise-console collapsed">
-            <div class="raise-heading">
-              <button
-                id="btn-raise-options"
-                class="raise-amount-meta"
-                type="button"
-                aria-controls="raise-panel"
-                aria-expanded="false"
-                title="调整加注额度"
-              >
-                <span class="action-zh">加注至</span>
-                <span class="action-en raise-to-en">RAISE TO</span>
-                <strong id="raise-value">0</strong>
-                <i aria-hidden="true">⌃</i>
+          <div class="poker-actions-layer">
+            <div class="primary-actions">
+              <button data-action="fold" class="action-button fold" type="button">
+                <span class="action-zh">弃牌</span><span class="action-en">FOLD</span>
               </button>
-              <button data-action="raise" id="btn-raise" class="action-button raise" type="button">
-                <span class="action-zh" id="raise-label">加注</span>
-                <span class="action-en">RAISE</span>
+              <button data-action="check" class="action-button check" type="button">
+                <span class="action-zh">过牌</span><span class="action-en">CHECK</span>
+              </button>
+              <button data-action="call" class="action-button call" type="button">
+                <span class="action-zh" id="call-label">跟注</span>
+                <span class="action-en">CALL</span>
+                <small id="call-amount" class="action-amt">—</small>
+              </button>
+              <button data-action="allin" class="action-button allin" type="button">
+                <span class="action-zh">全押</span><span class="action-en">ALL IN</span>
               </button>
             </div>
-            <div id="raise-panel" class="raise-panel">
-              <label class="sr-only" for="raise-input">加注到</label>
-              <input id="raise-input" type="range" min="0" max="0" step="1" value="0" />
-              <div class="raise-range-labels"><span id="raise-min-label">最小 —</span><span id="raise-max-label">最大 —</span></div>
-              <div class="raise-presets" aria-label="加注快捷值">
-                <button type="button" data-raise-preset="min"><span class="action-zh">最小</span><span class="action-en">MIN</span></button>
-                <button type="button" data-raise-preset="half"><span class="action-zh">半池</span><span class="action-en">½ POT</span></button>
-                <button type="button" data-raise-preset="pot"><span class="action-zh">满池</span><span class="action-en">POT</span></button>
-                <button type="button" data-raise-preset="max"><span class="action-zh">最大</span><span class="action-en">MAX</span></button>
+            <div id="endgame-window-actions" class="endgame-window-actions hidden">
+              <button id="btn-endgame-fire" class="action-button allin" type="button">
+                <span class="action-zh">发动终局</span><span class="action-en">ENDGAME</span>
+              </button>
+              <button id="btn-endgame-skip" class="action-button fold" type="button">
+                <span class="action-zh">放弃</span><span class="action-en">SKIP</span>
+              </button>
+            </div>
+
+            <div class="raise-console collapsed">
+              <div class="raise-heading">
+                <button
+                  id="btn-raise-options"
+                  class="raise-amount-meta"
+                  type="button"
+                  aria-controls="raise-panel"
+                  aria-expanded="false"
+                  title="调整加注额度"
+                >
+                  <span class="action-zh">加注至</span>
+                  <span class="action-en raise-to-en">RAISE TO</span>
+                  <strong id="raise-value">0</strong>
+                  <i aria-hidden="true">⌃</i>
+                </button>
+                <button data-action="raise" id="btn-raise" class="action-button raise" type="button">
+                  <span class="action-zh" id="raise-label">加注</span>
+                  <span class="action-en">RAISE</span>
+                </button>
+              </div>
+              <div id="raise-panel" class="raise-panel">
+                <label class="sr-only" for="raise-input">加注到</label>
+                <input id="raise-input" type="range" min="0" max="0" step="1" value="0" />
+                <div class="raise-range-labels"><span id="raise-min-label">最小 —</span><span id="raise-max-label">最大 —</span></div>
+                <div class="raise-presets" aria-label="加注快捷值">
+                  <button type="button" data-raise-preset="min"><span class="action-zh">最小</span><span class="action-en">MIN</span></button>
+                  <button type="button" data-raise-preset="half"><span class="action-zh">半池</span><span class="action-en">½ POT</span></button>
+                  <button type="button" data-raise-preset="pot"><span class="action-zh">满池</span><span class="action-en">POT</span></button>
+                  <button type="button" data-raise-preset="max"><span class="action-zh">最大</span><span class="action-en">MAX</span></button>
+                </div>
               </div>
             </div>
+          </div>
+          <div id="skill-hud" class="skill-hud hidden">
+            <div class="skill-energy-row">
+              <span class="skill-hud-label">技能</span>
+              <span>能量 <strong id="self-energy">0</strong>/<span id="self-energy-cap">8</span></span>
+              <span>对手 <strong id="opponent-energy">0</strong></span>
+              <span id="skill-silence-flag" class="hidden">技能封锁</span>
+            </div>
+            <div id="skill-bar" class="skill-bar" aria-label="已装备技能"></div>
           </div>
         </section>
       </section>

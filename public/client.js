@@ -415,6 +415,7 @@ const el = {
   fairnessSummary: byId("fairness-summary"),
   board: byId("board"),
   tableCenter: byId("table-center"),
+  skillFxStageAnchor: byId("skill-fx-stage-anchor"),
   opponentArea: byId("opponent-area"),
   overdriveStage: byId("overdrive-stage"),
   opponentName: byId("opponent-name"),
@@ -437,6 +438,7 @@ const el = {
   community: byId("community-cards"),
   currentBet: byId("current-bet"),
   potCore: byId("pot-core"),
+  deckFxAnchor: byId("deck-fx-anchor"),
   deckStack: byId("deck-stack"),
   pot: byId("pot-value"),
   commitmentShort: byId("commitment-short"),
@@ -1198,22 +1200,37 @@ function renderPlayers() {
   el.selfChips.textContent = state.chipViewHidden ? "—" : String(me?.chips ?? "—");
   el.selfBet.textContent = state.chipViewHidden ? "—" : String(me?.streetBet ?? 0);
   el.selfState.textContent = playerStateLabel(me);
-  el.selfState.dataset.state = (me?.status || "standby").toLowerCase();
+  el.selfState.dataset.state = me?.isAllIn ? "allin" : (me?.status || "standby").toLowerCase();
   el.selfConnection.innerHTML = "";
   const selfDot = document.createElement("i");
   selfDot.className = "status-dot " + (me?.isConnected ? "online" : "");
-  el.selfConnection.append(selfDot, document.createTextNode(me?.isConnected ? "在线" : "离线"));
+  const selfConnectionLabel = document.createElement("span");
+  selfConnectionLabel.className = "mini-status-label";
+  selfConnectionLabel.textContent = me?.isConnected ? "在线" : "离线";
+  el.selfConnection.append(selfDot, selfConnectionLabel);
 
   el.opponentName.textContent = opponent?.name || "等待对手";
   el.opponentChips.textContent = state.chipViewHidden ? "—" : String(opponent?.chips ?? "—");
   el.opponentBet.textContent = state.chipViewHidden ? "—" : String(opponent?.streetBet ?? 0);
   el.opponentState.textContent = playerStateLabel(opponent);
-  el.opponentState.dataset.state = (opponent?.status || "standby").toLowerCase();
+  el.opponentState.dataset.state = opponent?.isAllIn
+    ? "allin"
+    : (opponent?.status || "standby").toLowerCase();
   el.opponentConnection.innerHTML = "";
   const opponentDot = document.createElement("i");
   opponentDot.className = "status-dot " + (opponent?.isConnected || opponent?.isBot ? "online" : "");
   const connectionText = opponent?.isBot ? "人机" : opponent?.isConnected ? "在线" : "连接中断";
-  el.opponentConnection.append(opponentDot, document.createTextNode(connectionText));
+  const opponentConnectionLabel = document.createElement("span");
+  opponentConnectionLabel.className = "mini-status-label";
+  opponentConnectionLabel.textContent = connectionText;
+  el.opponentConnection.append(opponentDot, opponentConnectionLabel);
+  el.opponentConnection.classList.toggle("is-bot", Boolean(opponent?.isBot));
+  el.opponentConnection.classList.toggle(
+    "is-offline",
+    Boolean(opponent && !opponent.isConnected && !opponent.isBot)
+  );
+  el.opponentConnection.title = connectionText;
+  el.opponentConnection.setAttribute("aria-label", connectionText);
   renderOpponentEnergy();
   el.selfArea.classList.toggle("active-turn", state.currentTurnPlayerId === state.playerId);
   el.opponentArea.classList.toggle(
@@ -1576,7 +1593,13 @@ function setConnectionUI(connected, message) {
     node.innerHTML = "";
     const dot = document.createElement("i");
     dot.className = "status-dot " + (connected ? "online" : "");
-    node.append(dot, document.createTextNode(text));
+    if (node === el.gameConnection) {
+      node.append(dot);
+      node.title = text;
+      node.setAttribute("aria-label", text);
+    } else {
+      node.append(dot, document.createTextNode(text));
+    }
     node.classList.toggle("offline", !connected);
   });
   if (connected) {
@@ -1815,8 +1838,8 @@ function getSkillFxManager() {
     }),
     getAnchors: () => ({
       board: el.board,
-      stageCenter: el.tableCenter || el.community || el.board,
-      tableCenter: el.tableCenter || el.community || el.board,
+      stageCenter: el.skillFxStageAnchor || el.tableCenter || el.community || el.board,
+      tableCenter: el.skillFxStageAnchor || el.tableCenter || el.community || el.board,
       self: el.selfArea,
       opponent: el.opponentArea,
       selfEnergy: el.selfEnergy?.closest(".skill-energy-row") || el.selfArea,
@@ -1826,7 +1849,7 @@ function getSkillFxManager() {
       community: el.community,
       river: el.community?.querySelector('[data-board-index="4"]') || el.community,
       pot: el.potCore,
-      deck: el.deckStack,
+      deck: el.deckFxAnchor || el.deckStack,
       settlement: el.settleBoard || el.handSettleModal,
       target: el.community,
     }),
