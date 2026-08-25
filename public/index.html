@@ -943,7 +943,12 @@
               <span class="game-exit-icon" aria-hidden="true">←</span><span class="game-exit-label">离开</span>
             </button>
             <button id="btn-hand-history" class="history-chip" type="button" title="查看本局历史结算">
-              历史
+              <svg class="history-restore-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+                <path d="M3 3v5h5" />
+                <path d="M12 7v5l4 2" />
+              </svg>
+              <span class="history-label">历史</span>
             </button>
           </div>
           <p id="table-title" class="sr-only">超限牌桌</p>
@@ -1002,36 +1007,34 @@
               <div id="opponent-state" class="player-state">等待</div>
             </div>
             <div id="opponent-cards" class="cards-row opponent-cards" aria-label="对手底牌"></div>
-          </section>
-
-          <button
-            id="btn-toggle-opponent-intel"
-            class="table-rail-tab intel-tab"
-            type="button"
-            aria-controls="opponent-skill-field"
-            aria-expanded="false"
-          >
-            <span aria-hidden="true">◇</span>
-            <strong>构筑情报</strong>
-            <small id="opponent-intel-count">0 / 4</small>
-          </button>
-
-          <aside id="opponent-skill-field" class="table-side-rail opponent-skill-field" aria-labelledby="opponent-skill-title">
-            <header class="rail-heading">
-              <h2 id="opponent-skill-title">对手技能</h2>
-              <span id="opponent-build-status" class="intel-status">未确认</span>
-            </header>
-            <div class="intel-legend" aria-label="技能情报图例">
-              <span title="系统确认"><i class="known"></i><span class="sr-only">系统确认</span></span>
-              <span title="本地推测"><i class="suspected"></i><span class="sr-only">本地推测</span></span>
-            </div>
-            <div id="opponent-skill-bar" class="opponent-skill-bar" aria-label="对手已知与推测技能"></div>
-            <button id="btn-mark-opponent-skills" class="intel-edit-button" type="button" title="标记仅保存在本机，不会同步或影响结算">
-              <span aria-hidden="true">＋</span>
-              <span>标记推测</span>
+            <button
+              id="btn-toggle-opponent-intel"
+              class="opponent-intel-summary"
+              type="button"
+              aria-controls="opponent-skill-field"
+              aria-expanded="false"
+            >
+              <span class="opponent-intel-summary-copy">
+                <small>构筑情报</small>
+                <strong id="opponent-intel-count">完全未知</strong>
+              </span>
+              <span id="opponent-intel-slots" class="opponent-intel-slots" aria-hidden="true">
+                <i class="is-unknown"></i><i class="is-unknown"></i><i class="is-unknown"></i><i class="is-unknown"></i>
+              </span>
+              <span class="opponent-intel-chevron" aria-hidden="true">›</span>
             </button>
-            <p class="intel-privacy sr-only">标记只保存在本机，不会同步或影响结算。</p>
-          </aside>
+            <button
+              id="btn-toggle-skill-feed"
+              class="table-rail-tab feed-tab"
+              type="button"
+              aria-controls="skill-broadcast"
+              aria-expanded="false"
+            >
+              <span aria-hidden="true">≋</span>
+              <strong>播报</strong>
+              <small id="skill-feed-count">0</small>
+            </button>
+          </section>
 
           <section class="table-center" id="table-center" aria-label="底池、行动倒计时与公共牌">
             <div class="board-core">
@@ -1067,33 +1070,18 @@
                 </div>
               </div>
             </div>
+            <div class="turn-status" role="status" aria-live="polite">
+              <div>
+                <span id="turn-kicker">回合</span>
+                <strong id="turn-message">等待行动</strong>
+              </div>
+            </div>
             <span id="action-log" class="action-log sr-only" aria-live="polite">同步中</span>
             <div id="skill-board-target-bar" class="skill-board-target-bar hidden" role="status" aria-live="polite">
               <strong>零化</strong>
               <button id="btn-cancel-skill-target" class="button button-ghost" type="button">取消</button>
             </div>
           </section>
-
-          <button
-            id="btn-toggle-skill-feed"
-            class="table-rail-tab feed-tab"
-            type="button"
-            aria-controls="skill-broadcast"
-            aria-expanded="false"
-          >
-            <span aria-hidden="true">≋</span>
-            <strong>战术播报</strong>
-            <small id="skill-feed-count">0</small>
-          </button>
-
-          <aside id="table-telemetry" class="table-side-rail table-telemetry" aria-label="战术播报">
-            <section id="skill-broadcast" class="skill-broadcast" aria-labelledby="skill-broadcast-title">
-              <header>
-                <h2 id="skill-broadcast-title">战术播报</h2>
-              </header>
-              <div id="skill-log" class="skill-log" aria-live="polite"></div>
-            </section>
-          </aside>
 
           <section id="self-area" class="player-zone self-zone" aria-label="你的状态">
             <div class="self-stage">
@@ -1120,15 +1108,51 @@
               </div>
             </div>
           </section>
+
+          <aside id="own-skill-arsenal" class="table-side-rail own-skill-arsenal" aria-label="己方已装备技能">
+            <div id="skill-hud" class="skill-hud hidden">
+              <div class="skill-energy-row">
+                <span class="skill-hud-label">己方技能</span>
+                <span class="skill-energy-meter">能量 <strong id="self-energy">0</strong>/<span id="self-energy-cap">8</span></span>
+                <span class="skill-opponent-energy sr-only">对手 <strong id="opponent-energy">0</strong></span>
+                <span id="skill-silence-flag" class="hidden">技能封锁</span>
+              </div>
+              <div id="skill-bar" class="skill-bar" aria-label="已装备技能"></div>
+            </div>
+          </aside>
+
+          <aside id="opponent-skill-field" class="table-side-rail opponent-skill-field" aria-labelledby="opponent-skill-title">
+            <header class="rail-heading">
+              <h2 id="opponent-skill-title">对手技能</h2>
+              <div class="rail-heading-actions">
+                <span id="opponent-build-status" class="intel-status">未确认</span>
+                <button id="btn-close-opponent-intel" class="rail-close-button" type="button" aria-label="关闭对手技能情报">×</button>
+              </div>
+            </header>
+            <div class="intel-legend" aria-label="技能情报图例">
+              <span title="系统确认"><i class="known"></i><span class="sr-only">系统确认</span></span>
+              <span title="本地推测"><i class="suspected"></i><span class="sr-only">本地推测</span></span>
+            </div>
+            <div id="opponent-skill-bar" class="opponent-skill-bar" aria-label="对手已知与推测技能"></div>
+            <button id="btn-mark-opponent-skills" class="intel-edit-button" type="button" title="标记仅保存在本机，不会同步或影响结算">
+              <span aria-hidden="true">＋</span>
+              <span>标记推测</span>
+            </button>
+            <p class="intel-privacy sr-only">标记只保存在本机，不会同步或影响结算。</p>
+          </aside>
+
+          <aside id="table-telemetry" class="table-side-rail table-telemetry" aria-label="战术播报">
+            <section id="skill-broadcast" class="skill-broadcast" aria-labelledby="skill-broadcast-title">
+              <header>
+                <h2 id="skill-broadcast-title">战术播报</h2>
+                <button id="btn-close-skill-feed" class="rail-close-button skill-feed-close" type="button" aria-label="关闭战术播报">×</button>
+              </header>
+              <div id="skill-log" class="skill-log" aria-live="polite"></div>
+            </section>
+          </aside>
         </div>
 
         <section class="action-dock" aria-label="玩家操作">
-          <div class="turn-status">
-            <div>
-              <span id="turn-kicker">回合</span>
-              <strong id="turn-message">等待行动</strong>
-            </div>
-          </div>
           <div class="poker-actions-layer">
             <div class="primary-actions">
               <button data-action="fold" class="action-button fold" type="button">
@@ -1188,15 +1212,6 @@
               </div>
             </div>
           </div>
-          <div id="skill-hud" class="skill-hud hidden">
-            <div class="skill-energy-row">
-              <span class="skill-hud-label">技能</span>
-              <span>能量 <strong id="self-energy">0</strong>/<span id="self-energy-cap">8</span></span>
-              <span>对手 <strong id="opponent-energy">0</strong></span>
-              <span id="skill-silence-flag" class="hidden">技能封锁</span>
-            </div>
-            <div id="skill-bar" class="skill-bar" aria-label="已装备技能"></div>
-          </div>
         </section>
       </section>
       <button
@@ -1244,6 +1259,7 @@
           <span id="skill-choice-step" class="skill-choice-step">选择目标</span>
         </header>
         <div class="skill-choice-brief">
+          <nav id="skill-choice-filters" class="skill-choice-filters hidden" aria-label="技能标签筛选"></nav>
           <p id="skill-choice-text">请完成技能选择</p>
           <strong id="skill-choice-selection" aria-live="polite">尚未选择</strong>
         </div>

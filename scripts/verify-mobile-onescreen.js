@@ -116,15 +116,22 @@ async function showScreenOnly(page, key) {
     }
     if (k === "game") {
       document.getElementById("skill-hud")?.classList.remove("hidden");
-      // inject a couple skill buttons for realistic HUD height
+      document.getElementById("board")?.classList.remove("skills-disabled");
+      // Inject equipped-skill slots using the production DOM shape. The
+      // synthetic screen audit has no room state, so it must opt into the
+      // skill layout explicitly instead of inheriting the lobby's off mode.
       const bar = document.getElementById("skill-bar");
       if (bar && !bar.children.length) {
+        bar.dataset.count = "3";
         for (let i = 0; i < 3; i++) {
+          const slot = document.createElement("div");
+          slot.className = "skill-slot is-ready";
           const b = document.createElement("button");
           b.type = "button";
-          b.className = "skill-use-btn";
+          b.className = "skill-use-btn is-ready";
           b.textContent = "SKILL" + (i + 1);
-          bar.appendChild(b);
+          slot.appendChild(b);
+          bar.appendChild(slot);
         }
       }
     }

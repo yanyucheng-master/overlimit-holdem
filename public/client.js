@@ -466,17 +466,21 @@ const el = {
   opponentSkillField: byId("opponent-skill-field"),
   opponentBuildStatus: byId("opponent-build-status"),
   opponentIntelCount: byId("opponent-intel-count"),
+  opponentIntelSlots: byId("opponent-intel-slots"),
   btnMarkOpponentSkills: byId("btn-mark-opponent-skills"),
   btnToggleOpponentIntel: byId("btn-toggle-opponent-intel"),
+  btnCloseOpponentIntel: byId("btn-close-opponent-intel"),
   skillLog: byId("skill-log"),
   skillBroadcast: byId("skill-broadcast"),
   skillFeedCount: byId("skill-feed-count"),
   btnToggleSkillFeed: byId("btn-toggle-skill-feed"),
+  btnCloseSkillFeed: byId("btn-close-skill-feed"),
   tableTelemetry: byId("table-telemetry"),
   skillChoiceModal: byId("skill-choice-modal"),
   skillChoiceEyebrow: byId("skill-choice-eyebrow"),
   skillChoiceStep: byId("skill-choice-step"),
   skillChoiceTitle: byId("skill-choice-title"),
+  skillChoiceFilters: byId("skill-choice-filters"),
   skillChoiceText: byId("skill-choice-text"),
   skillChoiceSelection: byId("skill-choice-selection"),
   skillChoiceBody: byId("skill-choice-body"),
@@ -2488,7 +2492,8 @@ function syncHandHistoryButton() {
   const count = Array.isArray(state.handSettleHistory) ? state.handSettleHistory.length : 0;
   if (!el.btnHandHistory) return;
   const liveSettle = Boolean(state.handSettling && !state.settleReviewFromHistory);
-  el.btnHandHistory.dataset.count = count ? String(count) : "";
+  if (count) el.btnHandHistory.dataset.count = String(count);
+  else el.btnHandHistory.removeAttribute("data-count");
   el.btnHandHistory.disabled = liveSettle;
   el.btnHandHistory.setAttribute(
     "aria-label",
@@ -5419,6 +5424,33 @@ function createIntelSkillCard(skillId, certainty) {
   return card;
 }
 
+function syncOpponentIntelSummary(opponent, known, suspected) {
+  const confirmedCount = Math.min(4, known.ids.length);
+  const suspectedCount = Math.min(Math.max(0, 4 - confirmedCount), suspected.length);
+  const summary = !opponent
+    ? "等待对手"
+    : confirmedCount && suspectedCount
+      ? "已确认 " + confirmedCount + " · 推测 " + suspectedCount
+      : confirmedCount
+        ? "已确认 " + confirmedCount
+        : suspectedCount
+          ? "推测 " + suspectedCount
+          : "完全未知";
+  if (el.opponentIntelCount) el.opponentIntelCount.textContent = summary;
+  if (el.btnToggleOpponentIntel) {
+    el.btnToggleOpponentIntel.setAttribute("aria-label", summary + "，打开对手技能情报");
+    el.btnToggleOpponentIntel.title = "打开对手技能情报";
+  }
+  [...(el.opponentIntelSlots?.children || [])].forEach((slot, index) => {
+    const certainty = index < confirmedCount
+      ? "known"
+      : index < confirmedCount + suspectedCount
+        ? "suspected"
+        : "unknown";
+    slot.className = "is-" + certainty;
+  });
+}
+
 function renderOpponentSkillIntel() {
   if (!el.opponentSkillBar) return;
   const opponent = getOpponent();
@@ -5437,7 +5469,7 @@ function renderOpponentSkillIntel() {
   if (el.opponentSkillBar.dataset.intelSignature === intelSignature) {
     el.opponentSkillField?.classList.toggle("has-complete-build", known.complete);
     el.opponentSkillField?.classList.toggle("has-intel", visibleCount > 0);
-    if (el.opponentIntelCount) el.opponentIntelCount.textContent = visibleCount + " / 4";
+    syncOpponentIntelSummary(opponent, known, suspected);
     return;
   }
   el.opponentSkillBar.dataset.intelSignature = intelSignature;
@@ -5445,7 +5477,7 @@ function renderOpponentSkillIntel() {
   el.opponentSkillBar.textContent = "";
   el.opponentSkillField?.classList.toggle("has-complete-build", known.complete);
   el.opponentSkillField?.classList.toggle("has-intel", visibleCount > 0);
-  if (el.opponentIntelCount) el.opponentIntelCount.textContent = visibleCount + " / 4";
+  syncOpponentIntelSummary(opponent, known, suspected);
 
   if (!opponent) {
     const empty = document.createElement("div");
@@ -5655,7 +5687,7 @@ function renderSkillFeed() {
   if (!entries.length) {
     const empty = document.createElement("div");
     empty.className = "skill-feed-empty";
-    empty.innerHTML = "<span>NO SIGNAL</span><strong>等待技能事件</strong>";
+    empty.innerHTML = "<strong>暂无公开技能事件</strong>";
     el.skillLog.appendChild(empty);
     return;
   }
@@ -5806,6 +5838,9 @@ function prepareSkillChoiceModal({ variant = "default", eyebrow = "TACTICAL DECI
   el.skillChoiceModal.dataset.variant = variant;
   if (el.skillChoiceEyebrow) el.skillChoiceEyebrow.textContent = eyebrow;
   if (el.skillChoiceStep) el.skillChoiceStep.textContent = step;
+  el.skillChoiceFilters?.classList.add("hidden");
+  if (el.skillChoiceFilters) el.skillChoiceFilters.textContent = "";
+  el.skillChoiceText?.classList.remove("hidden");
   if (el.skillChoiceSelection) el.skillChoiceSelection.textContent = "尚未选择";
   el.btnSkillChoiceConfirm.textContent = confirmLabel;
   el.btnSkillChoiceConfirm.disabled = true;
@@ -6212,26 +6247,55 @@ function openSuspectPicker() {
   };
   prepareSkillChoiceModal({
     variant: "dossier",
-    eyebrow: "OPPONENT BUILD ANALYSIS",
-    step: "本地情报 · 不会同步",
+    eyebrow: "",
+    step: "",
     confirmLabel: "保存标记",
   });
   el.skillChoiceTitle.textContent = "标记对手技能";
-  el.skillChoiceText.textContent = known.ids.length
-    ? "系统已确认 " + known.ids.length + " 项技能；你可以在剩余槽位记录自己的判断。"
-    : "从技能档案中标记你认为对手可能携带的技能。推测不会影响规则或对手视图。";
+  el.skillChoiceText.classList.add("hidden");
+  el.skillChoiceFilters?.classList.remove("hidden");
   el.btnSkillChoiceConfirm.disabled = false;
 
   const updateSummary = () => {
     if (el.skillChoiceSelection) {
-      el.skillChoiceSelection.textContent = selected.size
-        ? "已标记 " + selected.size + " 项 · 剩余 " + Math.max(0, limit - selected.size) + " 个推测槽位"
-        : "尚未标记 · 可用 " + limit + " 个推测槽位";
+      el.skillChoiceSelection.textContent = "剩余可用 " + Math.max(0, limit - selected.size);
     }
   };
 
   const grid = document.createElement("div");
   grid.className = "dossier-skill-grid";
+  let activeFilter = "all";
+  const skillButtons = new Map();
+  const applyFilter = () => {
+    skillButtons.forEach((button, skillId) => {
+      const skill = state.skillCatalog.find((entry) => entry.id === skillId);
+      button.classList.toggle("is-filtered-out", !skillMatchesLabFilter(skill, activeFilter));
+    });
+    el.skillChoiceFilters?.querySelectorAll("[data-skill-filter]").forEach((button) => {
+      const on = button.dataset.skillFilter === activeFilter;
+      button.classList.toggle("is-active", on);
+      button.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+  };
+
+  if (el.skillChoiceFilters) {
+    SKILL_LAB_FILTERS.forEach((filter) => {
+      const filterButton = document.createElement("button");
+      filterButton.type = "button";
+      filterButton.className = "skill-lab-filter";
+      filterButton.dataset.skillFilter = filter.id;
+      filterButton.textContent = filter.label;
+      filterButton.setAttribute("aria-label", "筛选" + filter.label + "技能");
+      filterButton.addEventListener("click", () => {
+        if (activeFilter === filter.id) return;
+        activeFilter = filter.id;
+        applyFilter();
+        grid.querySelector("button:not(:disabled):not(.is-filtered-out)")?.focus();
+      });
+      el.skillChoiceFilters.appendChild(filterButton);
+    });
+  }
+
   state.skillCatalog.forEach((skill) => {
     const btn = document.createElement("button");
     btn.type = "button";
@@ -6270,9 +6334,11 @@ function openSuspectPicker() {
       state.pendingChoice.skillIds = [...selected];
       updateSummary();
     });
+    skillButtons.set(skill.id, btn);
     grid.appendChild(btn);
   });
   el.skillChoiceBody.appendChild(grid);
+  applyFilter();
   updateSummary();
   el.skillChoiceModal.classList.remove("hidden");
   grid.querySelector("button:not(:disabled)")?.focus();
@@ -6335,13 +6401,14 @@ function syncTableRailAccessibility() {
   const skillsEnabled = state.skillMode === "abyss";
   const intelOpen = Boolean(el.opponentSkillField?.classList.contains("is-mobile-open"));
   const feedOpen = Boolean(el.tableTelemetry?.classList.contains("is-feed-open"));
-  const intelHidden = !skillsEnabled || (compact && !intelOpen);
+  const intelHidden = !skillsEnabled || !intelOpen;
   const feedHidden = !skillsEnabled || (compact && !feedOpen);
   if (el.opponentSkillField) {
     el.opponentSkillField.inert = intelHidden;
     el.opponentSkillField.setAttribute("aria-hidden", intelHidden ? "true" : "false");
   }
   if (el.skillBroadcast) {
+    el.skillBroadcast.inert = feedHidden;
     el.skillBroadcast.setAttribute("aria-hidden", feedHidden ? "true" : "false");
   }
   [el.btnToggleOpponentIntel, el.btnToggleSkillFeed].forEach((button) => {
@@ -6402,6 +6469,16 @@ el.btnSkillChoiceConfirm?.addEventListener("click", () => {
   }
 });
 el.btnMarkOpponentSkills?.addEventListener("click", openSuspectPicker);
+el.btnCloseOpponentIntel?.addEventListener("click", () => {
+  if (!el.opponentSkillField?.classList.contains("is-mobile-open")) return;
+  toggleTableRail("intel");
+  requestAnimationFrame(() => el.btnToggleOpponentIntel?.focus());
+});
+el.btnCloseSkillFeed?.addEventListener("click", () => {
+  if (!el.tableTelemetry?.classList.contains("is-feed-open")) return;
+  toggleTableRail("feed");
+  requestAnimationFrame(() => el.btnToggleSkillFeed?.focus());
+});
 el.btnHandHistory?.addEventListener("click", openHandHistoryModal);
 el.btnHistoryClose?.addEventListener("click", closeHandHistoryModal);
 el.btnSettleClose?.addEventListener("click", () => {
@@ -6433,7 +6510,20 @@ document.addEventListener("click", (event) => {
   closeOpponentEnergyPop();
 });
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && isOpponentEnergyPopOpen()) closeOpponentEnergyPop();
+  if (event.key !== "Escape") return;
+  if (isOpponentEnergyPopOpen()) {
+    closeOpponentEnergyPop();
+    return;
+  }
+  if (el.opponentSkillField?.classList.contains("is-mobile-open")) {
+    toggleTableRail("intel");
+    el.btnToggleOpponentIntel?.focus();
+    return;
+  }
+  if (el.tableTelemetry?.classList.contains("is-feed-open")) {
+    toggleTableRail("feed");
+    el.btnToggleSkillFeed?.focus();
+  }
 });
 el.btnToggleOpponentIntel?.addEventListener("click", () => toggleTableRail("intel"));
 el.btnToggleSkillFeed?.addEventListener("click", () => toggleTableRail("feed"));

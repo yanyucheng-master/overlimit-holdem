@@ -54,6 +54,12 @@ describe("frontend DOM contract", () => {
     expect(depth).toBe(0);
     expect(nested).toBe(false);
     expect(html).toContain('id="btn-back-game" class="button button-ghost back-button" aria-label="离开牌桌"');
+    expect(html).toContain('class="history-restore-icon" width="16" height="16"');
+    expect(html).toContain('<span class="history-label">历史</span>');
+    expect(tableV2).toContain(".salon-ui #screen-game .table-tools-left");
+    expect(tableV2).toContain("flex-direction: row;");
+    expect(tableV2).toContain(".salon-ui #screen-game .history-restore-icon");
+    expect(client).toContain('el.btnHandHistory.removeAttribute("data-count")');
   });
 
   test("技能放大、四技能栏与单击加注控件已接入", () => {
@@ -70,11 +76,12 @@ describe("frontend DOM contract", () => {
     expect(client).toContain("socket.connected &&");
   });
 
-  test("牌桌中央只承载牌局核心，牌堆保留不可见 FX 锚点", () => {
+  test("V6 牌桌保持三栏竞技结构、单层操作区与隐私安全的对手构筑入口", () => {
     const boardStageStart = html.indexOf('<section class="table-center"');
-    const boardStageEnd = html.indexOf('id="btn-toggle-skill-feed"', boardStageStart);
+    const boardStageEnd = html.indexOf('</section>', boardStageStart) + '</section>'.length;
     const boardStageMarkup = html.slice(boardStageStart, boardStageEnd);
     expect(boardStageStart).toBeGreaterThan(-1);
+    expect(boardStageEnd).toBeGreaterThan(boardStageStart);
     expect(boardStageMarkup).toContain('class="board-stage-line"');
     expect(boardStageMarkup).toContain('id="phase-text"');
     expect(boardStageMarkup).toContain('id="pot-core"');
@@ -84,6 +91,8 @@ describe("frontend DOM contract", () => {
     expect(boardStageMarkup).toContain('id="deck-stack"');
     expect(boardStageMarkup).toContain('id="skill-fx-stage-anchor"');
     expect(boardStageMarkup).toContain('id="action-log" class="action-log sr-only"');
+    expect(boardStageMarkup).toContain('class="turn-status"');
+    expect(boardStageMarkup).not.toContain('id="skill-hud"');
     expect(boardStageMarkup.indexOf('id="pot-core"')).toBeLessThan(
       boardStageMarkup.indexOf('id="community-cards"')
     );
@@ -92,8 +101,9 @@ describe("frontend DOM contract", () => {
     );
 
     const telemetryStart = html.indexOf('id="table-telemetry"');
-    const telemetryEnd = html.indexOf('id="self-area"', telemetryStart);
+    const telemetryEnd = html.indexOf('</aside>', telemetryStart) + '</aside>'.length;
     const telemetryMarkup = html.slice(telemetryStart, telemetryEnd);
+    expect(telemetryEnd).toBeGreaterThan(telemetryStart);
     expect(telemetryMarkup).toContain('id="skill-broadcast"');
     expect(telemetryMarkup).toContain('id="skill-log"');
     expect(telemetryMarkup).not.toContain('id="pot-core"');
@@ -101,21 +111,52 @@ describe("frontend DOM contract", () => {
     expect(telemetryMarkup).not.toContain('id="deck-stack"');
     expect(telemetryMarkup).not.toContain('LIVE');
 
+    const ownSkillsStart = html.indexOf('id="own-skill-arsenal"');
+    const ownSkillsEnd = html.indexOf('</aside>', ownSkillsStart) + '</aside>'.length;
+    const ownSkillsMarkup = html.slice(ownSkillsStart, ownSkillsEnd);
+    expect(ownSkillsMarkup).toContain('id="skill-hud"');
+    expect(ownSkillsMarkup).toContain('id="skill-bar"');
+
+    const actionDockStart = html.indexOf('<section class="action-dock"');
+    const actionDockEnd = html.indexOf('</section>', actionDockStart) + '</section>'.length;
+    const actionDockMarkup = html.slice(actionDockStart, actionDockEnd);
+    expect(actionDockMarkup).toContain('class="poker-actions-layer"');
+    expect(actionDockMarkup).not.toContain('id="skill-hud"');
+    expect(actionDockMarkup).not.toContain('class="turn-status"');
+
+    const opponentSummaryStart = html.indexOf('id="btn-toggle-opponent-intel"');
+    const opponentSummaryEnd = html.indexOf('</button>', opponentSummaryStart) + '</button>'.length;
+    const opponentSummaryMarkup = html.slice(opponentSummaryStart, opponentSummaryEnd);
+    expect(opponentSummaryMarkup).toContain('aria-controls="opponent-skill-field"');
+    expect((opponentSummaryMarkup.match(/class="is-unknown"/g) || []).length).toBe(4);
+    expect(html).toContain('id="btn-close-opponent-intel"');
+    expect(html).toContain('id="btn-close-skill-feed"');
+
     expect(client).toContain('el.skillBar.dataset.count = String(equippedSkillIds.length)');
-    expect(tableV2).toMatch(
-      /\.skill-bar\[data-count="4"\][^{]*\{[^}]*grid-template-columns:\s*repeat\(4,\s*minmax\(0,\s*1fr\)\)/s
+    expect(client).toContain('function syncOpponentIntelSummary(opponent, known, suspected)');
+    const summaryFunction = client.slice(
+      client.indexOf('function syncOpponentIntelSummary'),
+      client.indexOf('function renderOpponentSkillIntel')
     );
+    expect(summaryFunction).not.toMatch(/\d+\s*\/\s*4/);
+    expect(summaryFunction).not.toContain('负载');
     expect(tableV2).toContain(
       'body.pro-player-mode.salon-ui #screen-game .action-button .action-en'
     );
-    expect(tableV2).toContain('font-size: clamp(0.92rem, 1.09vw, 1.16rem)');
-    expect(tableV2).toContain('grid-template-rows: auto auto 0.85em');
-    expect(tableV2).toContain('TABLE V5 / COMPETITIVE CONVERGENCE');
-    expect(tableV2).toContain('grid-template-rows: 16px var(--table-command-row) var(--table-skill-row)');
-    expect(tableV2).toContain('grid-template-columns: repeat(4, minmax(0, 1fr))');
+    expect(tableV2).toContain('TABLE V6 / RELEASE LAYOUT');
+    expect(tableV2).toContain('--table-left-rail: clamp(214px, 15vw, 244px)');
+    expect(tableV2).toContain('--table-right-rail: clamp(184px, 13vw, 214px)');
+    expect(tableV2).toContain('grid-template-columns: var(--table-left-rail) minmax(470px, 1fr) var(--table-right-rail)');
+    expect(tableV2).toContain('.salon-ui #screen-game .own-skill-arsenal');
+    expect(tableV2).toContain('.salon-ui #screen-game .opponent-intel-summary');
+    expect(tableV2).toContain('grid-template-columns: minmax(0, 1fr) minmax(224px, 0.36fr)');
+    expect(tableV2).toContain('.skill-bar[data-count="3"]');
+    expect(tableV2).toContain('grid-template-columns: repeat(3, minmax(0, 1fr))');
+    expect(tableV2).toContain('.skill-bar[data-count="4"]');
+    expect(tableV2).toContain('grid-template-columns: repeat(2, minmax(0, 1fr))');
+    expect(tableV2).toContain('--card-w: var(--table-card-w)');
     expect(tableV2).not.toMatch(/\.self-cards \.card:nth-child\(2\)[^{]*\{[^}]*margin-left:\s*-/s);
-    expect(tableV2).toMatch(/\.salon-ui #screen-game \.self-cards\s*\{[^}]*gap:\s*8px/s);
-    expect(tableV2).toContain("min-width: calc(var(--card-w) * 2 + 8px)");
+    expect(tableV2).toContain('bottom: calc(100% + 8px)');
   });
 
   test("storage failures and modal focus are handled defensively", () => {
@@ -261,6 +302,9 @@ describe("frontend DOM contract", () => {
     expect(tableV2).toContain("is-nullify-targeting");
     expect(html).toContain('id="opponent-skill-field"');
     expect(html).toContain('id="btn-mark-opponent-skills"');
+    expect(html).toContain('id="skill-choice-filters"');
+    expect(client).toContain('el.skillChoiceSelection.textContent = "剩余可用 "');
+    expect(client).toContain('skillMatchesLabFilter(skill, activeFilter)');
     expect(client).toContain("function renderOpponentSkillIntel()");
     expect(client).toContain('skillLoadout: "abyss_skill_loadout_v2"');
     expect(html).toContain('id="self-energy"');
@@ -339,6 +383,7 @@ describe("frontend DOM contract", () => {
     expect(client).toContain("closeSkillChoiceModal({ render: false, restoreFocus: false })");
     expect(client).toContain("function syncTableRailAccessibility");
     expect(client).toContain("el.opponentSkillField.inert = intelHidden");
+    expect(client).toContain("el.skillBroadcast.inert = feedHidden");
     expect(client).toContain("rememberPublicSkillIntel(payload)");
     expect(html).not.toContain('id="btn-toggle-cards"');
     expect(client).toContain("renderCardRow(el.selfCards, state.myCards");
@@ -410,7 +455,7 @@ describe("frontend DOM contract", () => {
   test("技能播报保留本人私有结果，情报看到的牌写入本机 feed", () => {
     expect(client).toContain("function rememberPrivateSkillFeed");
     expect(client).toContain("skillSelfLog");
-    expect(client).toContain("等待技能事件");
+    expect(client).toContain("暂无公开技能事件");
     expect(client).not.toContain("等待公开技能事件");
     expect(client).toContain('time + " · 我 · " + skillName');
     expect(client).toContain("rememberPrivateSkillFeed({");

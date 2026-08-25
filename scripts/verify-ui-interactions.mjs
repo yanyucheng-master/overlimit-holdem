@@ -44,12 +44,29 @@ async function phoneTableLayout(page) {
   return page.evaluate(() => {
     const dock = document.querySelector(".action-dock")?.getBoundingClientRect();
     const board = document.getElementById("board")?.getBoundingClientRect();
+    const opponent = document.getElementById("opponent-area")?.getBoundingClientRect();
+    const center = document.getElementById("table-center")?.getBoundingClientRect();
     const self = document.getElementById("self-area")?.getBoundingClientRect();
+    const ownSkills = document.getElementById("own-skill-arsenal")?.getBoundingClientRect();
+    const opponentSummary = document.getElementById("btn-toggle-opponent-intel")?.getBoundingClientRect();
     const clock = document.getElementById("action-countdown")?.getBoundingClientRect();
     const pot = document.getElementById("pot-core")?.getBoundingClientRect();
     const community = [...document.querySelectorAll("#community-cards .card")].map((card) =>
       card.getBoundingClientRect()
     );
+    const opponentCards = [...document.querySelectorAll("#opponent-cards .card")].map((card) =>
+      card.getBoundingClientRect()
+    );
+    const selfCards = [...document.querySelectorAll("#self-cards .card")].map((card) =>
+      card.getBoundingClientRect()
+    );
+    const cardWidths = [...community, ...opponentCards, ...selfCards]
+      .map((card) => card.width)
+      .filter((width) => width > 0);
+    const cardSizeDelta = cardWidths.length
+      ? (Math.max(...cardWidths) - Math.min(...cardWidths)) / Math.max(...cardWidths)
+      : 1;
+    const dockNode = document.querySelector(".action-dock");
     const overlaps = (left, right) =>
       Boolean(
         left &&
@@ -77,8 +94,39 @@ async function phoneTableLayout(page) {
         self.left >= board.left - 1 &&
         self.right <= board.right + 1 &&
         self.top >= board.top - 1 &&
-        self.bottom <= board.bottom + 1
+          self.bottom <= board.bottom + 1
       ),
+      ownSkillsInsideBoard: Boolean(
+        board &&
+        ownSkills &&
+        ownSkills.left >= board.left - 1 &&
+        ownSkills.right <= board.right + 1 &&
+        ownSkills.top >= board.top - 1 &&
+        ownSkills.bottom <= board.bottom + 1
+      ),
+      opponentSummaryInsideBoard: Boolean(
+        board &&
+        opponentSummary &&
+        opponentSummary.left >= board.left - 1 &&
+        opponentSummary.right <= board.right + 1 &&
+        opponentSummary.top >= board.top - 1 &&
+        opponentSummary.bottom <= board.bottom + 1
+      ),
+      visualOrder: Boolean(
+        opponent &&
+        center &&
+        self &&
+        ownSkills &&
+        opponent.top <= center.top + 1 &&
+        center.top <= self.top + 1 &&
+        self.top <= ownSkills.top + 1
+      ),
+      actionSingleLayer: Boolean(
+        dockNode &&
+        dockNode.children.length === 1 &&
+        dockNode.firstElementChild?.classList.contains("poker-actions-layer")
+      ),
+      cardSizeDelta,
       communityInsideBoard: Boolean(
         board &&
         community.length === 5 &&
@@ -105,10 +153,149 @@ async function phoneTableLayout(page) {
   });
 }
 
+async function skillCountLayoutAudit(page, viewport) {
+  await page.setViewportSize(viewport);
+  await page.waitForTimeout(120);
+  return page.evaluate(() => {
+    const bar = document.getElementById("skill-bar");
+    const slots = [...document.querySelectorAll("#skill-bar .skill-slot")];
+    if (!bar || slots.length < 4) return { available: false, cases: [] };
+    const originalCount = bar.dataset.count || String(slots.length);
+    const originalDisplay = slots.map((slot) => slot.style.display);
+    const cases = [];
+    for (let count = 1; count <= 4; count += 1) {
+      bar.dataset.count = String(count);
+      slots.forEach((slot, index) => {
+        slot.style.display = index < count ? "" : "none";
+      });
+      void bar.offsetWidth;
+      const bounds = bar.getBoundingClientRect();
+      const rects = slots.slice(0, count).map((slot) => slot.getBoundingClientRect());
+      const columns = new Set(rects.map((rect) => Math.round(rect.left))).size;
+      const rows = new Set(rects.map((rect) => Math.round(rect.top))).size;
+      cases.push({
+        count,
+        columns,
+        rows,
+        allInside: rects.every((rect) => (
+          rect.left >= bounds.left - 1 &&
+          rect.right <= bounds.right + 1 &&
+          rect.top >= bounds.top - 1 &&
+          rect.bottom <= bounds.bottom + 1
+        )),
+        overflows: bar.scrollWidth > bar.clientWidth + 1,
+      });
+    }
+    slots.forEach((slot, index) => {
+      slot.style.display = originalDisplay[index];
+    });
+    bar.dataset.count = originalCount;
+    return { available: true, cases };
+  });
+}
+
+async function mobileDrawerAudit(page) {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(120);
+  await page.click("#btn-toggle-opponent-intel");
+  await page.waitForFunction(() => document.getElementById("opponent-skill-field")?.classList.contains("is-mobile-open"));
+  await page.waitForTimeout(220);
+  const intelOpen = await page.evaluate(() => {
+    const drawer = document.getElementById("opponent-skill-field");
+    const bounds = drawer?.getBoundingClientRect();
+    return {
+      visible: Boolean(bounds && bounds.width > 1 && bounds.height > 1 && bounds.left >= -1 && bounds.right <= innerWidth + 1),
+      ariaHidden: drawer?.getAttribute("aria-hidden"),
+      inert: Boolean(drawer?.inert),
+      expanded: document.getElementById("btn-toggle-opponent-intel")?.getAttribute("aria-expanded"),
+    };
+  });
+  await page.click("#btn-close-opponent-intel");
+  await page.waitForFunction(() => !document.getElementById("opponent-skill-field")?.classList.contains("is-mobile-open"));
+  const intelClosed = await page.evaluate(() => ({
+    ariaHidden: document.getElementById("opponent-skill-field")?.getAttribute("aria-hidden"),
+    inert: Boolean(document.getElementById("opponent-skill-field")?.inert),
+    focusReturned: document.activeElement === document.getElementById("btn-toggle-opponent-intel"),
+  }));
+
+  await page.click("#btn-toggle-skill-feed");
+  await page.waitForFunction(() => document.getElementById("table-telemetry")?.classList.contains("is-feed-open"));
+  await page.waitForTimeout(220);
+  const feedOpen = await page.evaluate(() => {
+    const drawer = document.getElementById("table-telemetry");
+    const feed = document.getElementById("skill-broadcast");
+    const bounds = drawer?.getBoundingClientRect();
+    return {
+      visible: Boolean(bounds && bounds.width > 1 && bounds.height > 1 && bounds.left >= -1 && bounds.right <= innerWidth + 1),
+      ariaHidden: feed?.getAttribute("aria-hidden"),
+      inert: Boolean(feed?.inert),
+      expanded: document.getElementById("btn-toggle-skill-feed")?.getAttribute("aria-expanded"),
+    };
+  });
+  await page.click("#btn-close-skill-feed");
+  await page.waitForFunction(() => !document.getElementById("table-telemetry")?.classList.contains("is-feed-open"));
+  const feedClosed = await page.evaluate(() => ({
+    ariaHidden: document.getElementById("skill-broadcast")?.getAttribute("aria-hidden"),
+    inert: Boolean(document.getElementById("skill-broadcast")?.inert),
+  }));
+  return { intelOpen, intelClosed, feedOpen, feedClosed };
+}
+
+async function raisePopoverAudit(page) {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.waitForTimeout(120);
+  const button = page.locator("#btn-raise-options");
+  if (!(await button.count()) || await button.isDisabled()) return { available: false };
+  const geometry = () => page.evaluate(() => {
+    const read = (selector) => {
+      const bounds = document.querySelector(selector)?.getBoundingClientRect();
+      return bounds ? {
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
+        top: bounds.top,
+        right: bounds.right,
+        bottom: bounds.bottom,
+        left: bounds.left,
+      } : null;
+    };
+    return {
+      board: read("#board"),
+      dock: read("#screen-game .action-dock"),
+      self: read("#self-area"),
+      actions: read("#screen-game .poker-actions-layer"),
+      panel: read("#raise-panel"),
+      expanded: document.getElementById("btn-raise-options")?.getAttribute("aria-expanded"),
+      panelDisplay: getComputedStyle(document.getElementById("raise-panel")).display,
+    };
+  });
+  const before = await geometry();
+  await button.click();
+  await page.waitForTimeout(80);
+  const opened = await geometry();
+  await button.click();
+  await page.waitForTimeout(80);
+  const closed = await geometry();
+  const stable = (first, next) => ["board", "dock", "self", "actions"].every((key) => {
+    if (!first[key] || !next[key]) return false;
+    return ["x", "y", "width", "height"].every((metric) => Math.abs(first[key][metric] - next[key][metric]) <= 1);
+  });
+  return {
+    available: true,
+    opened: opened.expanded === "true" && opened.panelDisplay !== "none",
+    closed: closed.expanded === "false",
+    stableWhileOpen: stable(before, opened),
+    stableAfterClose: stable(before, closed),
+    panelAboveDock: Boolean(opened.panel && opened.dock && opened.panel.bottom <= opened.dock.top + 1),
+    panelInsideViewport: Boolean(opened.panel && opened.panel.left >= -1 && opened.panel.right <= 1441 && opened.panel.top >= -1),
+  };
+}
+
 async function competitiveTableAudit(page, viewport) {
   await page.setViewportSize(viewport);
   await page.waitForTimeout(240);
-  return page.evaluate(({ width, height }) => {
+  const audit = await page.evaluate(({ width, height }) => {
     const byId = (id) => document.getElementById(id);
     const rect = (node) => node?.getBoundingClientRect();
     const visible = (node) => {
@@ -131,14 +318,36 @@ async function competitiveTableAudit(page, viewport) {
     const hidden = (node) => !visible(node);
     const close = (left, right, tolerance = 1) => Math.abs(left - right) <= tolerance;
     const topbar = document.querySelector("#screen-game .game-topbar");
+    const toolsLeft = document.querySelector("#screen-game .table-tools-left");
+    const backButton = byId("btn-back-game");
+    const historyButton = byId("btn-hand-history");
+    const backLabel = backButton?.querySelector(".game-exit-label");
+    const historyLabel = historyButton?.querySelector(".history-label");
+    const historyIcon = historyButton?.querySelector(".history-restore-icon");
+    const backRect = rect(backButton);
+    const historyRect = rect(historyButton);
+    const backLabelRect = rect(backLabel);
+    const historyLabelRect = rect(historyLabel);
+    const historyIconRect = rect(historyIcon);
+    const toolsStyle = toolsLeft ? getComputedStyle(toolsLeft) : null;
+    const backStyle = backButton ? getComputedStyle(backButton) : null;
+    const historyStyle = historyButton ? getComputedStyle(historyButton) : null;
+    const historyCount = historyButton?.dataset.count || "";
+    const historyCountContent = historyButton ? getComputedStyle(historyButton, "::after").content : "none";
+    const paddingKey = (style) => style
+      ? [style.paddingTop, style.paddingRight, style.paddingBottom, style.paddingLeft].join("|")
+      : "";
     const runtime = document.querySelector("#screen-game .table-runtime-data");
     const connection = byId("game-connection");
-    const leftRail = byId("opponent-skill-field");
+    const ownRail = byId("own-skill-arsenal");
+    const intelDrawer = byId("opponent-skill-field");
     const rightRail = byId("table-telemetry");
     const skillBroadcast = byId("skill-broadcast");
     const tableCenter = byId("table-center");
     const clock = rect(byId("action-countdown"));
     const communityCards = [...document.querySelectorAll("#community-cards .card")].map(rect);
+    const opponentCards = [...document.querySelectorAll("#opponent-cards .card")].map(rect);
+    const selfCards = [...document.querySelectorAll("#self-cards .card")].map(rect);
     const skillSlots = [...document.querySelectorAll("#skill-bar .skill-slot")].map(rect);
     const pokerLayer = rect(document.querySelector("#screen-game .poker-actions-layer"));
     const skillHud = rect(byId("skill-hud"));
@@ -152,8 +361,21 @@ async function competitiveTableAudit(page, viewport) {
     const topbarText = topbar?.innerText.replace(/\s+/g, " ").trim() || "";
     const board = rect(byId("board"));
     const dock = rect(document.querySelector("#screen-game .action-dock"));
-    const leftRect = rect(leftRail);
+    const ownRect = rect(ownRail);
+    const intelRect = rect(intelDrawer);
     const rightRect = rect(rightRail);
+    const opponentSummary = byId("btn-toggle-opponent-intel");
+    const opponentSummaryText = byId("opponent-intel-count")?.textContent.trim() || "";
+    const opponentSummarySlots = [...(byId("opponent-intel-slots")?.children || [])];
+    const actionDock = document.querySelector("#screen-game .action-dock");
+    const cardWidths = [...communityCards, ...opponentCards, ...selfCards]
+      .map((card) => card?.width || 0)
+      .filter((widthValue) => widthValue > 0);
+    const cardSizeDelta = cardWidths.length
+      ? (Math.max(...cardWidths) - Math.min(...cardWidths)) / Math.max(...cardWidths)
+      : 1;
+    const skillColumns = new Set(skillSlots.map((slot) => Math.round(slot?.left || 0))).size;
+    const skillRows = new Set(skillSlots.map((slot) => Math.round(slot?.top || 0))).size;
     const selfMinimal = {
       avatarHidden: hidden(byId("self-avatar")),
       connectionHidden: hidden(byId("self-connection")),
@@ -177,14 +399,20 @@ async function competitiveTableAudit(page, viewport) {
           visible(byId("btn-hand-history"))
         ),
         "TABLE-CLEAN-02": compact
-          ? hidden(leftRail) && hidden(rightRail)
+          ? Boolean(
+              visible(ownRail) &&
+              hidden(intelDrawer) &&
+              hidden(rightRail) &&
+              intelDrawer?.getAttribute("aria-hidden") === "true"
+            )
           : Boolean(
-              visible(leftRail) &&
+              visible(ownRail) &&
+              hidden(intelDrawer) &&
               visible(rightRail) &&
-              byId("opponent-skill-title")?.textContent.trim() === "对手技能" &&
               byId("skill-broadcast-title")?.textContent.trim() === "战术播报" &&
               telemetryVisibleChildren.length === 1 &&
-              telemetryVisibleChildren[0] === "skill-broadcast"
+              telemetryVisibleChildren[0] === "skill-broadcast" &&
+              intelDrawer?.getAttribute("aria-hidden") === "true"
             ),
         "TABLE-CLEAN-03": Boolean(
           byId("pot-core")?.closest("#table-center") === tableCenter &&
@@ -208,13 +436,16 @@ async function competitiveTableAudit(page, viewport) {
           pokerLayer &&
           skillHud &&
           turnStatus &&
-          turnStatus.bottom <= pokerLayer.top + 2 &&
-          pokerLayer.bottom <= skillHud.top + 2
+          byId("skill-hud")?.closest("#own-skill-arsenal") === ownRail &&
+          document.querySelector("#screen-game .turn-status")?.closest("#table-center") === tableCenter &&
+          actionDock?.children.length === 1 &&
+          actionDock?.firstElementChild?.classList.contains("poker-actions-layer") &&
+          skillHud.bottom <= board.bottom + 1 &&
+          pokerLayer.top >= board.bottom - 1
         ),
-        "TABLE-CLEAN-08": Boolean(
-          skillSlots.length === 4 &&
-          skillSlots.every((slot) => close(slot.top, skillSlots[0].top, 1))
-        ),
+        "TABLE-CLEAN-08": compact && width <= 760
+          ? Boolean(skillSlots.length === 4 && skillColumns === 2 && skillRows === 2)
+          : Boolean(skillSlots.length === 4 && skillColumns === 1 && skillRows === 4),
         "TABLE-CLEAN-09": Boolean(
           deckAnchor?.width > 20 &&
           deckAnchor?.height > 20 &&
@@ -230,27 +461,140 @@ async function competitiveTableAudit(page, viewport) {
         ),
         "TABLE-CLEAN-11": compact
           ? Boolean(
-              visible(byId("btn-toggle-opponent-intel")) &&
+              visible(opponentSummary) &&
               visible(byId("btn-toggle-skill-feed")) &&
-              leftRail?.getAttribute("aria-hidden") === "true" &&
+              intelDrawer?.getAttribute("aria-hidden") === "true" &&
               skillBroadcast?.getAttribute("aria-hidden") === "true"
             )
           : Boolean(
-              hidden(byId("btn-toggle-opponent-intel")) &&
+              visible(opponentSummary) &&
               hidden(byId("btn-toggle-skill-feed"))
             ),
         "TABLE-CLEAN-12": compact
           ? true
           : Boolean(
-              leftRect?.width >= 249 &&
-              leftRect?.width <= 287 &&
-              rightRect?.width >= 219 &&
-              rightRect?.width <= 253
+              ownRect?.width >= 213 &&
+              ownRect?.width <= 245 &&
+              rightRect?.width >= 183 &&
+              rightRect?.width <= 215 &&
+              intelRect?.right <= board.left + 1
             ),
+        "TABLE-CLEAN-13": Boolean(
+          communityCards.length === 5 &&
+          opponentCards.length === 2 &&
+          selfCards.length === 2 &&
+          cardSizeDelta <= 0.1
+        ),
+        "TABLE-CLEAN-14": Boolean(
+          visible(opponentSummary) &&
+          opponentSummarySlots.length === 4 &&
+          !/\d+\s*\/\s*4/.test(opponentSummaryText) &&
+          !/负载/.test(opponentSummaryText)
+        ),
+        "TABLE-TOOLS-01": Boolean(
+          toolsStyle?.display === "flex" &&
+          toolsStyle?.flexDirection === "row" &&
+          toolsStyle?.alignItems === "center" &&
+          backStyle?.display === "flex" &&
+          backStyle?.flexDirection === "row" &&
+          historyStyle?.display === "flex" &&
+          historyStyle?.flexDirection === "row" &&
+          backRect &&
+          historyRect &&
+          close(backRect.height, historyRect.height, 0.5) &&
+          close(backRect.top, historyRect.top, 0.5) &&
+          close(backRect.top + backRect.height / 2, historyRect.top + historyRect.height / 2, 0.5) &&
+          paddingKey(backStyle) === paddingKey(historyStyle) &&
+          backStyle.lineHeight === historyStyle.lineHeight &&
+          (!visible(backLabel) || Boolean(
+            backLabelRect &&
+            historyLabelRect &&
+            close(backLabelRect.top, historyLabelRect.top, 0.5) &&
+            close(backLabelRect.bottom, historyLabelRect.bottom, 0.5)
+          )) &&
+          historyIconRect?.width >= 15 &&
+          historyIconRect?.width <= 17 &&
+          historyIconRect?.height >= 15 &&
+          historyIconRect?.height <= 17
+        ),
+        "TABLE-TOOLS-02": Boolean(
+          historyLabel?.textContent.trim() === "历史" &&
+          (!historyCount || Boolean(
+            /^\d+$/.test(historyCount) &&
+            Number(historyCount) > 0 &&
+            historyCountContent.includes(historyCount) &&
+            historyButton?.getAttribute("aria-label")?.includes(historyCount)
+          ))
+        ),
       },
       selfMinimal,
     };
   }, viewport);
+
+  const readToolGeometry = () => page.evaluate(() => {
+    const read = (id) => {
+      const button = document.getElementById(id);
+      const bounds = button?.getBoundingClientRect();
+      return bounds ? {
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
+        count: button.dataset.count || "",
+        focused: document.activeElement === button,
+        focusVisible: button.matches(":focus-visible"),
+      } : null;
+    };
+    return {
+      back: read("btn-back-game"),
+      history: read("btn-hand-history"),
+    };
+  });
+  const geometryStable = (before, after) => {
+    const close = (left, right) => Math.abs(left - right) <= 0.5;
+    return ["back", "history"].every((key) => {
+      const first = before[key];
+      const next = after[key];
+      if (!first || !next) return false;
+      return close(first.x, next.x) &&
+        close(first.y, next.y) &&
+        close(first.height, next.height) &&
+        (first.count !== next.count || close(first.width, next.width));
+    });
+  };
+
+  const initialTools = await readToolGeometry();
+  await page.hover("#btn-back-game");
+  await page.waitForTimeout(60);
+  const backHoverTools = await readToolGeometry();
+  await page.hover("#btn-hand-history");
+  await page.waitForTimeout(60);
+  const historyHoverTools = await readToolGeometry();
+  await page.focus("#btn-back-game");
+  await page.keyboard.press("Tab");
+  await page.waitForTimeout(60);
+  const historyFocusTools = await readToolGeometry();
+  await page.keyboard.press("Shift+Tab");
+  await page.waitForTimeout(60);
+  const backFocusTools = await readToolGeometry();
+  audit.toolInteraction = {
+    initial: initialTools,
+    backHover: backHoverTools,
+    historyHover: historyHoverTools,
+    backFocus: backFocusTools,
+    historyFocus: historyFocusTools,
+  };
+  audit.contracts["TABLE-TOOLS-03"] = [
+    backHoverTools,
+    historyHoverTools,
+    backFocusTools,
+    historyFocusTools,
+  ].every((geometry) => geometryStable(initialTools, geometry)) &&
+    backFocusTools.back?.focused === true &&
+    backFocusTools.back?.focusVisible === true &&
+    historyFocusTools.history?.focused === true &&
+    historyFocusTools.history?.focusVisible === true;
+  return audit;
 }
 
 async function buttonHitAudit(page, scopeSelector) {
@@ -578,6 +922,53 @@ async function main() {
   await page.locator("#skill-bar .skill-zoom-button").first().click();
   report.game.previewOpened = await visible(page, "#skill-preview-modal:not(.hidden)");
   await page.click("#btn-skill-preview-done");
+
+  await page.click("#btn-toggle-opponent-intel");
+  await page.waitForFunction(() => document.getElementById("opponent-skill-field")?.classList.contains("is-mobile-open"));
+  await page.click("#btn-mark-opponent-skills");
+  await page.waitForSelector('#skill-choice-modal[data-variant="dossier"]:not(.hidden)');
+  report.game.suspectPicker = await page.evaluate(() => {
+    const modal = document.getElementById("skill-choice-modal");
+    const filters = [...document.querySelectorAll("#skill-choice-filters [data-skill-filter]")];
+    const visibleChoices = () => [...document.querySelectorAll(".dossier-skill-choice")]
+      .filter((choice) => !choice.classList.contains("is-filtered-out"));
+    return {
+      eyebrowHidden: getComputedStyle(document.getElementById("skill-choice-eyebrow")).display === "none",
+      stepHidden: getComputedStyle(document.getElementById("skill-choice-step")).display === "none",
+      subtitleHidden: getComputedStyle(document.getElementById("skill-choice-text")).display === "none",
+      filterCount: filters.length,
+      filterLabels: filters.map((button) => button.textContent.trim()),
+      activeFilter: modal?.querySelector(".skill-lab-filter.is-active")?.dataset.skillFilter || "",
+      initialVisible: visibleChoices().length,
+      initialRemaining: document.getElementById("skill-choice-selection")?.textContent.trim() || "",
+    };
+  });
+  await page.click('#skill-choice-filters [data-skill-filter="resource"]');
+  await page.waitForFunction(() => (
+    document.querySelector('#skill-choice-filters [data-skill-filter="resource"]')?.getAttribute("aria-pressed") === "true"
+  ));
+  const resourceVisible = await page.locator(
+    ".dossier-skill-choice:not(.is-filtered-out)"
+  ).count();
+  const firstResourceChoice = page.locator(
+    ".dossier-skill-choice:not(.is-filtered-out):not(:disabled)"
+  ).first();
+  const selectedSkillId = await firstResourceChoice.getAttribute("data-skill-id");
+  await firstResourceChoice.click();
+  await page.click('#skill-choice-filters [data-skill-filter="all"]');
+  report.game.suspectPicker.afterFilter = await page.evaluate(({ skillId, resourceCount }) => ({
+    resourceVisible: resourceCount,
+    selectedPersisted: document.querySelector(
+      `.dossier-skill-choice[data-skill-id="${skillId}"]`
+    )?.classList.contains("selected") || false,
+    remaining: document.getElementById("skill-choice-selection")?.textContent.trim() || "",
+    allActive: document.querySelector(
+      '#skill-choice-filters [data-skill-filter="all"]'
+    )?.getAttribute("aria-pressed") === "true",
+  }), { skillId: selectedSkillId, resourceCount: resourceVisible });
+  await page.click("#btn-skill-choice-cancel");
+  await page.click("#btn-close-opponent-intel");
+
   for (const viewport of [
     { width: 1920, height: 1080 },
     { width: 1440, height: 900 },
@@ -588,6 +979,7 @@ async function main() {
   ]) {
     report.tableClean.push(await competitiveTableAudit(page, viewport));
   }
+  report.game.skillCounts = await skillCountLayoutAudit(page, { width: 1440, height: 900 });
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.waitForTimeout(120);
   report.game.hitAudit = await buttonHitAudit(page, "#screen-game");
@@ -601,16 +993,7 @@ async function main() {
     { timeout: 12000 }
   );
 
-  report.game.raiseOptions = await page.evaluate(() => {
-    const options = document.getElementById("btn-raise-options");
-    const panel = document.getElementById("raise-panel");
-    if (!options || options.disabled) return { available: false };
-    options.click();
-    const opened = options.getAttribute("aria-expanded") === "true" && getComputedStyle(panel).display !== "none";
-    options.click();
-    const closed = options.getAttribute("aria-expanded") === "false";
-    return { available: true, opened, closed };
-  });
+  report.game.raiseOptions = await raisePopoverAudit(page);
 
   report.game.actionGate = await page.evaluate(() => {
     const order = ["check", "call", "fold"];
@@ -645,6 +1028,8 @@ async function main() {
   await page.waitForTimeout(200);
   report.mobile.skillGeometry = await skillGeometry(page);
   report.mobile.layout = await phoneTableLayout(page);
+  report.mobile.skillCounts = await skillCountLayoutAudit(page, { width: 390, height: 844 });
+  report.mobile.drawers = await mobileDrawerAudit(page);
   await page.click("#btn-settings");
   report.mobile.settings = await page.evaluate(() => {
     const panel = document.querySelector("#settings-modal .settings-panel")?.getBoundingClientRect();
@@ -670,6 +1055,7 @@ async function main() {
   await page.click("#btn-close-settings");
   report.mobile.hitAudit = await buttonHitAudit(page, "#screen-game");
 
+  report.compact.skillCounts = await skillCountLayoutAudit(page, { width: 320, height: 700 });
   await page.setViewportSize({ width: 320, height: 568 });
   await page.waitForTimeout(200);
   report.compact.skillGeometry = await skillGeometry(page);
@@ -810,6 +1196,21 @@ async function main() {
   if (report.game.skillGeometry.count !== 4 || !report.game.skillGeometry.allInside || report.game.skillGeometry.overflows) {
     failures.push("desktop four-skill HUD overflow");
   }
+  const expectedDesktopSkillCases = [1, 2, 3, 4].map((count) => ({ count, columns: 1, rows: count }));
+  if (
+    !report.game.skillCounts.available ||
+    report.game.skillCounts.cases.length !== expectedDesktopSkillCases.length ||
+    report.game.skillCounts.cases.some((current, index) => {
+      const expected = expectedDesktopSkillCases[index];
+      return current.count !== expected.count ||
+        current.columns !== expected.columns ||
+        current.rows !== expected.rows ||
+        !current.allInside ||
+        current.overflows;
+    })
+  ) {
+    failures.push("desktop 1-4 skill arsenal layout contract failed");
+  }
   if (
     report.game.zoomButtons !== 4 ||
     report.game.deckAnchor.width <= 20 ||
@@ -818,6 +1219,31 @@ async function main() {
     !report.game.previewOpened
   ) {
     failures.push("game HUD controls failed");
+  }
+  const initialRemaining = Number.parseInt(
+    report.game.suspectPicker.initialRemaining.replace(/\D+/g, ""),
+    10
+  );
+  const remainingAfterSelection = Number.parseInt(
+    report.game.suspectPicker.afterFilter.remaining.replace(/\D+/g, ""),
+    10
+  );
+  if (
+    !report.game.suspectPicker.eyebrowHidden ||
+    !report.game.suspectPicker.stepHidden ||
+    !report.game.suspectPicker.subtitleHidden ||
+    report.game.suspectPicker.filterCount !== 7 ||
+    report.game.suspectPicker.filterLabels.join("|") !== "全部|情报|攻击|防御|资源|改牌|协议" ||
+    report.game.suspectPicker.activeFilter !== "all" ||
+    report.game.suspectPicker.initialVisible < 24 ||
+    !report.game.suspectPicker.initialRemaining.startsWith("剩余可用 ") ||
+    report.game.suspectPicker.afterFilter.resourceVisible <= 0 ||
+    report.game.suspectPicker.afterFilter.resourceVisible >= report.game.suspectPicker.initialVisible ||
+    !report.game.suspectPicker.afterFilter.selectedPersisted ||
+    !report.game.suspectPicker.afterFilter.allActive ||
+    remainingAfterSelection !== initialRemaining - 1
+  ) {
+    failures.push("opponent skill tag filtering or remaining-slot summary failed");
   }
   for (const audit of report.tableClean) {
     const failedContracts = Object.entries(audit.contracts)
@@ -839,8 +1265,18 @@ async function main() {
   if (!report.game.actionGate.found || !report.game.actionGate.allDisabledAfterFirst) {
     failures.push("poker action double-click gate failed");
   }
-  if (report.game.raiseOptions.available && (!report.game.raiseOptions.opened || !report.game.raiseOptions.closed)) {
-    failures.push("raise options button failed");
+  if (
+    report.game.raiseOptions.available &&
+    (
+      !report.game.raiseOptions.opened ||
+      !report.game.raiseOptions.closed ||
+      !report.game.raiseOptions.stableWhileOpen ||
+      !report.game.raiseOptions.stableAfterClose ||
+      !report.game.raiseOptions.panelAboveDock ||
+      !report.game.raiseOptions.panelInsideViewport
+    )
+  ) {
+    failures.push("raise options popover moved the table or escaped its overlay lane");
   }
   if (
     !report.allin.functionAvailable ||
@@ -859,12 +1295,54 @@ async function main() {
     !report.mobile.layout.dockInside ||
     report.mobile.layout.boardDockOverlap ||
     !report.mobile.layout.selfInsideBoard ||
+    !report.mobile.layout.ownSkillsInsideBoard ||
+    !report.mobile.layout.opponentSummaryInsideBoard ||
+    !report.mobile.layout.visualOrder ||
+    !report.mobile.layout.actionSingleLayer ||
+    report.mobile.layout.cardSizeDelta > 0.1 ||
     !report.mobile.layout.communityInsideBoard ||
     !report.mobile.layout.communityInsideViewport ||
     !report.mobile.layout.communityClearOfClock ||
     !report.mobile.layout.communityClearOfPot
   ) {
     failures.push("mobile four-skill layout failed");
+  }
+  const expectedMobileSkillCases = [
+    { count: 1, columns: 1, rows: 1 },
+    { count: 2, columns: 2, rows: 1 },
+    { count: 3, columns: 3, rows: 1 },
+    { count: 4, columns: 2, rows: 2 },
+  ];
+  if (
+    !report.mobile.skillCounts.available ||
+    report.mobile.skillCounts.cases.length !== expectedMobileSkillCases.length ||
+    report.mobile.skillCounts.cases.some((current, index) => {
+      const expected = expectedMobileSkillCases[index];
+      return current.count !== expected.count ||
+        current.columns !== expected.columns ||
+        current.rows !== expected.rows ||
+        !current.allInside ||
+        current.overflows;
+    })
+  ) {
+    failures.push("mobile 1-4 skill responsive layout contract failed");
+  }
+  if (
+    !report.mobile.drawers.intelOpen.visible ||
+    report.mobile.drawers.intelOpen.ariaHidden !== "false" ||
+    report.mobile.drawers.intelOpen.inert ||
+    report.mobile.drawers.intelOpen.expanded !== "true" ||
+    report.mobile.drawers.intelClosed.ariaHidden !== "true" ||
+    !report.mobile.drawers.intelClosed.inert ||
+    !report.mobile.drawers.intelClosed.focusReturned ||
+    !report.mobile.drawers.feedOpen.visible ||
+    report.mobile.drawers.feedOpen.ariaHidden !== "false" ||
+    report.mobile.drawers.feedOpen.inert ||
+    report.mobile.drawers.feedOpen.expanded !== "true" ||
+    report.mobile.drawers.feedClosed.ariaHidden !== "true" ||
+    !report.mobile.drawers.feedClosed.inert
+  ) {
+    failures.push("mobile opponent-intel or tactical-feed drawer contract failed");
   }
   if (report.mobile.hitAudit.failures.length) failures.push("mobile button hit targets blocked");
   if (
@@ -882,12 +1360,31 @@ async function main() {
     !report.compact.layout.dockInside ||
     report.compact.layout.boardDockOverlap ||
     !report.compact.layout.selfInsideBoard ||
+    !report.compact.layout.ownSkillsInsideBoard ||
+    !report.compact.layout.opponentSummaryInsideBoard ||
+    !report.compact.layout.visualOrder ||
+    !report.compact.layout.actionSingleLayer ||
+    report.compact.layout.cardSizeDelta > 0.1 ||
     !report.compact.layout.communityInsideBoard ||
     !report.compact.layout.communityInsideViewport ||
     !report.compact.layout.communityClearOfClock ||
     !report.compact.layout.communityClearOfPot
   ) {
     failures.push("compact four-skill layout failed");
+  }
+  if (
+    !report.compact.skillCounts.available ||
+    report.compact.skillCounts.cases.length !== expectedMobileSkillCases.length ||
+    report.compact.skillCounts.cases.some((current, index) => {
+      const expected = expectedMobileSkillCases[index];
+      return current.count !== expected.count ||
+        current.columns !== expected.columns ||
+        current.rows !== expected.rows ||
+        !current.allInside ||
+        current.overflows;
+    })
+  ) {
+    failures.push("320px 1-4 skill responsive layout contract failed");
   }
   if (report.compact.hitAudit.failures.length) failures.push("compact button hit targets blocked");
   for (const [name, label] of [
