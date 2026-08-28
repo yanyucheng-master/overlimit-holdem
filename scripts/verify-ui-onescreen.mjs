@@ -386,6 +386,26 @@ async function readSkillLabLoadMap(page) {
   ));
 }
 
+async function auditSkillLabCatalogCopy(page) {
+  return page.evaluate(async () => {
+    const response = await fetch("/api/skills");
+    const payload = await response.json();
+    const expected = new Map((payload.skills || []).map((skill) => [skill.id, skill.catalogSummary]));
+    const cards = [...document.querySelectorAll("#skill-lab-catalog .skill-card")];
+    const mismatches = cards
+      .filter((card) => card.querySelector(".skill-card-copy")?.textContent !== expected.get(card.dataset.skillId))
+      .map((card) => card.dataset.skillId);
+    return {
+      apiCount: expected.size,
+      cardCount: cards.length,
+      missingApiSummaries: [...expected.entries()]
+        .filter(([, summary]) => typeof summary !== "string" || !summary.trim())
+        .map(([id]) => id),
+      mismatches,
+    };
+  });
+}
+
 async function auditSkillLabViewport(page, viewport, scenario) {
   const expectedSelectionCount = scenario.ids.length;
   const expectedLoad = scenario.load;
@@ -403,6 +423,7 @@ async function auditSkillLabViewport(page, viewport, scenario) {
     const hint = document.getElementById("skill-lab-hint");
     const loadMeter = document.getElementById("lab-load-meter");
     const cards = [...(catalog?.querySelectorAll(".skill-card") || [])];
+    const copies = cards.map((card) => card.querySelector(".skill-card-copy")).filter(Boolean);
     const selected = cards.filter((card) => card.classList.contains("selected"));
     const rect = (node) => node?.getBoundingClientRect() || null;
     const screenRect = rect(screen);
@@ -475,6 +496,10 @@ async function auditSkillLabViewport(page, viewport, scenario) {
       columns: firstRowCount,
       cardHeight: firstRect?.height || 0,
       copyLineClamp: copyStyle?.webkitLineClamp || "",
+      catalogSummaryClassApplied: copies.every((copy) => copy.classList.contains("skill-card-catalog-summary")),
+      catalogSummaryNoClipping: copies.every((copy) => (
+        copy.scrollWidth <= copy.clientWidth + 1 && copy.scrollHeight <= copy.clientHeight + 1
+      )),
       fullyVisibleCards,
       selectedHeadersClear,
       cardTextContained: cards.every((card) => card.scrollWidth <= card.clientWidth + 1),
@@ -570,6 +595,7 @@ async function main() {
     active: document.getElementById("screen-skill-lab")?.classList.contains("active"),
     cards: document.querySelectorAll("#skill-lab-catalog .skill-card").length,
   }));
+  const skillLabCatalogCopy = await auditSkillLabCatalogCopy(page);
   const skillLabLoadMap = await readSkillLabLoadMap(page);
   const makeSkillLabScenario = (name, ids, valid) => ({
     name,
@@ -612,6 +638,7 @@ async function main() {
     step: "skill-lab",
     lab,
     labFit: await fit(page),
+    skillLabCatalogCopy,
     skillLabLoadMap,
     skillLabScenarios,
     skillLabLayouts,
@@ -706,6 +733,7 @@ async function main() {
   const skillLabLayoutAudits = skillLabReport.skillLabLayouts || [];
   const skillLabScenarioAudits = skillLabReport.skillLabScenarios || [];
   const skillLabLayoutStabilityAudits = skillLabReport.skillLabLayoutStability || [];
+  const skillLabCatalogCopyAudit = skillLabReport.skillLabCatalogCopy || {};
   const waitFit = report.find((r) => r.step === "wait-create")?.waitFit;
   const gameFit = report.find((r) => r.step === "abyss-solo")?.gameFit;
   const mobileLobby = report.find((r) => r.step === "mobile-lobby")?.mobileLobby;
@@ -769,6 +797,15 @@ async function main() {
   if (!lab.active || lab.cards < 8) failures.push("skill lab incomplete");
   if (labFit?.needsScroll && labFit?.bodyOverflow !== "hidden") failures.push("skill lab page scrolls");
   if (
+    !Number.isInteger(skillLabCatalogCopyAudit.apiCount) ||
+    skillLabCatalogCopyAudit.apiCount < 1 ||
+    skillLabCatalogCopyAudit.cardCount !== skillLabCatalogCopyAudit.apiCount ||
+    skillLabCatalogCopyAudit.missingApiSummaries?.length ||
+    skillLabCatalogCopyAudit.mismatches?.length
+  ) {
+    failures.push("skill lab catalog summaries do not match the API catalog");
+  }
+  if (
     skillLabScenarioAudits.length !== 5 ||
     skillLabScenarioAudits.some((scenario) => !Number.isFinite(scenario.load)) ||
     skillLabScenarioAudits.find((scenario) => scenario.name === "four-max-load")?.load !== 8 ||
@@ -793,7 +830,9 @@ async function main() {
         audit.columns !== expectedColumns ||
         audit.cardHeight < 100 ||
         audit.cardHeight > 112 ||
-        audit.copyLineClamp !== "2" ||
+        audit.copyLineClamp !== (audit.viewport.width <= 640 ? "2" : "none") ||
+        !audit.catalogSummaryClassApplied ||
+        !audit.catalogSummaryNoClipping ||
         audit.fullyVisibleCards < minimumVisible ||
         !audit.selectedHeadersClear ||
         !audit.cardTextContained ||

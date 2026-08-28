@@ -3380,7 +3380,7 @@ function createSkillCatalogCard(skill, { selected = false, disabled = false, onS
   const name = document.createElement("strong");
   const cost = document.createElement("small");
   const description = document.createElement("span");
-  description.className = "skill-card-copy";
+  description.className = "skill-card-copy skill-card-catalog-summary";
   name.textContent = skill.name;
   const passive = (skill.tags || []).includes("PASSIVE");
   const energyHint = skill.energyCosts
@@ -3389,7 +3389,7 @@ function createSkillCatalogCard(skill, { selected = false, disabled = false, onS
       ? passive ? " · 触发消耗 " + skill.energyCost : " · 能量 " + skill.energyCost
       : passive ? " · 自动触发" : " · 能量 0";
   cost.textContent = "负载 " + skill.load + energyHint;
-  description.textContent = skill.shortDescription || skill.description || "";
+  description.textContent = skill.catalogSummary || skill.shortDescription || skill.description || "";
   select.append(name, cost, description);
   if (typeof onSelect === "function") select.addEventListener("click", onSelect);
 

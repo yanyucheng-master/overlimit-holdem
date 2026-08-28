@@ -964,17 +964,16 @@
 }
 
 .salon-ui #skill-lab-catalog .skill-card-copy {
-  display: -webkit-box;
+  display: block;
+  width: calc(100% + 40px);
   margin-top: 5px;
-  min-height: calc(1.35em * 2);
+  min-height: 1.35em;
   overflow: hidden;
   color: var(--muted);
-  font-size: 0.74rem;
+  font-size: 0.73rem;
   line-height: 1.35;
-  white-space: normal;
-  overflow-wrap: anywhere;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .salon-ui #skill-lab-catalog .skill-card strong {
@@ -1792,6 +1791,15 @@
     grid-template-columns: 1fr;
     grid-auto-rows: 108px;
     gap: 8px;
+  }
+
+  .salon-ui #skill-lab-catalog .skill-card-copy {
+    display: -webkit-box;
+    min-height: calc(1.35em * 2);
+    white-space: normal;
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
   }
 
   .salon-ui #screen-skill-lab .skill-lab-actions {

@@ -85,7 +85,7 @@ function weakHole() {
 }
 
 describe("技能目录、构筑与隐私", () => {
-  test("目录包含 24 个主体技能与 9 个协议，并提供简易/详细说明", () => {
+  test("目录包含 24 个主体技能与 9 个协议，并提供构筑摘要/简易/详细三层说明", () => {
     const catalog = listSkillDefinitions();
     expect(catalog).toHaveLength(33);
     expect(catalog.map((skill) => skill.id).slice(0, 24)).toEqual([
@@ -95,6 +95,15 @@ describe("技能目录、构筑与隐私", () => {
       "LOAN", "ALERT", "RETREAT", "RESTART", "PROBE", "DISGUISE", "ENDGAME",
     ]);
     expect(catalog.filter((skill) => skill.id.startsWith("PROTOCOL_"))).toHaveLength(9);
+    catalog.forEach((skill) => {
+      expect(typeof skill.catalogSummary).toBe("string");
+      expect(skill.catalogSummary.trim()).not.toBe("");
+      expect(skill.catalogSummary).not.toMatch(/[\r\n]/);
+      expect(Array.from(skill.catalogSummary).length).toBeLessThanOrEqual(26);
+      expect(skill.catalogSummary).not.toBe(skill.shortDescription);
+      expect(skill.catalogSummary).not.toBe(skill.expertDescription);
+      expect(skill.description).toBe(skill.shortDescription);
+    });
     const destiny = catalog.find((skill) => skill.id === "DESTINY");
     expect(destiny).toMatchObject({ load: 5, energyCost: 7, maxUsesPerHand: null });
     expect(destiny.shortDescription).toBeTruthy();

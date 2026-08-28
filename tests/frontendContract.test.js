@@ -19,6 +19,7 @@ describe("frontend DOM contract", () => {
   const skillEffects = fs.readFileSync(path.join(publicDir, "skill-effects.css"), "utf8");
   const skillFxProfiles = fs.readFileSync(path.join(publicDir, "skill-fx-profiles.js"), "utf8");
   const skillFxManager = fs.readFileSync(path.join(publicDir, "skill-fx-manager.js"), "utf8");
+  const skillDefinitions = fs.readFileSync(path.join(__dirname, "..", "game", "skills", "definitions.js"), "utf8");
 
   test("HTML id 唯一", () => {
     const ids = collectMatches(html, /\bid=["']([^"']+)["']/g);
@@ -44,6 +45,16 @@ describe("frontend DOM contract", () => {
     expect(client).toContain("function currentSkillBuildLimits()");
     expect(client).toContain("function skillBuildRuleText");
     expect(client).toContain("el.skillLabHint.textContent = skillBuildRuleText({ compact: true })");
+  });
+
+  test("技能构筑卡使用目录摘要且详情继续使用简易/详细规则", () => {
+    expect(skillDefinitions).toContain("const catalogSummary = skill.catalogSummary || skill.shortDescription || skill.description || \"\"");
+    expect(skillDefinitions).toContain("catalogSummary: skill.catalogSummary");
+    expect(client).toContain("skill.catalogSummary || skill.shortDescription || skill.description || \"\"");
+    expect(client).toContain('description.className = "skill-card-copy skill-card-catalog-summary"');
+    expect(client).toContain("function skillDescriptionText(skill)");
+    expect(client).toContain("skill?.expertDescription || skill?.description");
+    expect(client).toContain("skill?.shortDescription || skill?.description");
   });
 
   test("所有静态按钮均声明 type 且不存在按钮嵌套", () => {
