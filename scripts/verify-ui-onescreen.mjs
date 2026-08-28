@@ -347,11 +347,27 @@ const SKILL_LAB_VIEWPORTS = [
   { width: 1600, height: 900 },
   { width: 1440, height: 900 },
   { width: 1366, height: 768 },
+  { width: 1200, height: 800 },
+  { width: 1199, height: 800 },
+  { width: 1024, height: 768 },
+  { width: 900, height: 700 },
+  { width: 841, height: 800 },
+  { width: 840, height: 800 },
+  { width: 768, height: 1024 },
+  { width: 641, height: 800 },
+  { width: 640, height: 800 },
   { width: 430, height: 932 },
   { width: 390, height: 844 },
   { width: 360, height: 800 },
   { width: 320, height: 700 },
 ];
+
+function expectedSkillLabColumns(width) {
+  if (width >= 1200) return 4;
+  if (width >= 841) return 3;
+  if (width >= 641) return 2;
+  return 1;
+}
 
 async function setSkillLabSelection(page, skillIds) {
   await page.setViewportSize({ width: 1440, height: 900 });
@@ -361,10 +377,21 @@ async function setSkillLabSelection(page, skillIds) {
   }
 }
 
-async function auditSkillLabViewport(page, viewport, expectedSelectionCount, expectedLoad) {
+async function readSkillLabLoadMap(page) {
+  return page.evaluate(() => Object.fromEntries(
+    [...document.querySelectorAll("#skill-lab-catalog .skill-card")].map((card) => {
+      const load = Number(card.querySelector("small")?.textContent.match(/负载\s*(\d+)/)?.[1]);
+      return [card.dataset.skillId, Number.isFinite(load) ? load : null];
+    })
+  ));
+}
+
+async function auditSkillLabViewport(page, viewport, scenario) {
+  const expectedSelectionCount = scenario.ids.length;
+  const expectedLoad = scenario.load;
   await page.setViewportSize(viewport);
   await page.waitForTimeout(50);
-  return page.evaluate(({ viewport, expectedSelectionCount, expectedLoad }) => {
+  return page.evaluate(({ viewport, expectedSelectionCount, expectedLoad, expectedValid, expectedSkillIds }) => {
     const screen = document.getElementById("screen-skill-lab");
     const header = screen?.querySelector(".skill-lab-bar");
     const catalog = document.getElementById("skill-lab-catalog");
@@ -373,6 +400,7 @@ async function auditSkillLabViewport(page, viewport, expectedSelectionCount, exp
     const save = document.getElementById("btn-save-loadout");
     const settings = document.getElementById("btn-settings");
     const filters = document.getElementById("skill-lab-filters");
+    const hint = document.getElementById("skill-lab-hint");
     const loadMeter = document.getElementById("lab-load-meter");
     const cards = [...(catalog?.querySelectorAll(".skill-card") || [])];
     const selected = cards.filter((card) => card.classList.contains("selected"));
@@ -425,8 +453,12 @@ async function auditSkillLabViewport(page, viewport, expectedSelectionCount, exp
       viewport,
       expectedSelectionCount,
       expectedLoad,
+      expectedValid,
+      expectedSkillIds,
       selectedCount: selected.length,
+      selectedSkillIds: selected.map((card) => card.dataset.skillId).sort(),
       loadUsed,
+      hintText: hint?.textContent.trim() || "",
       pageOverflowX: document.documentElement.scrollWidth > innerWidth + 1,
       pageOverflowY: document.documentElement.scrollHeight > innerHeight + 1,
       screenInsideViewport: insideViewport(screenRect),
@@ -454,9 +486,19 @@ async function auditSkillLabViewport(page, viewport, expectedSelectionCount, exp
         clearRect.height >= (viewport.width <= 640 ? 43.5 : 39.5) &&
         saveRect.height >= (viewport.width <= 640 ? 43.5 : 39.5)
       ),
+      headerTop: headerRect?.top || 0,
+      headerHeight: headerRect?.height || 0,
+      footerTop: footerRect?.top || 0,
+      footerHeight: footerRect?.height || 0,
       saveDisabled: Boolean(save?.disabled),
     };
-  }, { viewport, expectedSelectionCount, expectedLoad });
+  }, {
+    viewport,
+    expectedSelectionCount,
+    expectedLoad,
+    expectedValid: scenario.valid,
+    expectedSkillIds: [...scenario.ids].sort(),
+  });
 }
 
 async function main() {
@@ -528,22 +570,53 @@ async function main() {
     active: document.getElementById("screen-skill-lab")?.classList.contains("active"),
     cards: document.querySelectorAll("#skill-lab-catalog .skill-card").length,
   }));
+  const skillLabLoadMap = await readSkillLabLoadMap(page);
+  const makeSkillLabScenario = (name, ids, valid) => ({
+    name,
+    ids,
+    valid,
+    load: ids.reduce((sum, id) => sum + Number(skillLabLoadMap[id] ?? NaN), 0),
+  });
+  const skillLabScenarios = [
+    makeSkillLabScenario("empty", [], false),
+    makeSkillLabScenario("one", ["DEEP_BREATH"], true),
+    makeSkillLabScenario("two", ["DEEP_BREATH", "PROBE"], true),
+    makeSkillLabScenario("three", ["ALERT", "DEEP_BREATH", "PROBE"], true),
+    makeSkillLabScenario("four-max-load", ["NULLIFICATION", "ALERT", "DEEP_BREATH", "PROBE"], true),
+  ];
   const skillLabLayouts = [];
-  for (const scenario of [
-    { name: "empty", ids: [], load: 0 },
-    { name: "two", ids: ["DEEP_BREATH", "PROBE"], load: 2 },
-    { name: "four-max-load", ids: ["NULLIFICATION", "ALERT", "DEEP_BREATH", "PROBE"], load: 8 },
-  ]) {
+  for (const scenario of skillLabScenarios) {
     await setSkillLabSelection(page, scenario.ids);
     for (const viewport of SKILL_LAB_VIEWPORTS) {
       skillLabLayouts.push({
         scenario: scenario.name,
-        ...(await auditSkillLabViewport(page, viewport, scenario.ids.length, scenario.load)),
+        ...(await auditSkillLabViewport(page, viewport, scenario)),
       });
     }
   }
+  const skillLabLayoutStability = SKILL_LAB_VIEWPORTS.map((viewport) => {
+    const matching = skillLabLayouts.filter((audit) => (
+      audit.viewport.width === viewport.width && audit.viewport.height === viewport.height
+    ));
+    const spread = (key) => Math.max(...matching.map((audit) => audit[key])) - Math.min(...matching.map((audit) => audit[key]));
+    return {
+      viewport,
+      headerTopSpread: spread("headerTop"),
+      headerHeightSpread: spread("headerHeight"),
+      footerTopSpread: spread("footerTop"),
+      footerHeightSpread: spread("footerHeight"),
+    };
+  });
   await page.setViewportSize({ width: 1440, height: 900 });
-  report.push({ step: "skill-lab", lab, labFit: await fit(page), skillLabLayouts });
+  report.push({
+    step: "skill-lab",
+    lab,
+    labFit: await fit(page),
+    skillLabLoadMap,
+    skillLabScenarios,
+    skillLabLayouts,
+    skillLabLayoutStability,
+  });
   await page.click("#btn-back-skill-lab");
   await page.waitForSelector("#screen-auth.active");
 
@@ -629,7 +702,10 @@ async function main() {
   const settlementCardAudit = report.find((r) => r.step === "lobby")?.settlementCards;
   const settlementLayoutAudits = report.find((r) => r.step === "lobby")?.settlementLayouts || [];
   const labFit = report.find((r) => r.step === "skill-lab")?.labFit;
-  const skillLabLayoutAudits = report.find((r) => r.step === "skill-lab")?.skillLabLayouts || [];
+  const skillLabReport = report.find((r) => r.step === "skill-lab") || {};
+  const skillLabLayoutAudits = skillLabReport.skillLabLayouts || [];
+  const skillLabScenarioAudits = skillLabReport.skillLabScenarios || [];
+  const skillLabLayoutStabilityAudits = skillLabReport.skillLabLayoutStability || [];
   const waitFit = report.find((r) => r.step === "wait-create")?.waitFit;
   const gameFit = report.find((r) => r.step === "abyss-solo")?.gameFit;
   const mobileLobby = report.find((r) => r.step === "mobile-lobby")?.mobileLobby;
@@ -693,13 +769,18 @@ async function main() {
   if (!lab.active || lab.cards < 8) failures.push("skill lab incomplete");
   if (labFit?.needsScroll && labFit?.bodyOverflow !== "hidden") failures.push("skill lab page scrolls");
   if (
-    skillLabLayoutAudits.length !== SKILL_LAB_VIEWPORTS.length * 3 ||
+    skillLabScenarioAudits.length !== 5 ||
+    skillLabScenarioAudits.some((scenario) => !Number.isFinite(scenario.load)) ||
+    skillLabScenarioAudits.find((scenario) => scenario.name === "four-max-load")?.load !== 8 ||
+    skillLabLayoutAudits.length !== SKILL_LAB_VIEWPORTS.length * 5 ||
     skillLabLayoutAudits.some((audit) => {
-      const expectedColumns = audit.viewport.width >= 1200 ? 4 : 1;
-      const minimumVisible = audit.viewport.width >= 1200 ? 12 : 3;
+      const expectedColumns = expectedSkillLabColumns(audit.viewport.width);
+      const minimumVisible = audit.viewport.width >= 1200 ? 12 : Math.max(3, expectedColumns * 2);
       return (
         audit.selectedCount !== audit.expectedSelectionCount ||
+        JSON.stringify(audit.selectedSkillIds) !== JSON.stringify(audit.expectedSkillIds) ||
         audit.loadUsed !== audit.expectedLoad ||
+        audit.hintText !== "1–4 个 · 负载 ≤ 8" ||
         audit.pageOverflowX ||
         audit.pageOverflowY ||
         !audit.screenInsideViewport ||
@@ -718,9 +799,16 @@ async function main() {
         !audit.cardTextContained ||
         !audit.footerSameRow ||
         !audit.footerButtonsReachable ||
-        audit.saveDisabled !== (audit.expectedSelectionCount === 0)
+        audit.saveDisabled === audit.expectedValid
       );
-    })
+    }) ||
+    skillLabLayoutStabilityAudits.length !== SKILL_LAB_VIEWPORTS.length ||
+    skillLabLayoutStabilityAudits.some((audit) => (
+      audit.headerTopSpread > 1 ||
+      audit.headerHeightSpread > 1 ||
+      audit.footerTopSpread > 1 ||
+      audit.footerHeightSpread > 1
+    ))
   ) {
     failures.push("skill lab compact layout regressed across selections or required viewports");
   }

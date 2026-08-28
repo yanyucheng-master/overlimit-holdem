@@ -1259,6 +1259,40 @@ async function buttonHitAudit(page, scopeSelector) {
   }, scopeSelector);
 }
 
+async function skillLabSelectionState(page) {
+  return page.evaluate(() => {
+    const selected = [...document.querySelectorAll("#skill-lab-catalog .skill-card.selected")];
+    const save = document.getElementById("btn-save-loadout");
+    const meter = document.getElementById("lab-load-meter")?.textContent.trim() || "";
+    const meterNumbers = meter.match(/\d+/g) || [];
+    const load = Number(meterNumbers.length >= 3 ? meterNumbers.at(-2) : NaN);
+    const rect = (node) => node?.getBoundingClientRect() || null;
+    const overlaps = (left, right) => Boolean(
+      left && right &&
+      left.left < right.right - 1 &&
+      left.right > right.left + 1 &&
+      left.top < right.bottom - 1 &&
+      left.bottom > right.top + 1
+    );
+    return {
+      selectedIds: selected.map((card) => card.dataset.skillId).sort(),
+      meter,
+      load,
+      saveEnabled: Boolean(save && !save.disabled),
+      status: document.getElementById("skill-lab-status")?.textContent.trim() || "",
+      hint: document.getElementById("skill-lab-hint")?.textContent.trim() || "",
+      selectedHeadersClear: selected.every((card) => {
+        const name = rect(card.querySelector("strong"));
+        const marker = rect(card.querySelector(".skill-selection-mark"));
+        const zoom = rect(card.querySelector(".skill-zoom-button"));
+        return !overlaps(name, marker) && !overlaps(name, zoom) && !overlaps(marker, zoom);
+      }),
+      pageOverflowX: document.documentElement.scrollWidth > innerWidth + 1,
+      pageOverflowY: document.documentElement.scrollHeight > innerHeight + 1,
+    };
+  });
+}
+
 async function main() {
   const browser = await chromium.launch(playwrightRuntime.chromiumLaunchOptions({ headless: true }));
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
@@ -1659,8 +1693,18 @@ async function main() {
   report.lab.previewOpened = await visible(page, "#skill-preview-modal:not(.hidden)");
   report.lab.zoomDidNotSelect =
     selectedBeforeZoom === (await page.locator("#skill-lab-catalog .skill-card.selected").count());
-  await page.click("#btn-close-skill-preview");
+  await page.keyboard.press("Escape");
   report.lab.previewClosed = !(await visible(page, "#skill-preview-modal:not(.hidden)"));
+  report.lab.escapeLayerPriority = await visible(page, "#screen-skill-lab.active");
+  await page.keyboard.press("Escape");
+  await page.waitForSelector("#screen-auth.active");
+  report.lab.escapeBack = await page.evaluate(() => ({
+    lobbyActive: document.getElementById("screen-auth")?.classList.contains("active") || false,
+    skillLabActive: document.getElementById("screen-skill-lab")?.classList.contains("active") || false,
+    screen: document.body.dataset.screen || "",
+  }));
+  await page.click("#btn-open-skill-lab");
+  await page.waitForSelector("#screen-skill-lab.active");
   report.lab.hitAudit = await buttonHitAudit(page, "#screen-skill-lab");
   report.lab.settingsHidden = await page.evaluate(() => {
     const settings = document.getElementById("btn-settings");
@@ -1677,6 +1721,28 @@ async function main() {
     visibleCards: document.querySelectorAll("#skill-lab-catalog .skill-card").length,
   }));
   await page.click('#skill-lab-filters [data-skill-filter="all"]');
+
+  await page.click("#btn-clear-loadout");
+  await page.click('#skill-lab-catalog .skill-card[data-skill-id="DEEP_BREATH"] .skill-card-select');
+  report.lab.oneSkill = await skillLabSelectionState(page);
+  await page.click("#btn-save-loadout");
+  await page.waitForSelector("#screen-auth.active");
+  report.lab.oneSkill.saved = await page.evaluate(() => {
+    try {
+      return JSON.parse(localStorage.getItem("abyss_skill_loadout_v2") || "[]");
+    } catch (_error) {
+      return null;
+    }
+  });
+  await page.click("#btn-open-skill-lab");
+  await page.waitForSelector("#screen-skill-lab.active");
+  report.lab.oneSkill.reopened = await skillLabSelectionState(page);
+
+  await page.click("#btn-clear-loadout");
+  for (const skillId of ["ALERT", "DEEP_BREATH", "PROBE"]) {
+    await page.click(`#skill-lab-catalog .skill-card[data-skill-id="${skillId}"] .skill-card-select`);
+  }
+  report.lab.threeSkill = await skillLabSelectionState(page);
 
   await page.click("#btn-clear-loadout");
   for (const skillId of LOADOUT) {
@@ -2174,6 +2240,14 @@ async function main() {
   if (!report.lab.previewOpened || !report.lab.previewClosed || !report.lab.zoomDidNotSelect) {
     failures.push("skill preview interaction failed");
   }
+  if (
+    !report.lab.escapeLayerPriority ||
+    !report.lab.escapeBack.lobbyActive ||
+    report.lab.escapeBack.skillLabActive ||
+    report.lab.escapeBack.screen !== "auth"
+  ) {
+    failures.push("skill lab Escape navigation or modal priority failed");
+  }
   if (report.lab.hitAudit.failures.length) failures.push("skill lab button hit targets blocked");
   if (!report.lab.settingsHidden) failures.push("global settings control remains visible in the skill lab");
   if (
@@ -2183,6 +2257,33 @@ async function main() {
     report.lab.filterReset.visibleCards >= report.lab.cards
   ) {
     failures.push("skill lab category filter did not replace and reset the internal catalog");
+  }
+  if (
+    JSON.stringify(report.lab.oneSkill.selectedIds) !== JSON.stringify(["DEEP_BREATH"]) ||
+    report.lab.oneSkill.load !== 1 ||
+    !report.lab.oneSkill.saveEnabled ||
+    !report.lab.oneSkill.status.includes("构筑有效") ||
+    report.lab.oneSkill.hint !== "1–4 个 · 负载 ≤ 8" ||
+    !report.lab.oneSkill.selectedHeadersClear ||
+    report.lab.oneSkill.pageOverflowX ||
+    report.lab.oneSkill.pageOverflowY ||
+    JSON.stringify(report.lab.oneSkill.saved) !== JSON.stringify(["DEEP_BREATH"]) ||
+    JSON.stringify(report.lab.oneSkill.reopened.selectedIds) !== JSON.stringify(["DEEP_BREATH"]) ||
+    report.lab.oneSkill.reopened.load !== 1 ||
+    !report.lab.oneSkill.reopened.saveEnabled
+  ) {
+    failures.push("one-skill loadout save or reopen failed");
+  }
+  if (
+    JSON.stringify(report.lab.threeSkill.selectedIds) !== JSON.stringify(["ALERT", "DEEP_BREATH", "PROBE"]) ||
+    report.lab.threeSkill.load !== 3 ||
+    !report.lab.threeSkill.saveEnabled ||
+    !report.lab.threeSkill.status.includes("构筑有效") ||
+    !report.lab.threeSkill.selectedHeadersClear ||
+    report.lab.threeSkill.pageOverflowX ||
+    report.lab.threeSkill.pageOverflowY
+  ) {
+    failures.push("three-skill loadout validation failed");
   }
   if (report.lab.selected !== 4 || !report.lab.saveEnabled) failures.push("four-skill loadout failed");
   if (

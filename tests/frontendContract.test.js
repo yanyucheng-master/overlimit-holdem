@@ -36,6 +36,16 @@ describe("frontend DOM contract", () => {
     expect(missing).toEqual([]);
   });
 
+  test("技能构筑玩家文案与 1–4 / 负载 8 配置保持一致", () => {
+    expect(html).toContain('id="skill-lab-hint" class="protocol-summary">1–4 个 · 负载 ≤ 8</p>');
+    expect(html).toContain('id="draft-status" class="panel-tip">选择 1–4 个技能，总负载不超过 8。</p>');
+    expect(html).not.toMatch(/2[–—-]4\s*个/);
+    expect(client).toContain('skillLabHint: byId("skill-lab-hint")');
+    expect(client).toContain("function currentSkillBuildLimits()");
+    expect(client).toContain("function skillBuildRuleText");
+    expect(client).toContain("el.skillLabHint.textContent = skillBuildRuleText({ compact: true })");
+  });
+
   test("所有静态按钮均声明 type 且不存在按钮嵌套", () => {
     const buttonTags = [...html.matchAll(/<button\b[^>]*>/g)].map((match) => match[0]);
     expect(buttonTags.length).toBeGreaterThan(30);

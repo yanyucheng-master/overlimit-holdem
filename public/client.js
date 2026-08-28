@@ -397,6 +397,7 @@ const el = {
   skillPrepStatus: byId("skill-prep-status"),
   skillLabCatalog: byId("skill-lab-catalog"),
   skillLabFilters: byId("skill-lab-filters"),
+  skillLabHint: byId("skill-lab-hint"),
   skillLabStatus: byId("skill-lab-status"),
   labLoadMeter: byId("lab-load-meter"),
   lobbyConnection: byId("lobby-connection"),
@@ -3075,10 +3076,27 @@ function loadSavedLoadout() {
   }
 }
 
+function currentSkillBuildLimits() {
+  return {
+    minEquipped: state.skillConfig.minEquipped ?? 1,
+    maxEquipped: state.skillConfig.maxEquipped || 4,
+    maxLoad: state.skillConfig.maxLoad || 8,
+  };
+}
+
+function skillBuildRuleText({ compact = false } = {}) {
+  const { minEquipped, maxEquipped, maxLoad } = currentSkillBuildLimits();
+  return compact
+    ? `${minEquipped}–${maxEquipped} 个 · 负载 ≤ ${maxLoad}`
+    : `选择 ${minEquipped}–${maxEquipped} 个技能，总负载不超过 ${maxLoad}。`;
+}
+
 function validateLoadoutIds(ids, catalog = state.skillCatalog) {
-  const min = state.skillConfig.minEquipped ?? 1;
-  const max = state.skillConfig.maxEquipped || 4;
-  const maxLoad = state.skillConfig.maxLoad || 8;
+  const {
+    minEquipped: min,
+    maxEquipped: max,
+    maxLoad,
+  } = currentSkillBuildLimits();
   if (!Array.isArray(ids) || ids.length < min || ids.length > max) {
     return { ok: false, load: 0, error: `请选择 ${min}–${max} 个技能` };
   }
@@ -3122,11 +3140,12 @@ function updateSkillPrepUi() {
   const validation = validateLoadoutIds(state.savedLoadout);
   const ready = validation.ok;
   const load = validation.load || 0;
+  const { maxLoad } = currentSkillBuildLimits();
   const invalidSavedBuild = state.savedLoadout.length > 0 && state.skillCatalogStatus === "ready" && !ready;
   if (el.skillPrepStatus) {
     el.skillPrepStatus.classList.toggle("ready", ready);
     el.skillPrepStatus.textContent = ready
-      ? `已配置 ${state.savedLoadout.length} 技能 · 负载 ${load}/8`
+      ? `已配置 ${state.savedLoadout.length} 技能 · 负载 ${load}/${maxLoad}`
       : invalidSavedBuild
         ? "构筑失效 · 请重新配置"
       : state.skillCatalogStatus === "error"
@@ -3170,6 +3189,11 @@ function openSkillLab(pendingAction = null) {
 function closeSkillLab() {
   showScreen("auth");
   updateSkillPrepUi();
+}
+
+function returnFromSkillLab() {
+  state.pendingRoomAction = null;
+  closeSkillLab();
 }
 
 async function ensureSkillCatalog() {
@@ -3457,6 +3481,7 @@ function renderSkillLabFilters() {
 function renderSkillLab() {
   if (!el.skillLabCatalog) return;
   renderSkillLabFilters();
+  const { maxEquipped, maxLoad } = currentSkillBuildLimits();
   const validation = validateLoadoutIds(state.selectedLoadout);
   const load = state.selectedLoadout.reduce((sum, id) => {
     const def = state.skillCatalog.find((skill) => skill.id === id);
@@ -3465,9 +3490,10 @@ function renderSkillLab() {
   const selectedNames = state.selectedLoadout
     .map((id) => state.skillCatalog.find((skill) => skill.id === id)?.name)
     .filter(Boolean);
+  if (el.skillLabHint) el.skillLabHint.textContent = skillBuildRuleText({ compact: true });
   if (el.labLoadMeter) {
     el.labLoadMeter.textContent =
-      state.selectedLoadout.length + " 项 · " + load + " / " + (state.skillConfig.maxLoad || 8);
+      state.selectedLoadout.length + " 项 · " + load + " / " + maxLoad;
   }
   if (el.skillLabStatus) {
     const selectionSummary = selectedNames.length
@@ -3475,7 +3501,7 @@ function renderSkillLab() {
       : "尚未选择技能";
     el.skillLabStatus.textContent = validation.ok
       ? selectionSummary + "。构筑有效，可保存。"
-      : selectionSummary + " · " + (validation.error || `选择 ${state.skillConfig.minEquipped ?? 1}–${state.skillConfig.maxEquipped || 4} 个技能，总负载不超过 8。`);
+      : selectionSummary + " · " + (validation.error || skillBuildRuleText());
   }
   if (el.btnSaveLoadout) el.btnSaveLoadout.disabled = !validation.ok;
   el.skillLabCatalog.textContent = "";
@@ -3495,10 +3521,10 @@ function renderSkillLab() {
       onSelect: () => {
       const idx = state.selectedLoadout.indexOf(skill.id);
       if (idx >= 0) state.selectedLoadout.splice(idx, 1);
-      else if (state.selectedLoadout.length >= (state.skillConfig.maxEquipped || 4)) {
-        showToast("最多装备 " + (state.skillConfig.maxEquipped || 4) + " 个技能", "error");
+      else if (state.selectedLoadout.length >= maxEquipped) {
+        showToast("最多装备 " + maxEquipped + " 个技能", "error");
         return;
-      } else if (loadoutLoad([...state.selectedLoadout, skill.id]) > (state.skillConfig.maxLoad || 8)) {
+      } else if (loadoutLoad([...state.selectedLoadout, skill.id]) > maxLoad) {
         showToast("负载已达上限", "error");
         return;
       } else {
@@ -3834,8 +3860,7 @@ el.btnOpenSkillLab?.addEventListener("click", async () => {
   }
 });
 el.btnBackSkillLab?.addEventListener("click", () => {
-  state.pendingRoomAction = null;
-  closeSkillLab();
+  returnFromSkillLab();
 });
 el.btnSaveLoadout?.addEventListener("click", saveLoadoutFromLab);
 el.btnClearLoadout?.addEventListener("click", () => {
@@ -5036,6 +5061,11 @@ document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;
   setRaiseExpanded(false);
   if (!top) {
+    if (el.skillLab?.classList.contains("active")) {
+      event.preventDefault();
+      returnFromSkillLab();
+      return;
+    }
     if (isNullifyTargeting()) cancelNullifyTargeting();
     return;
   }
@@ -5632,20 +5662,21 @@ function renderSkillDraft() {
     : [];
   const draftIds = confirmed && equippedIds.length ? equippedIds : state.selectedLoadout;
   const load = loadoutLoad(draftIds);
+  const { minEquipped, maxEquipped, maxLoad } = currentSkillBuildLimits();
   el.skillDraftPanel.classList.toggle("is-confirmed", confirmed);
-  el.draftLoadMeter.textContent = load + " / 8 · " + draftIds.length + " / 4";
+  el.draftLoadMeter.textContent = load + " / " + maxLoad + " · " + draftIds.length + " / " + maxEquipped;
   el.draftStatus.textContent = invalidBuild
     ? "当前技能构筑包含重复或无效技能，请重新配置。"
     : confirmed
     ? "构筑已确认，等待对手…"
-    : `选择 ${state.skillConfig.minEquipped ?? 1}–${state.skillConfig.maxEquipped || 4} 个技能，总负载不超过 8。`;
+    : skillBuildRuleText();
   el.btnConfirmLoadout.disabled =
     confirmed ||
     !socket.connected ||
     state.uiPending.loadout ||
-    state.selectedLoadout.length < (state.skillConfig.minEquipped ?? 1) ||
-    state.selectedLoadout.length > (state.skillConfig.maxEquipped || 4) ||
-    load > 8;
+    state.selectedLoadout.length < minEquipped ||
+    state.selectedLoadout.length > maxEquipped ||
+    load > maxLoad;
   el.btnConfirmLoadout.classList.toggle("hidden", confirmed);
   el.skillCatalog.textContent = "";
   const visibleSkills = confirmed
@@ -5659,7 +5690,7 @@ function renderSkillDraft() {
       if (confirmed) return;
       const idx = state.selectedLoadout.indexOf(skill.id);
       if (idx >= 0) state.selectedLoadout.splice(idx, 1);
-      else if (state.selectedLoadout.length < 4 && loadoutLoad([...state.selectedLoadout, skill.id]) <= 8) {
+      else if (state.selectedLoadout.length < maxEquipped && loadoutLoad([...state.selectedLoadout, skill.id]) <= maxLoad) {
         state.selectedLoadout.push(skill.id);
       } else {
         showToast("负载或数量已达上限", "error");
