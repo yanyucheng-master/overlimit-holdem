@@ -491,18 +491,57 @@
       role="dialog"
       aria-modal="true"
       aria-labelledby="quickstart-image-title"
-      aria-describedby="quickstart-image-caption"
+      aria-describedby="quickstart-image-caption quickstart-image-help"
     >
       <section class="modal-panel quickstart-image-viewer" tabindex="-1">
         <header class="quickstart-image-header">
-          <div>
+          <div class="quickstart-image-heading">
             <span>IMAGE REVIEW</span>
             <strong id="quickstart-image-title">教程图片</strong>
           </div>
-          <button id="btn-close-quickstart-image" class="icon-button quickstart-image-close" type="button" aria-label="关闭放大图片">×</button>
+          <div class="quickstart-image-actions">
+            <div class="quickstart-image-zoom-controls" role="group" aria-label="图片缩放控制">
+              <button
+                id="btn-quickstart-image-zoom-out"
+                class="quickstart-image-tool"
+                type="button"
+                aria-label="缩小图片"
+                title="缩小"
+              >
+                −
+              </button>
+              <button
+                id="btn-quickstart-image-reset"
+                class="quickstart-image-tool quickstart-image-reset"
+                type="button"
+                aria-label="重置图片缩放，当前 100%"
+                title="重置缩放"
+              >
+                <span id="quickstart-image-scale" aria-hidden="true">100%</span>
+              </button>
+              <button
+                id="btn-quickstart-image-zoom-in"
+                class="quickstart-image-tool"
+                type="button"
+                aria-label="放大图片"
+                title="放大"
+              >
+                +
+              </button>
+            </div>
+            <button id="btn-close-quickstart-image" class="icon-button quickstart-image-close" type="button" aria-label="关闭放大图片">×</button>
+          </div>
         </header>
-        <figure class="quickstart-image-stage">
+        <figure
+          id="quickstart-image-stage"
+          class="quickstart-image-stage"
+          role="group"
+          aria-label="教程图片查看器。可使用滚轮或双指缩放，放大后拖动查看。"
+          aria-keyshortcuts="+ - 0"
+          tabindex="0"
+        >
           <img id="quickstart-image-expanded" alt="" decoding="async" draggable="false" />
+          <p id="quickstart-image-help" class="quickstart-image-help">滚轮 / 双指缩放 · 放大后拖动查看</p>
           <figcaption id="quickstart-image-caption">点击图片外区域或按 Esc 关闭</figcaption>
         </figure>
       </section>

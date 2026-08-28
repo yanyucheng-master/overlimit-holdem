@@ -49,6 +49,59 @@ async function skillGeometry(page) {
   });
 }
 
+async function passiveSkillLabelAudit(page, viewport) {
+  await page.setViewportSize(viewport);
+  await page.waitForTimeout(120);
+  return page.evaluate((requestedViewport) => {
+    const button = document.querySelector("#skill-bar .skill-use-btn.is-passive");
+    const label = button?.querySelector(".skill-use-label");
+    const name = label?.querySelector(".skill-use-name");
+    const passiveTag = label?.querySelector(".skill-use-passive");
+    const zoom = button?.closest(".skill-slot")?.querySelector(".skill-zoom-button");
+    const activeButtons = [...document.querySelectorAll("#skill-bar .skill-use-btn.is-active")];
+    const rect = (node) => node?.getBoundingClientRect() || null;
+    const buttonRect = rect(button);
+    const labelRect = rect(label);
+    const nameRect = rect(name);
+    const tagRect = rect(passiveTag);
+    const zoomRect = rect(zoom);
+    const overlaps = (left, right) => Boolean(
+      left &&
+      right &&
+      left.right > right.left + 1 &&
+      left.left < right.right - 1 &&
+      left.bottom > right.top + 1 &&
+      left.top < right.bottom - 1
+    );
+    return {
+      viewport: requestedViewport,
+      found: Boolean(button && label && name && passiveTag),
+      text: passiveTag?.textContent?.trim() || "",
+      inlineAfterName: Boolean(name && passiveTag && passiveTag.previousElementSibling === name),
+      sameLine: Boolean(
+        nameRect &&
+        tagRect &&
+        Math.abs((nameRect.top + nameRect.bottom) / 2 - (tagRect.top + tagRect.bottom) / 2) <= 2
+      ),
+      insideButton: Boolean(
+        buttonRect &&
+        labelRect &&
+        labelRect.left >= buttonRect.left - 1 &&
+        labelRect.right <= buttonRect.right + 1 &&
+        labelRect.top >= buttonRect.top - 1 &&
+        labelRect.bottom <= buttonRect.bottom + 1
+      ),
+      clearOfZoom: !overlaps(tagRect, zoomRect),
+      noDetachedCostBadge: !button?.querySelector(".skill-use-cost"),
+      activeCostsPreserved: activeButtons.length > 0 && activeButtons.every(
+        (activeButton) => Boolean(activeButton.querySelector(":scope > .skill-use-cost"))
+      ),
+      ariaLabel: button?.getAttribute("aria-label") || "",
+      pageOverflows: document.documentElement.scrollWidth > innerWidth + 1,
+    };
+  }, viewport);
+}
+
 async function phoneTableLayout(page) {
   return page.evaluate(() => {
     const dock = document.querySelector(".action-dock")?.getBoundingClientRect();
@@ -201,6 +254,14 @@ async function skillCountLayoutAudit(page, viewport) {
       const selfCardBounds = selfCards?.getBoundingClientRect();
       const clockBounds = turnClock?.getBoundingClientRect();
       const communityBounds = community?.getBoundingClientRect();
+      const clockStyle = turnClock ? getComputedStyle(turnClock) : null;
+      const clockTrayHorizontalGap = clockBounds
+        ? Math.max(clockBounds.left - trayBounds.right, trayBounds.left - clockBounds.right, 0)
+        : 0;
+      const clockTrayVerticalGap = clockBounds
+        ? Math.max(clockBounds.top - trayBounds.bottom, trayBounds.top - clockBounds.bottom, 0)
+        : 0;
+      const clockTrayClearance = Math.max(clockTrayHorizontalGap, clockTrayVerticalGap);
       const criticalRects = {
         actionDock: dockBounds,
         selfZone: selfBounds,
@@ -245,6 +306,37 @@ async function skillCountLayoutAudit(page, viewport) {
           trayBounds.top >= boardBounds.top - 1 &&
           trayBounds.bottom <= boardBounds.bottom + 1
         ),
+        clockVisible: Boolean(
+          clockBounds &&
+          clockStyle &&
+          clockStyle.display !== "none" &&
+          clockStyle.visibility !== "hidden" &&
+          Number.parseFloat(clockStyle.opacity || "1") > 0 &&
+          clockBounds.width > 1 &&
+          clockBounds.height > 1
+        ),
+        clockInsideBoard: Boolean(
+          boardBounds &&
+          clockBounds &&
+          clockBounds.left >= boardBounds.left - 1 &&
+          clockBounds.right <= boardBounds.right + 1 &&
+          clockBounds.top >= boardBounds.top - 1 &&
+          clockBounds.bottom <= boardBounds.bottom + 1
+        ),
+        clockClearOfTray: Boolean(
+          clockBounds &&
+          !overlaps(trayBounds, clockBounds) &&
+          clockTrayClearance >= 12
+        ),
+        clockTrayClearance,
+        clock: clockBounds
+          ? {
+              left: clockBounds.left,
+              top: clockBounds.top,
+              right: clockBounds.right,
+              bottom: clockBounds.bottom,
+            }
+          : null,
         clearOfCriticalUi: criticalOverlaps.length === 0,
         criticalOverlaps,
       });
@@ -1248,6 +1340,7 @@ async function main() {
     const tutorial = document.getElementById("quickstart-modal");
     const source = document.querySelector('[data-quickstart-page="1"] [data-quickstart-zoom] img');
     const expanded = document.getElementById("quickstart-image-expanded");
+    const stage = document.getElementById("quickstart-image-stage");
     const sourceRect = source?.getBoundingClientRect();
     const expandedRect = expanded?.getBoundingClientRect();
     return {
@@ -1258,6 +1351,13 @@ async function main() {
       caption: document.getElementById("quickstart-image-caption")?.textContent || "",
       tutorialCovered: Boolean(tutorial?.inert && tutorial.getAttribute("aria-hidden") === "true"),
       closeFocused: document.activeElement?.id === "btn-close-quickstart-image",
+      controls: document.querySelectorAll(".quickstart-image-zoom-controls button").length,
+      scale: Number(stage?.dataset.zoomScale || 0),
+      scaleText: document.getElementById("quickstart-image-scale")?.textContent || "",
+      zoomOutDisabled: Boolean(document.getElementById("btn-quickstart-image-zoom-out")?.disabled),
+      touchAction: stage ? getComputedStyle(stage).touchAction : "",
+      stageLabel: stage?.getAttribute("aria-label") || "",
+      expandedWidth: expandedRect?.width || 0,
       expandedOnDesktop: Boolean(sourceRect && expandedRect && expandedRect.width > sourceRect.width * 1.25),
       insideViewport: Boolean(
         expandedRect &&
@@ -1268,6 +1368,164 @@ async function main() {
       ),
     };
   });
+  const quickstartImageStage = await page.locator("#quickstart-image-stage").boundingBox();
+  if (!quickstartImageStage) throw new Error("quickstart image stage is not measurable");
+  await page.mouse.move(
+    quickstartImageStage.x + quickstartImageStage.width * 0.72,
+    quickstartImageStage.y + quickstartImageStage.height * 0.52
+  );
+  await page.mouse.wheel(0, -520);
+  await page.waitForFunction(
+    () => Number(document.getElementById("quickstart-image-stage")?.dataset.zoomScale || 0) > 1.5
+  );
+  await page.waitForTimeout(140);
+  report.quickstart.imageWheelZoom = await page.evaluate(() => {
+    const stage = document.getElementById("quickstart-image-stage");
+    const image = document.getElementById("quickstart-image-expanded");
+    const rect = image?.getBoundingClientRect();
+    return {
+      scale: Number(stage?.dataset.zoomScale || 0),
+      scaleText: document.getElementById("quickstart-image-scale")?.textContent || "",
+      zoomedClass: stage?.classList.contains("is-zoomed") || false,
+      imageWidth: rect?.width || 0,
+      pageScrollX: window.scrollX,
+      pageScrollY: window.scrollY,
+    };
+  });
+  const panBeforeMouseDrag = await page.evaluate(() => ({
+    x: Number(document.getElementById("quickstart-image-stage")?.dataset.panX || 0),
+    y: Number(document.getElementById("quickstart-image-stage")?.dataset.panY || 0),
+  }));
+  await page.mouse.move(
+    quickstartImageStage.x + quickstartImageStage.width * 0.5,
+    quickstartImageStage.y + quickstartImageStage.height * 0.5
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    quickstartImageStage.x + quickstartImageStage.width * 0.5 + 64,
+    quickstartImageStage.y + quickstartImageStage.height * 0.5 + 28,
+    { steps: 4 }
+  );
+  await page.mouse.up();
+  report.quickstart.imageMouseDrag = await page.evaluate((before) => {
+    const stage = document.getElementById("quickstart-image-stage");
+    const after = {
+      x: Number(stage?.dataset.panX || 0),
+      y: Number(stage?.dataset.panY || 0),
+    };
+    return {
+      before,
+      after,
+      changed: Math.abs(after.x - before.x) > 1 || Math.abs(after.y - before.y) > 1,
+      released: !stage?.classList.contains("is-interacting"),
+    };
+  }, panBeforeMouseDrag);
+  await page.click("#btn-quickstart-image-reset");
+  await page.waitForFunction(
+    () => document.getElementById("quickstart-image-stage")?.dataset.zoomScale === "1.000"
+  );
+  report.quickstart.imageReset = await page.evaluate(() => {
+    const stage = document.getElementById("quickstart-image-stage");
+    return {
+      scale: Number(stage?.dataset.zoomScale || 0),
+      panX: Number(stage?.dataset.panX || 0),
+      panY: Number(stage?.dataset.panY || 0),
+      scaleText: document.getElementById("quickstart-image-scale")?.textContent || "",
+      zoomedClass: stage?.classList.contains("is-zoomed") || false,
+    };
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.waitForTimeout(80);
+  await page.evaluate(() => {
+    const stage = document.getElementById("quickstart-image-stage");
+    const rect = stage.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    const fire = (type, pointerId, clientX, clientY, buttons) => {
+      stage.dispatchEvent(new PointerEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        pointerId,
+        pointerType: "touch",
+        isPrimary: pointerId === 41,
+        clientX,
+        clientY,
+        button: 0,
+        buttons,
+      }));
+    };
+    fire("pointerdown", 41, centerX - 36, centerY, 1);
+    fire("pointerdown", 42, centerX + 36, centerY, 1);
+    fire("pointermove", 41, centerX - 82, centerY - 6, 1);
+    fire("pointermove", 42, centerX + 82, centerY + 6, 1);
+    fire("pointerup", 41, centerX - 82, centerY - 6, 0);
+    fire("pointerup", 42, centerX + 82, centerY + 6, 0);
+  });
+  await page.waitForFunction(
+    () => Number(document.getElementById("quickstart-image-stage")?.dataset.zoomScale || 0) > 1.8
+  );
+  report.quickstart.imagePinchZoom = await page.evaluate(() => {
+    const modal = document.getElementById("quickstart-image-modal");
+    const viewer = modal?.querySelector(".quickstart-image-viewer");
+    const stage = document.getElementById("quickstart-image-stage");
+    const viewerRect = viewer?.getBoundingClientRect();
+    return {
+      scale: Number(stage?.dataset.zoomScale || 0),
+      scaleText: document.getElementById("quickstart-image-scale")?.textContent || "",
+      touchAction: stage ? getComputedStyle(stage).touchAction : "",
+      released: !stage?.classList.contains("is-interacting"),
+      noHorizontalOverflow: document.documentElement.scrollWidth <= window.innerWidth + 1,
+      viewerInsideViewport: Boolean(
+        viewerRect &&
+        viewerRect.left >= 0 &&
+        viewerRect.right <= window.innerWidth &&
+        viewerRect.top >= 0 &&
+        viewerRect.bottom <= window.innerHeight
+      ),
+    };
+  });
+  const panBeforeTouchDrag = await page.evaluate(() => ({
+    x: Number(document.getElementById("quickstart-image-stage")?.dataset.panX || 0),
+    y: Number(document.getElementById("quickstart-image-stage")?.dataset.panY || 0),
+  }));
+  await page.evaluate(() => {
+    const stage = document.getElementById("quickstart-image-stage");
+    const rect = stage.getBoundingClientRect();
+    const startX = rect.left + rect.width / 2;
+    const startY = rect.top + rect.height / 2;
+    const fire = (type, clientX, clientY, buttons) => {
+      stage.dispatchEvent(new PointerEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        pointerId: 51,
+        pointerType: "touch",
+        isPrimary: true,
+        clientX,
+        clientY,
+        button: 0,
+        buttons,
+      }));
+    };
+    fire("pointerdown", startX, startY, 1);
+    fire("pointermove", startX + 54, startY + 26, 1);
+    fire("pointerup", startX + 54, startY + 26, 0);
+  });
+  report.quickstart.imageTouchDrag = await page.evaluate((before) => {
+    const stage = document.getElementById("quickstart-image-stage");
+    const after = {
+      x: Number(stage?.dataset.panX || 0),
+      y: Number(stage?.dataset.panY || 0),
+    };
+    return {
+      before,
+      after,
+      changed: Math.abs(after.x - before.x) > 1 || Math.abs(after.y - before.y) > 1,
+      released: !stage?.classList.contains("is-interacting"),
+    };
+  }, panBeforeTouchDrag);
+  await page.click("#btn-quickstart-image-reset");
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.waitForTimeout(80);
   await page.keyboard.press("Escape");
   await page.waitForSelector("#quickstart-image-modal", { state: "hidden", timeout: 5000 });
   await page.waitForFunction(() => document.activeElement?.matches?.("[data-quickstart-zoom]"));
@@ -1281,6 +1539,7 @@ async function main() {
   report.quickstart.imageZoomKeyboard = await page.evaluate(() => ({
     opened: !document.getElementById("quickstart-image-modal")?.classList.contains("hidden"),
     closeFocused: document.activeElement?.id === "btn-close-quickstart-image",
+    resetOnReopen: document.getElementById("quickstart-image-stage")?.dataset.zoomScale === "1.000",
   }));
   await page.click("#btn-close-quickstart-image");
   await page.waitForSelector("#quickstart-image-modal", { state: "hidden", timeout: 5000 });
@@ -1403,6 +1662,21 @@ async function main() {
   await page.click("#btn-close-skill-preview");
   report.lab.previewClosed = !(await visible(page, "#skill-preview-modal:not(.hidden)"));
   report.lab.hitAudit = await buttonHitAudit(page, "#screen-skill-lab");
+  report.lab.settingsHidden = await page.evaluate(() => {
+    const settings = document.getElementById("btn-settings");
+    return !settings || getComputedStyle(settings).display === "none";
+  });
+  await page.evaluate(() => {
+    const catalog = document.getElementById("skill-lab-catalog");
+    if (catalog) catalog.scrollTop = 180;
+  });
+  await page.click('#skill-lab-filters [data-skill-filter="resource"]');
+  report.lab.filterReset = await page.evaluate(() => ({
+    active: document.querySelector("#skill-lab-filters .is-active")?.dataset.skillFilter || "",
+    scrollTop: document.getElementById("skill-lab-catalog")?.scrollTop ?? -1,
+    visibleCards: document.querySelectorAll("#skill-lab-catalog .skill-card").length,
+  }));
+  await page.click('#skill-lab-filters [data-skill-filter="all"]');
 
   await page.click("#btn-clear-loadout");
   for (const skillId of LOADOUT) {
@@ -1427,6 +1701,10 @@ async function main() {
         unselectedStyle && selectedStyles.every((style) => style.backgroundImage !== unselectedStyle.backgroundImage)
       ),
       glowVisible: selectedStyles.every((style) => style.boxShadow !== "none"),
+      insetOnly: selectedStyles.every(
+        (style) => (style.boxShadow.match(/\binset\b/g) || []).length >= 2
+      ),
+      noTextGlow: selected.every((card) => getComputedStyle(card.querySelector("strong")).textShadow === "none"),
     };
   });
   report.lab.saveEnabled = await page.locator("#btn-save-loadout").isEnabled();
@@ -1603,6 +1881,13 @@ async function main() {
   report.game.skillCounts = report.game.desktopSkillCounts.find(
     (entry) => entry.viewport.width === 1440 && entry.viewport.height === 900
   );
+  report.game.passiveLabels = [];
+  for (const viewport of [
+    { width: 1440, height: 900 },
+    { width: 320, height: 700 },
+  ]) {
+    report.game.passiveLabels.push(await passiveSkillLabelAudit(page, viewport));
+  }
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.waitForTimeout(120);
   report.game.hitAudit = await buttonHitAudit(page, "#screen-game");
@@ -1805,13 +2090,41 @@ async function main() {
     !report.quickstart.imageZoomOpen.caption ||
     !report.quickstart.imageZoomOpen.tutorialCovered ||
     !report.quickstart.imageZoomOpen.closeFocused ||
+    report.quickstart.imageZoomOpen.controls !== 3 ||
+    report.quickstart.imageZoomOpen.scale !== 1 ||
+    report.quickstart.imageZoomOpen.scaleText !== "100%" ||
+    !report.quickstart.imageZoomOpen.zoomOutDisabled ||
+    report.quickstart.imageZoomOpen.touchAction !== "none" ||
+    !report.quickstart.imageZoomOpen.stageLabel.includes("双指缩放") ||
     !report.quickstart.imageZoomOpen.expandedOnDesktop ||
     !report.quickstart.imageZoomOpen.insideViewport ||
+    report.quickstart.imageWheelZoom.scale <= 1.5 ||
+    report.quickstart.imageWheelZoom.scale > 4 ||
+    !report.quickstart.imageWheelZoom.zoomedClass ||
+    report.quickstart.imageWheelZoom.imageWidth <= report.quickstart.imageZoomOpen.expandedWidth * 1.5 ||
+    report.quickstart.imageWheelZoom.pageScrollX !== 0 ||
+    report.quickstart.imageWheelZoom.pageScrollY !== 0 ||
+    !report.quickstart.imageMouseDrag.changed ||
+    !report.quickstart.imageMouseDrag.released ||
+    report.quickstart.imageReset.scale !== 1 ||
+    report.quickstart.imageReset.panX !== 0 ||
+    report.quickstart.imageReset.panY !== 0 ||
+    report.quickstart.imageReset.scaleText !== "100%" ||
+    report.quickstart.imageReset.zoomedClass ||
+    report.quickstart.imagePinchZoom.scale <= 1.8 ||
+    report.quickstart.imagePinchZoom.scale > 4 ||
+    report.quickstart.imagePinchZoom.touchAction !== "none" ||
+    !report.quickstart.imagePinchZoom.released ||
+    !report.quickstart.imagePinchZoom.noHorizontalOverflow ||
+    !report.quickstart.imagePinchZoom.viewerInsideViewport ||
+    !report.quickstart.imageTouchDrag.changed ||
+    !report.quickstart.imageTouchDrag.released ||
     !report.quickstart.imageZoomClose.tutorialStillOpen ||
     report.quickstart.imageZoomClose.pageStatus !== "01 / 04" ||
     !report.quickstart.imageZoomClose.focusReturned ||
     !report.quickstart.imageZoomKeyboard.opened ||
     !report.quickstart.imageZoomKeyboard.closeFocused ||
+    !report.quickstart.imageZoomKeyboard.resetOnReopen ||
     report.quickstart.finalPage.pageStatus !== "04 / 04" ||
     report.quickstart.finalPage.finishLabel !== "开始游戏" ||
     !report.quickstart.finalPage.nextCornerHidden ||
@@ -1862,13 +2175,24 @@ async function main() {
     failures.push("skill preview interaction failed");
   }
   if (report.lab.hitAudit.failures.length) failures.push("skill lab button hit targets blocked");
+  if (!report.lab.settingsHidden) failures.push("global settings control remains visible in the skill lab");
+  if (
+    report.lab.filterReset.active !== "resource" ||
+    report.lab.filterReset.scrollTop !== 0 ||
+    report.lab.filterReset.visibleCards < 1 ||
+    report.lab.filterReset.visibleCards >= report.lab.cards
+  ) {
+    failures.push("skill lab category filter did not replace and reset the internal catalog");
+  }
   if (report.lab.selected !== 4 || !report.lab.saveEnabled) failures.push("four-skill loadout failed");
   if (
     report.lab.selectionVisibility.markerCount !== 4 ||
     !report.lab.selectionVisibility.markersVisible ||
     !report.lab.selectionVisibility.borderDistinct ||
     !report.lab.selectionVisibility.backgroundDistinct ||
-    !report.lab.selectionVisibility.glowVisible
+    !report.lab.selectionVisibility.glowVisible ||
+    !report.lab.selectionVisibility.insetOnly ||
+    !report.lab.selectionVisibility.noTextGlow
   ) {
     failures.push("skill selection highlight failed");
   }
@@ -1896,6 +2220,9 @@ async function main() {
           current.rows !== expected.rows ||
           !current.allInside ||
           !current.anchoredInsideBoard ||
+          !current.clockVisible ||
+          !current.clockInsideBoard ||
+          !current.clockClearOfTray ||
           !current.clearOfCriticalUi ||
           current.tray.position !== "absolute" ||
           current.overflows ||
@@ -1915,6 +2242,24 @@ async function main() {
     !report.game.previewOpened
   ) {
     failures.push("game HUD controls failed");
+  }
+  for (const audit of report.game.passiveLabels || []) {
+    if (
+      !audit.found ||
+      audit.text !== "被动" ||
+      !audit.inlineAfterName ||
+      !audit.sameLine ||
+      !audit.insideButton ||
+      !audit.clearOfZoom ||
+      !audit.noDetachedCostBadge ||
+      !audit.activeCostsPreserved ||
+      !audit.ariaLabel.includes("被动技能") ||
+      audit.pageOverflows
+    ) {
+      failures.push(
+        `passive skill label placement failed at ${audit.viewport.width}x${audit.viewport.height}`
+      );
+    }
   }
   const initialRemaining = Number.parseInt(
     report.game.suspectPicker.initialRemaining.replace(/\D+/g, ""),

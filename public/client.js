@@ -25,6 +25,10 @@ const SKILL_FX_STALE_MS = 2500;
 const ALL_IN_STYLES = Object.freeze(["abyss", "verdict", "royal", "singularity"]);
 const PRO_FONT_STYLES = Object.freeze(["broadcast", "neonrail", "chrome", "classic"]);
 const QUICKSTART_PAGE_COUNT = 4;
+const QUICKSTART_IMAGE_MIN_SCALE = 1;
+const QUICKSTART_IMAGE_MAX_SCALE = 4;
+const QUICKSTART_IMAGE_BUTTON_FACTOR = 1.25;
+const QUICKSTART_IMAGE_WHEEL_RATE = 0.0015;
 const RULEBOOK_DATA = window.OVERLIMIT_RULEBOOK_V1 || Object.freeze({ sections: [], skills: [], protocols: [] });
 const RULEBOOK_HIGHLIGHT_MS = 2600;
 const RULEBOOK_MAX_SEARCH_RESULTS = 24;
@@ -299,9 +303,14 @@ const el = {
   btnQuickStartRules: byId("btn-quickstart-rules"),
   btnQuickStartSkills: byId("btn-quickstart-skills"),
   quickStartImageModal: byId("quickstart-image-modal"),
+  quickStartImageStage: byId("quickstart-image-stage"),
   quickStartImageExpanded: byId("quickstart-image-expanded"),
   quickStartImageTitle: byId("quickstart-image-title"),
   quickStartImageCaption: byId("quickstart-image-caption"),
+  quickStartImageScale: byId("quickstart-image-scale"),
+  btnQuickStartImageZoomOut: byId("btn-quickstart-image-zoom-out"),
+  btnQuickStartImageReset: byId("btn-quickstart-image-reset"),
+  btnQuickStartImageZoomIn: byId("btn-quickstart-image-zoom-in"),
   btnCloseQuickStartImage: byId("btn-close-quickstart-image"),
   rulesModal: byId("rules-handbook-modal"),
   btnCloseRules: byId("btn-close-rules"),
@@ -650,6 +659,13 @@ let rulesReadingAnchorId = "rule-overview";
 let quickStartReturnFocus = null;
 let quickStartImageReturnFocus = null;
 let quickStartPointer = null;
+const quickStartImageView = {
+  scale: QUICKSTART_IMAGE_MIN_SCALE,
+  panX: 0,
+  panY: 0,
+};
+const quickStartImagePointers = new Map();
+let quickStartImageGesture = null;
 let skillCatalogPromise = null;
 const uiPendingTimers = new Map();
 const boardPulseTimers = new Map();
@@ -3425,6 +3441,7 @@ function renderSkillLabFilters() {
         if (state.skillLabFilter === filter.id) return;
         state.skillLabFilter = filter.id;
         renderSkillLab();
+        if (el.skillLabCatalog) el.skillLabCatalog.scrollTop = 0;
       });
       el.skillLabFilters.appendChild(button);
     });
@@ -3915,17 +3932,218 @@ function isQuickStartImageOpen() {
   return Boolean(el.quickStartImageModal && !el.quickStartImageModal.classList.contains("hidden"));
 }
 
+function clampQuickStartImageScale(value) {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return QUICKSTART_IMAGE_MIN_SCALE;
+  return Math.max(QUICKSTART_IMAGE_MIN_SCALE, Math.min(QUICKSTART_IMAGE_MAX_SCALE, numeric));
+}
+
+function clampQuickStartImagePan() {
+  const stage = el.quickStartImageStage;
+  const image = el.quickStartImageExpanded;
+  if (!stage || !image) {
+    quickStartImageView.panX = 0;
+    quickStartImageView.panY = 0;
+    return;
+  }
+  const scaledWidth = image.offsetWidth * quickStartImageView.scale;
+  const scaledHeight = image.offsetHeight * quickStartImageView.scale;
+  const maxPanX = Math.max(0, (scaledWidth - stage.clientWidth) / 2);
+  const maxPanY = Math.max(0, (scaledHeight - stage.clientHeight) / 2);
+  quickStartImageView.panX = Math.max(-maxPanX, Math.min(maxPanX, quickStartImageView.panX));
+  quickStartImageView.panY = Math.max(-maxPanY, Math.min(maxPanY, quickStartImageView.panY));
+}
+
+function applyQuickStartImageView() {
+  const stage = el.quickStartImageStage;
+  const image = el.quickStartImageExpanded;
+  if (!stage || !image) return;
+  quickStartImageView.scale = clampQuickStartImageScale(quickStartImageView.scale);
+  clampQuickStartImagePan();
+  const scale = Math.round(quickStartImageView.scale * 1000) / 1000;
+  const panX = Math.round(quickStartImageView.panX * 100) / 100;
+  const panY = Math.round(quickStartImageView.panY * 100) / 100;
+  image.style.transform = `translate3d(${panX}px, ${panY}px, 0) scale(${scale})`;
+  stage.dataset.zoomScale = scale.toFixed(3);
+  stage.dataset.panX = panX.toFixed(2);
+  stage.dataset.panY = panY.toFixed(2);
+  stage.classList.toggle("is-zoomed", scale > QUICKSTART_IMAGE_MIN_SCALE + 0.001);
+  const percentage = `${Math.round(scale * 100)}%`;
+  if (el.quickStartImageScale) el.quickStartImageScale.textContent = percentage;
+  if (el.btnQuickStartImageReset) {
+    el.btnQuickStartImageReset.setAttribute("aria-label", `重置图片缩放，当前 ${percentage}`);
+  }
+  if (el.btnQuickStartImageZoomOut) {
+    el.btnQuickStartImageZoomOut.disabled = scale <= QUICKSTART_IMAGE_MIN_SCALE + 0.001;
+  }
+  if (el.btnQuickStartImageZoomIn) {
+    el.btnQuickStartImageZoomIn.disabled = scale >= QUICKSTART_IMAGE_MAX_SCALE - 0.001;
+  }
+}
+
+function stopQuickStartImageGesture() {
+  const stage = el.quickStartImageStage;
+  if (stage) {
+    quickStartImagePointers.forEach((_point, pointerId) => {
+      try {
+        if (stage.hasPointerCapture?.(pointerId)) stage.releasePointerCapture(pointerId);
+      } catch (_error) {
+        // The operating system can end a touch gesture before capture cleanup runs.
+      }
+    });
+    stage.classList.remove("is-interacting");
+  }
+  quickStartImagePointers.clear();
+  quickStartImageGesture = null;
+}
+
+function resetQuickStartImageView() {
+  stopQuickStartImageGesture();
+  quickStartImageView.scale = QUICKSTART_IMAGE_MIN_SCALE;
+  quickStartImageView.panX = 0;
+  quickStartImageView.panY = 0;
+  applyQuickStartImageView();
+}
+
+function setQuickStartImageScale(value, { clientX, clientY } = {}) {
+  const stage = el.quickStartImageStage;
+  if (!stage) return;
+  const previousScale = quickStartImageView.scale;
+  const nextScale = clampQuickStartImageScale(value);
+  if (Math.abs(nextScale - previousScale) < 0.0001) {
+    applyQuickStartImageView();
+    return;
+  }
+  const stageRect = stage.getBoundingClientRect();
+  const focalX = Number.isFinite(clientX)
+    ? clientX - (stageRect.left + stageRect.width / 2)
+    : 0;
+  const focalY = Number.isFinite(clientY)
+    ? clientY - (stageRect.top + stageRect.height / 2)
+    : 0;
+  const ratio = nextScale / previousScale;
+  quickStartImageView.panX = focalX - (focalX - quickStartImageView.panX) * ratio;
+  quickStartImageView.panY = focalY - (focalY - quickStartImageView.panY) * ratio;
+  quickStartImageView.scale = nextScale;
+  applyQuickStartImageView();
+}
+
+function panQuickStartImageBy(deltaX, deltaY) {
+  if (quickStartImageView.scale <= QUICKSTART_IMAGE_MIN_SCALE + 0.001) return;
+  quickStartImageView.panX += Number(deltaX) || 0;
+  quickStartImageView.panY += Number(deltaY) || 0;
+  applyQuickStartImageView();
+}
+
+function quickStartImagePinchGeometry() {
+  const points = [...quickStartImagePointers.values()].slice(0, 2);
+  if (points.length < 2) return null;
+  const [first, second] = points;
+  return {
+    distance: Math.max(1, Math.hypot(second.x - first.x, second.y - first.y)),
+    x: (first.x + second.x) / 2,
+    y: (first.y + second.y) / 2,
+  };
+}
+
+function beginQuickStartImagePointer(event) {
+  if (!isQuickStartImageOpen()) return;
+  if (event.pointerType === "mouse" && event.button !== 0) return;
+  event.preventDefault();
+  quickStartImagePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  try {
+    el.quickStartImageStage?.setPointerCapture?.(event.pointerId);
+  } catch (_error) {
+    // Pointer capture is optional in older embedded mobile browsers.
+  }
+  el.quickStartImageStage?.classList.add("is-interacting");
+  if (quickStartImagePointers.size >= 2) {
+    const pinch = quickStartImagePinchGeometry();
+    quickStartImageGesture = pinch ? { kind: "pinch", ...pinch } : null;
+  } else {
+    quickStartImageGesture = {
+      kind: "pan",
+      x: event.clientX,
+      y: event.clientY,
+    };
+  }
+}
+
+function moveQuickStartImagePointer(event) {
+  if (!quickStartImagePointers.has(event.pointerId)) return;
+  event.preventDefault();
+  quickStartImagePointers.set(event.pointerId, { x: event.clientX, y: event.clientY });
+  if (quickStartImagePointers.size >= 2) {
+    const nextPinch = quickStartImagePinchGeometry();
+    if (!nextPinch) return;
+    if (!quickStartImageGesture || quickStartImageGesture.kind !== "pinch") {
+      quickStartImageGesture = { kind: "pinch", ...nextPinch };
+      return;
+    }
+    const previousPinch = quickStartImageGesture;
+    const previousScale = quickStartImageView.scale;
+    const nextScale = clampQuickStartImageScale(
+      previousScale * (nextPinch.distance / previousPinch.distance)
+    );
+    const stageRect = el.quickStartImageStage.getBoundingClientRect();
+    const stageCenterX = stageRect.left + stageRect.width / 2;
+    const stageCenterY = stageRect.top + stageRect.height / 2;
+    const previousFocalX = previousPinch.x - stageCenterX;
+    const previousFocalY = previousPinch.y - stageCenterY;
+    const nextFocalX = nextPinch.x - stageCenterX;
+    const nextFocalY = nextPinch.y - stageCenterY;
+    const ratio = nextScale / previousScale;
+    quickStartImageView.panX = nextFocalX - (previousFocalX - quickStartImageView.panX) * ratio;
+    quickStartImageView.panY = nextFocalY - (previousFocalY - quickStartImageView.panY) * ratio;
+    quickStartImageView.scale = nextScale;
+    applyQuickStartImageView();
+    quickStartImageGesture = { kind: "pinch", ...nextPinch };
+    return;
+  }
+  if (!quickStartImageGesture || quickStartImageGesture.kind !== "pan") {
+    quickStartImageGesture = { kind: "pan", x: event.clientX, y: event.clientY };
+    return;
+  }
+  const previous = quickStartImageGesture;
+  panQuickStartImageBy(event.clientX - previous.x, event.clientY - previous.y);
+  quickStartImageGesture = { kind: "pan", x: event.clientX, y: event.clientY };
+}
+
+function endQuickStartImagePointer(event) {
+  if (!quickStartImagePointers.has(event.pointerId)) return;
+  quickStartImagePointers.delete(event.pointerId);
+  try {
+    if (el.quickStartImageStage?.hasPointerCapture?.(event.pointerId)) {
+      el.quickStartImageStage.releasePointerCapture(event.pointerId);
+    }
+  } catch (_error) {
+    // Capture may already be released by the browser after a cancelled gesture.
+  }
+  if (quickStartImagePointers.size >= 2) {
+    const pinch = quickStartImagePinchGeometry();
+    quickStartImageGesture = pinch ? { kind: "pinch", ...pinch } : null;
+  } else if (quickStartImagePointers.size === 1) {
+    const point = [...quickStartImagePointers.values()][0];
+    quickStartImageGesture = { kind: "pan", x: point.x, y: point.y };
+  } else {
+    quickStartImageGesture = null;
+    el.quickStartImageStage?.classList.remove("is-interacting");
+  }
+}
+
 function openQuickStartImage(shot, returnFocus = shot) {
   if (!isQuickStartOpen() || isQuickStartImageOpen() || !shot) return false;
   const source = shot.querySelector("img");
   if (!source || !el.quickStartImageExpanded) return false;
   const title = shot.dataset.quickstartZoomTitle || source.alt || "教程图片";
   quickStartImageReturnFocus = returnFocus && document.contains(returnFocus) ? returnFocus : shot;
+  resetQuickStartImageView();
   el.quickStartImageExpanded.src = source.currentSrc || source.src;
   el.quickStartImageExpanded.alt = source.alt || title;
   if (el.quickStartImageTitle) el.quickStartImageTitle.textContent = title;
   if (el.quickStartImageCaption) el.quickStartImageCaption.textContent = source.alt || title;
   el.quickStartImageModal.classList.remove("hidden");
+  requestAnimationFrame(() => applyQuickStartImageView());
   el.btnCloseQuickStartImage?.focus({ preventScroll: true });
   if (document.activeElement !== el.btnCloseQuickStartImage) {
     requestAnimationFrame(() => el.btnCloseQuickStartImage?.focus({ preventScroll: true }));
@@ -3935,6 +4153,7 @@ function openQuickStartImage(shot, returnFocus = shot) {
 
 function closeQuickStartImage({ restoreFocus = true } = {}) {
   if (!isQuickStartImageOpen()) return false;
+  resetQuickStartImageView();
   el.quickStartImageModal.classList.add("hidden");
   const target = quickStartImageReturnFocus && document.contains(quickStartImageReturnFocus)
     ? quickStartImageReturnFocus
@@ -4111,6 +4330,65 @@ el.quickStartModal?.addEventListener("keydown", (event) => {
 el.btnCloseQuickStartImage?.addEventListener("click", () => closeQuickStartImage());
 el.quickStartImageModal?.addEventListener("click", (event) => {
   if (event.target === el.quickStartImageModal) closeQuickStartImage();
+});
+el.btnQuickStartImageZoomOut?.addEventListener("click", () => {
+  setQuickStartImageScale(quickStartImageView.scale / QUICKSTART_IMAGE_BUTTON_FACTOR);
+});
+el.btnQuickStartImageZoomIn?.addEventListener("click", () => {
+  setQuickStartImageScale(quickStartImageView.scale * QUICKSTART_IMAGE_BUTTON_FACTOR);
+});
+el.btnQuickStartImageReset?.addEventListener("click", () => resetQuickStartImageView());
+el.quickStartImageExpanded?.addEventListener("load", () => {
+  if (isQuickStartImageOpen()) requestAnimationFrame(() => applyQuickStartImageView());
+});
+el.quickStartImageStage?.addEventListener(
+  "wheel",
+  (event) => {
+    if (!isQuickStartImageOpen()) return;
+    event.preventDefault();
+    const deltaUnit = event.deltaMode === 1
+      ? 16
+      : event.deltaMode === 2
+        ? Math.max(1, el.quickStartImageStage.clientHeight)
+        : 1;
+    const zoomFactor = Math.exp(-event.deltaY * deltaUnit * QUICKSTART_IMAGE_WHEEL_RATE);
+    setQuickStartImageScale(quickStartImageView.scale * zoomFactor, {
+      clientX: event.clientX,
+      clientY: event.clientY,
+    });
+  },
+  { passive: false }
+);
+el.quickStartImageStage?.addEventListener("pointerdown", beginQuickStartImagePointer);
+el.quickStartImageStage?.addEventListener("pointermove", moveQuickStartImagePointer);
+el.quickStartImageStage?.addEventListener("pointerup", endQuickStartImagePointer);
+el.quickStartImageStage?.addEventListener("pointercancel", endQuickStartImagePointer);
+el.quickStartImageStage?.addEventListener("keydown", (event) => {
+  if (["+", "="].includes(event.key)) {
+    event.preventDefault();
+    setQuickStartImageScale(quickStartImageView.scale * QUICKSTART_IMAGE_BUTTON_FACTOR);
+  } else if (["-", "_"].includes(event.key)) {
+    event.preventDefault();
+    setQuickStartImageScale(quickStartImageView.scale / QUICKSTART_IMAGE_BUTTON_FACTOR);
+  } else if (event.key === "0") {
+    event.preventDefault();
+    resetQuickStartImageView();
+  } else if (event.key === "ArrowLeft") {
+    event.preventDefault();
+    panQuickStartImageBy(42, 0);
+  } else if (event.key === "ArrowRight") {
+    event.preventDefault();
+    panQuickStartImageBy(-42, 0);
+  } else if (event.key === "ArrowUp") {
+    event.preventDefault();
+    panQuickStartImageBy(0, 42);
+  } else if (event.key === "ArrowDown") {
+    event.preventDefault();
+    panQuickStartImageBy(0, -42);
+  }
+});
+window.addEventListener("resize", () => {
+  if (isQuickStartImageOpen()) requestAnimationFrame(() => applyQuickStartImageView());
 });
 el.quickStartViewport?.addEventListener("pointerdown", (event) => {
   if (event.button !== 0 || event.target.closest("button, a, input, select, textarea, [data-quickstart-zoom]")) return;
@@ -5919,13 +6197,33 @@ function renderSkillHud() {
     btn.disabled = !availability.ready;
     btn.dataset.reason = availability.reason;
     btn.title = skillDescriptionText(def) + "\n状态：" + availability.reason;
-    btn.setAttribute("aria-label", def.name + "，" + availability.reason);
-    btn.innerHTML =
-      "<span class=\"skill-use-name\">" +
-      def.name +
-      "</span><span class=\"skill-use-cost\">" +
-      (availability.kind === "passive" ? "被动" : availability.cost) +
-      "</span>";
+    const isPassive = availability.kind === "passive";
+    btn.setAttribute(
+      "aria-label",
+      def.name + (isPassive ? "，被动技能，" : "，") + availability.reason
+    );
+
+    const skillLabel = document.createElement("span");
+    skillLabel.className = "skill-use-label";
+    const skillName = document.createElement("span");
+    skillName.className = "skill-use-name";
+    skillName.textContent = def.name;
+    skillLabel.appendChild(skillName);
+
+    if (isPassive) {
+      const passiveTag = document.createElement("span");
+      passiveTag.className = "skill-use-passive";
+      passiveTag.textContent = "被动";
+      skillLabel.appendChild(passiveTag);
+    }
+    btn.appendChild(skillLabel);
+
+    if (!isPassive) {
+      const skillCost = document.createElement("span");
+      skillCost.className = "skill-use-cost";
+      skillCost.textContent = String(availability.cost);
+      btn.appendChild(skillCost);
+    }
     btn.addEventListener("click", () => useSkill(skillId, def));
     slot.append(btn, createSkillZoomButton(def));
     el.skillBar.appendChild(slot);

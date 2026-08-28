@@ -240,13 +240,19 @@ describe("frontend DOM contract", () => {
     expect(html).toContain('id="btn-open-quickstart"');
     expect(html).toContain('id="quickstart-page-status"');
     expect(markup).toContain('id="quickstart-image-modal"');
+    expect(markup).toContain('id="quickstart-image-stage"');
     expect(markup).toContain('id="quickstart-image-expanded"');
+    expect(markup).toContain('id="btn-quickstart-image-zoom-out"');
+    expect(markup).toContain('id="btn-quickstart-image-reset"');
+    expect(markup).toContain('id="btn-quickstart-image-zoom-in"');
     expect(markup).toContain('id="btn-close-quickstart-image"');
     expect(client).toContain('quickStart: "overlimit_quickstart_v1"');
     expect(client).toContain("function renderQuickStartPage");
     expect(client).toContain("function releaseQuickStartPointer");
     expect(client).toContain("function openQuickStartImage");
     expect(client).toContain("function closeQuickStartImage");
+    expect(client).toContain("function setQuickStartImageScale");
+    expect(client).toContain("function beginQuickStartImagePointer");
     expect(client).toContain('top === el.quickStartImageModal');
     expect(client).not.toContain("!hasPendingReconnect && !state.quickStartSeen");
     expect(client).toContain('el.btnOpenQuickStart?.addEventListener("click", () => openQuickStart({ page: 1 }))');
@@ -257,7 +263,9 @@ describe("frontend DOM contract", () => {
     expect(salon).toContain(".salon-ui .quickstart-shot[data-quickstart-zoom]");
     expect(salon).toContain(".salon-ui .quickstart-image-layer");
     expect(salon).toContain(".salon-ui .quickstart-image-stage img");
+    expect(salon).toContain(".salon-ui .quickstart-image-zoom-controls");
     expect(salon).toContain("touch-action: pan-y");
+    expect(salon).toContain("touch-action: none");
     [
       "shot-01-preflop.png",
       "shot-02-flop.png",

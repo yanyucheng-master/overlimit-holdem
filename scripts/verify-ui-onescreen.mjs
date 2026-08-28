@@ -342,6 +342,123 @@ async function clickProtocol(page, gameMode, skillMode, action) {
   );
 }
 
+const SKILL_LAB_VIEWPORTS = [
+  { width: 1920, height: 1080 },
+  { width: 1600, height: 900 },
+  { width: 1440, height: 900 },
+  { width: 1366, height: 768 },
+  { width: 430, height: 932 },
+  { width: 390, height: 844 },
+  { width: 360, height: 800 },
+  { width: 320, height: 700 },
+];
+
+async function setSkillLabSelection(page, skillIds) {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.click("#btn-clear-loadout");
+  for (const skillId of skillIds) {
+    await page.click(`#skill-lab-catalog .skill-card[data-skill-id="${skillId}"] .skill-card-select`);
+  }
+}
+
+async function auditSkillLabViewport(page, viewport, expectedSelectionCount, expectedLoad) {
+  await page.setViewportSize(viewport);
+  await page.waitForTimeout(50);
+  return page.evaluate(({ viewport, expectedSelectionCount, expectedLoad }) => {
+    const screen = document.getElementById("screen-skill-lab");
+    const header = screen?.querySelector(".skill-lab-bar");
+    const catalog = document.getElementById("skill-lab-catalog");
+    const footer = screen?.querySelector(".skill-lab-actions");
+    const clear = document.getElementById("btn-clear-loadout");
+    const save = document.getElementById("btn-save-loadout");
+    const settings = document.getElementById("btn-settings");
+    const filters = document.getElementById("skill-lab-filters");
+    const loadMeter = document.getElementById("lab-load-meter");
+    const cards = [...(catalog?.querySelectorAll(".skill-card") || [])];
+    const selected = cards.filter((card) => card.classList.contains("selected"));
+    const rect = (node) => node?.getBoundingClientRect() || null;
+    const screenRect = rect(screen);
+    const headerRect = rect(header);
+    const catalogRect = rect(catalog);
+    const footerRect = rect(footer);
+    const clearRect = rect(clear);
+    const saveRect = rect(save);
+    const firstRect = rect(cards[0]);
+    const firstRowCount = firstRect
+      ? cards.filter((card) => Math.abs(card.getBoundingClientRect().top - firstRect.top) < 1).length
+      : 0;
+    const firstCopy = cards[0]?.querySelector(".skill-card-copy");
+    const copyStyle = firstCopy ? getComputedStyle(firstCopy) : null;
+    const loadMeterNumbers = String(loadMeter?.textContent || "").match(/\d+/g) || [];
+    const loadUsed = Number(
+      loadMeterNumbers.length >= 3
+        ? loadMeterNumbers[loadMeterNumbers.length - 2]
+        : (loadMeterNumbers[0] || 0)
+    );
+    const fullyVisibleCards = catalogRect
+      ? cards.filter((card) => {
+          const bounds = card.getBoundingClientRect();
+          return bounds.top >= catalogRect.top - 1 && bounds.bottom <= catalogRect.bottom + 1;
+        }).length
+      : 0;
+    const insideViewport = (bounds) => Boolean(
+      bounds &&
+      bounds.left >= -1 &&
+      bounds.top >= -1 &&
+      bounds.right <= innerWidth + 1 &&
+      bounds.bottom <= innerHeight + 1
+    );
+    const overlaps = (left, right) => Boolean(
+      left && right &&
+      left.left < right.right - 1 &&
+      left.right > right.left + 1 &&
+      left.top < right.bottom - 1 &&
+      left.bottom > right.top + 1
+    );
+    const selectedHeadersClear = selected.every((card) => {
+      const nameRect = rect(card.querySelector("strong"));
+      const markRect = rect(card.querySelector(".skill-selection-mark"));
+      const zoomRect = rect(card.querySelector(".skill-zoom-button"));
+      return !overlaps(nameRect, markRect) && !overlaps(nameRect, zoomRect) && !overlaps(markRect, zoomRect);
+    });
+    return {
+      viewport,
+      expectedSelectionCount,
+      expectedLoad,
+      selectedCount: selected.length,
+      loadUsed,
+      pageOverflowX: document.documentElement.scrollWidth > innerWidth + 1,
+      pageOverflowY: document.documentElement.scrollHeight > innerHeight + 1,
+      screenInsideViewport: insideViewport(screenRect),
+      headerInsideViewport: insideViewport(headerRect),
+      footerInsideViewport: insideViewport(footerRect),
+      settingsHidden: !settings || getComputedStyle(settings).display === "none",
+      catalogOwnsScroll: Boolean(
+        catalog &&
+        getComputedStyle(catalog).overflowY === "auto" &&
+        catalog.scrollHeight > catalog.clientHeight + 1
+      ),
+      catalogNoHorizontalOverflow: Boolean(catalog && catalog.scrollWidth <= catalog.clientWidth + 1),
+      filterNoPageOverflow: Boolean(filters && filters.getBoundingClientRect().right <= innerWidth + 1),
+      columns: firstRowCount,
+      cardHeight: firstRect?.height || 0,
+      copyLineClamp: copyStyle?.webkitLineClamp || "",
+      fullyVisibleCards,
+      selectedHeadersClear,
+      cardTextContained: cards.every((card) => card.scrollWidth <= card.clientWidth + 1),
+      footerSameRow: Boolean(
+        clearRect && saveRect && Math.abs(clearRect.top - saveRect.top) < 1 && Math.abs(clearRect.height - saveRect.height) < 1
+      ),
+      footerButtonsReachable: Boolean(
+        clearRect && saveRect &&
+        clearRect.height >= (viewport.width <= 640 ? 43.5 : 39.5) &&
+        saveRect.height >= (viewport.width <= 640 ? 43.5 : 39.5)
+      ),
+      saveDisabled: Boolean(save?.disabled),
+    };
+  }, { viewport, expectedSelectionCount, expectedLoad });
+}
+
 async function main() {
   const browser = await chromium.launch(playwrightRuntime.chromiumLaunchOptions({ headless: true }));
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
@@ -411,7 +528,22 @@ async function main() {
     active: document.getElementById("screen-skill-lab")?.classList.contains("active"),
     cards: document.querySelectorAll("#skill-lab-catalog .skill-card").length,
   }));
-  report.push({ step: "skill-lab", lab, labFit: await fit(page) });
+  const skillLabLayouts = [];
+  for (const scenario of [
+    { name: "empty", ids: [], load: 0 },
+    { name: "two", ids: ["DEEP_BREATH", "PROBE"], load: 2 },
+    { name: "four-max-load", ids: ["NULLIFICATION", "ALERT", "DEEP_BREATH", "PROBE"], load: 8 },
+  ]) {
+    await setSkillLabSelection(page, scenario.ids);
+    for (const viewport of SKILL_LAB_VIEWPORTS) {
+      skillLabLayouts.push({
+        scenario: scenario.name,
+        ...(await auditSkillLabViewport(page, viewport, scenario.ids.length, scenario.load)),
+      });
+    }
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  report.push({ step: "skill-lab", lab, labFit: await fit(page), skillLabLayouts });
   await page.click("#btn-back-skill-lab");
   await page.waitForSelector("#screen-auth.active");
 
@@ -497,6 +629,7 @@ async function main() {
   const settlementCardAudit = report.find((r) => r.step === "lobby")?.settlementCards;
   const settlementLayoutAudits = report.find((r) => r.step === "lobby")?.settlementLayouts || [];
   const labFit = report.find((r) => r.step === "skill-lab")?.labFit;
+  const skillLabLayoutAudits = report.find((r) => r.step === "skill-lab")?.skillLabLayouts || [];
   const waitFit = report.find((r) => r.step === "wait-create")?.waitFit;
   const gameFit = report.find((r) => r.step === "abyss-solo")?.gameFit;
   const mobileLobby = report.find((r) => r.step === "mobile-lobby")?.mobileLobby;
@@ -559,6 +692,38 @@ async function main() {
   }
   if (!lab.active || lab.cards < 8) failures.push("skill lab incomplete");
   if (labFit?.needsScroll && labFit?.bodyOverflow !== "hidden") failures.push("skill lab page scrolls");
+  if (
+    skillLabLayoutAudits.length !== SKILL_LAB_VIEWPORTS.length * 3 ||
+    skillLabLayoutAudits.some((audit) => {
+      const expectedColumns = audit.viewport.width >= 1200 ? 4 : 1;
+      const minimumVisible = audit.viewport.width >= 1200 ? 12 : 3;
+      return (
+        audit.selectedCount !== audit.expectedSelectionCount ||
+        audit.loadUsed !== audit.expectedLoad ||
+        audit.pageOverflowX ||
+        audit.pageOverflowY ||
+        !audit.screenInsideViewport ||
+        !audit.headerInsideViewport ||
+        !audit.footerInsideViewport ||
+        !audit.settingsHidden ||
+        !audit.catalogOwnsScroll ||
+        !audit.catalogNoHorizontalOverflow ||
+        !audit.filterNoPageOverflow ||
+        audit.columns !== expectedColumns ||
+        audit.cardHeight < 100 ||
+        audit.cardHeight > 112 ||
+        audit.copyLineClamp !== "2" ||
+        audit.fullyVisibleCards < minimumVisible ||
+        !audit.selectedHeadersClear ||
+        !audit.cardTextContained ||
+        !audit.footerSameRow ||
+        !audit.footerButtonsReachable ||
+        audit.saveDisabled !== (audit.expectedSelectionCount === 0)
+      );
+    })
+  ) {
+    failures.push("skill lab compact layout regressed across selections or required viewports");
+  }
   if (!wait.active || !wait.roomId || wait.roomId === "——") failures.push("wait screen failed");
   if (waitFit?.needsScroll) failures.push("wait screen scrolls");
   if (setPwd && setPwd.pwdUpdated !== "已设置") failures.push("password set failed");

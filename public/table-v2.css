@@ -5895,6 +5895,42 @@ body.pro-player-mode.salon-ui #screen-game .action-button .action-en {
   box-shadow: inset 2px 0 0 rgba(80, 225, 232, 0.14);
 }
 
+.salon-ui #screen-game .own-skill-arsenal .skill-use-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.salon-ui #screen-game .own-skill-arsenal .skill-use-label .skill-use-name {
+  display: block;
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  -webkit-line-clamp: unset;
+}
+
+.salon-ui #screen-game .own-skill-arsenal .skill-use-passive {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-height: 17px;
+  padding: 1px 5px;
+  border: 1px solid rgba(240, 197, 111, 0.3);
+  border-radius: 999px;
+  color: rgba(248, 210, 130, 0.96);
+  background: rgba(240, 197, 111, 0.09);
+  font-size: clamp(0.42rem, 0.78em, 0.5rem);
+  font-weight: 800;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
 .salon-ui #screen-game .own-skill-arsenal .skill-use-btn.is-ready:not(:disabled) {
   background: linear-gradient(100deg, rgba(15, 57, 64, 0.7), rgba(7, 22, 34, 0.72));
   box-shadow:
@@ -7283,6 +7319,31 @@ body.pro-player-mode.salon-ui #screen-game .action-button,
     grid-column: 1;
   }
 
+  /* Keep the turn clock in its own stage lane. The skill tray grows upward
+     from the board corner, so the former first-grid-column placement could
+     leave the clock ring only a few pixels from (and visually underneath)
+     three or four equipped skills. Community cards remain centered while the
+     clock is anchored in the clear space immediately to their left. */
+  .salon-ui #screen-game .board-stage-line {
+    display: block;
+  }
+
+  .salon-ui #screen-game .board-midline {
+    width: 100%;
+  }
+
+  .salon-ui #screen-game .board-turn-clock {
+    position: absolute;
+    z-index: 6;
+    top: 50%;
+    left: clamp(92px, 7.5vw, 112px);
+    transform: translateY(-50%);
+  }
+
+  .salon-ui #screen-game .board-turn-clock::after {
+    display: none;
+  }
+
   .salon-ui #screen-game .own-skill-arsenal {
     position: absolute;
     z-index: 12;
@@ -7395,6 +7456,22 @@ body.pro-player-mode.salon-ui #screen-game .action-button,
   .salon-ui #screen-game .poker-board:not(.skills-disabled) > .table-center,
   .salon-ui #screen-game .poker-board:not(.skills-disabled) > .self-zone {
     grid-column: 2;
+  }
+
+  .salon-ui #screen-game .board-stage-line {
+    display: grid;
+  }
+
+  .salon-ui #screen-game .board-turn-clock {
+    position: relative;
+    z-index: auto;
+    top: auto;
+    left: auto;
+    transform: none;
+  }
+
+  .salon-ui #screen-game .board-turn-clock::after {
+    display: block;
   }
 
   .salon-ui #screen-game .own-skill-arsenal {
