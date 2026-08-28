@@ -128,7 +128,19 @@ describe("frontend DOM contract", () => {
     const opponentSummaryEnd = html.indexOf('</button>', opponentSummaryStart) + '</button>'.length;
     const opponentSummaryMarkup = html.slice(opponentSummaryStart, opponentSummaryEnd);
     expect(opponentSummaryMarkup).toContain('aria-controls="opponent-skill-field"');
-    expect((opponentSummaryMarkup.match(/class="is-unknown"/g) || []).length).toBe(4);
+    expect(opponentSummaryMarkup).toContain('id="opponent-intel-slots"');
+    expect(opponentSummaryMarkup).toContain('class="opponent-intel-tags is-empty"');
+    expect(opponentSummaryMarkup).not.toContain('class="is-unknown"');
+    expect(opponentSummaryMarkup).not.toMatch(/<i\b/);
+    expect(html).toContain('id="opponent-intel-live"');
+    const intelClusterStart = html.indexOf('<div class="opponent-intel-cluster">');
+    const intelClusterEnd = html.indexOf('</div>', html.indexOf('id="btn-mark-opponent-skills"'));
+    const intelClusterMarkup = html.slice(intelClusterStart, intelClusterEnd);
+    expect(intelClusterMarkup.indexOf('id="btn-toggle-opponent-intel"')).toBeLessThan(
+      intelClusterMarkup.indexOf('id="opponent-skill-field"')
+    );
+    expect(intelClusterMarkup).toContain('id="opponent-skill-bar"');
+    expect(intelClusterMarkup).toContain('id="btn-mark-opponent-skills"');
     expect(html).toContain('id="btn-close-opponent-intel"');
     expect(html).toContain('id="btn-close-skill-feed"');
 
@@ -140,14 +152,26 @@ describe("frontend DOM contract", () => {
     );
     expect(summaryFunction).not.toMatch(/\d+\s*\/\s*4/);
     expect(summaryFunction).not.toContain('负载');
+    expect(summaryFunction).toContain('...confirmedIds.map');
+    expect(summaryFunction).toContain('...suspectedIds.map');
+    expect(summaryFunction).toContain('.filter((skillId) => !confirmedIds.includes(skillId))');
+    expect(summaryFunction).toContain('"opponent-intel-tag is-" + entry.certainty');
+    expect(summaryFunction).toContain('confirmed ? "✓" : "?"');
+    expect(client).toContain('function syncOpponentIntelToggleAccessibility(accessibleDetails = null)');
+    expect(client).toContain('(expanded ? "关闭详情。" : "打开详情。")');
+    expect(tableV2).toContain('.salon-ui #screen-game .opponent-intel-tags');
+    expect(tableV2).toContain('.salon-ui #screen-game .opponent-intel-tag.is-confirmed');
+    expect(tableV2).toContain('.salon-ui #screen-game .opponent-intel-tag.is-suspected');
     expect(tableV2).toContain(
       'body.pro-player-mode.salon-ui #screen-game .action-button .action-en'
     );
-    expect(tableV2).toContain('TABLE V6 / RELEASE LAYOUT');
-    expect(tableV2).toContain('--table-left-rail: clamp(214px, 15vw, 244px)');
+    expect(tableV2).toContain('TABLE V7 / ADAPTIVE TACTICAL TRAY');
+    expect(tableV2).toContain('--table-skill-tray: clamp(220px, 15vw, 238px)');
     expect(tableV2).toContain('--table-right-rail: clamp(184px, 13vw, 214px)');
-    expect(tableV2).toContain('grid-template-columns: var(--table-left-rail) minmax(470px, 1fr) var(--table-right-rail)');
+    expect(tableV2).toContain('grid-template-columns: minmax(470px, 1fr) var(--table-right-rail)');
     expect(tableV2).toContain('.salon-ui #screen-game .own-skill-arsenal');
+    expect(tableV2).toMatch(/TABLE V7[\s\S]*?\.own-skill-arsenal\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?bottom:\s*10px;[\s\S]*?width:\s*var\(--table-skill-tray\);[\s\S]*?height:\s*auto;/);
+    expect(tableV2).toMatch(/TABLE V7[\s\S]*?\.skill-bar\[data-count="4"\][\s\S]*?grid-template-columns:\s*minmax\(0, 1fr\);[\s\S]*?grid-auto-rows:\s*40px;/);
     expect(tableV2).toContain('.salon-ui #screen-game .opponent-intel-summary');
     expect(tableV2).toContain('grid-template-columns: minmax(0, 1fr) minmax(224px, 0.36fr)');
     expect(tableV2).toContain('.skill-bar[data-count="3"]');
@@ -157,6 +181,43 @@ describe("frontend DOM contract", () => {
     expect(tableV2).toContain('--card-w: var(--table-card-w)');
     expect(tableV2).not.toMatch(/\.self-cards \.card:nth-child\(2\)[^{]*\{[^}]*margin-left:\s*-/s);
     expect(tableV2).toContain('bottom: calc(100% + 8px)');
+    const releaseResponsiveStart = tableV2.indexOf('/* Portrait and narrow tablets');
+    const intelDropdownStart = tableV2.lastIndexOf(
+      '.salon-ui #screen-game .opponent-skill-field {',
+      releaseResponsiveStart
+    );
+    const intelDropdownStyles = tableV2.slice(
+      intelDropdownStart,
+      tableV2.indexOf('.salon-ui #screen-game .table-telemetry {', intelDropdownStart)
+    );
+    expect(intelDropdownStyles).toContain('top: calc(100% + 7px)');
+    expect(intelDropdownStyles).toContain('clip-path: inset(0 0 100% 0 round 13px)');
+    expect(intelDropdownStyles).toContain('transform: translateY(-8px)');
+    expect(intelDropdownStyles).not.toContain('translateX');
+    expect(client).toContain('if (el.opponentSkillField.contains(event.target)) return');
+    expect(client).toContain('if (el.btnToggleOpponentIntel?.contains(event.target)) return');
+    expect(client).toContain('opponentEnergy: el.opponentEnergy?.closest(".skill-energy-row") || el.opponentArea');
+
+    expect(html).toContain('class="settle-community-block"');
+    expect(html).toContain('class="settle-outcome"');
+    expect(html).toContain('class="settle-meta-row"');
+    expect(style).toContain('SETTLEMENT V2 / DESKTOP ONE-SCREEN REVIEW');
+    expect(style).toMatch(/\.hand-settle-modal\s*\{[\s\S]*?overflow:\s*hidden;/);
+    expect(style).toMatch(/\.hand-settle-modal \.settle-panel\s*\{[\s\S]*?max-height:\s*calc\(100dvh[\s\S]*?overflow:\s*hidden;/);
+    expect(style).toMatch(/\.hand-settle-modal \.settle-hands-grid\s*\{[\s\S]*?grid-template-columns:\s*repeat\(2,/);
+    expect(style).toMatch(/\.hand-settle-modal \.settle-chip-steps\s*\{[\s\S]*?overflow-y:\s*auto;[\s\S]*?scrollbar-gutter:\s*stable;/);
+  });
+
+  test("对手技能标记弹窗使用固定壳层和独立滚动列表", () => {
+    expect(tableV2).toContain('#skill-choice-modal[data-variant="dossier"] .skill-command-panel');
+    expect(tableV2).toContain('grid-template-rows: 56px 52px minmax(0, 1fr) 62px');
+    expect(tableV2).toContain('height: min(760px, calc(100dvh - 28px))');
+    expect(tableV2).toContain('#skill-choice-modal[data-variant="dossier"] .skill-choice-body');
+    expect(tableV2).toContain('scrollbar-gutter: stable');
+    expect(tableV2).toContain('grid-auto-rows: 58px');
+    expect(tableV2).toContain('grid-auto-rows: 52px');
+    expect(client).toContain('el.skillChoiceBody.scrollTop = 0');
+    expect(client).toContain('focus({ preventScroll: true })');
   });
 
   test("storage failures and modal focus are handled defensively", () => {
@@ -167,24 +228,35 @@ describe("frontend DOM contract", () => {
     expect(client).toContain('event.key !== "Tab"');
   });
 
-  test("四页快速入门复用大厅、规则与技能入口，并只使用实机素材", () => {
+  test("四页快速入门复用大厅、规则与技能入口，实机素材均可放大查看", () => {
     const start = html.indexOf('id="quickstart-modal"');
     const end = html.indexOf('id="rules-handbook-modal"', start);
     const markup = html.slice(start, end);
     expect(start).toBeGreaterThan(-1);
     expect(end).toBeGreaterThan(start);
     expect((markup.match(/data-quickstart-page="[1-4]"/g) || []).length).toBe(4);
+    expect((markup.match(/data-quickstart-zoom(?:\s|>)/g) || []).length).toBe(5);
+    expect((markup.match(/aria-label="放大查看/g) || []).length).toBe(5);
     expect(html).toContain('id="btn-open-quickstart"');
     expect(html).toContain('id="quickstart-page-status"');
+    expect(markup).toContain('id="quickstart-image-modal"');
+    expect(markup).toContain('id="quickstart-image-expanded"');
+    expect(markup).toContain('id="btn-close-quickstart-image"');
     expect(client).toContain('quickStart: "overlimit_quickstart_v1"');
     expect(client).toContain("function renderQuickStartPage");
     expect(client).toContain("function releaseQuickStartPointer");
+    expect(client).toContain("function openQuickStartImage");
+    expect(client).toContain("function closeQuickStartImage");
+    expect(client).toContain('top === el.quickStartImageModal');
     expect(client).not.toContain("!hasPendingReconnect && !state.quickStartSeen");
     expect(client).toContain('el.btnOpenQuickStart?.addEventListener("click", () => openQuickStart({ page: 1 }))');
     expect(client).toContain('openRulesFromQuickStart("rule-hands")');
     expect(client).toContain("openSkillsFromQuickStart");
     expect(salon).toContain(".salon-ui .quickstart-entry");
     expect(salon).toContain(".salon-ui .quickstart-track");
+    expect(salon).toContain(".salon-ui .quickstart-shot[data-quickstart-zoom]");
+    expect(salon).toContain(".salon-ui .quickstart-image-layer");
+    expect(salon).toContain(".salon-ui .quickstart-image-stage img");
     expect(salon).toContain("touch-action: pan-y");
     [
       "shot-01-preflop.png",

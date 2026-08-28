@@ -2442,6 +2442,20 @@ html[data-pro-font="classic"] body.pro-player-mode .raise-amount-meta .raise-to-
   box-shadow: 0 32px 88px rgba(0, 0, 0, 0.62), inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
+/* The opponent dossier is a fixed instrument panel. Filtering may only
+   replace cards inside its list viewport; it must never resize the shell. */
+.salon-ui #skill-choice-modal[data-variant="dossier"] {
+  overflow: hidden;
+}
+
+.salon-ui #skill-choice-modal[data-variant="dossier"] .skill-command-panel {
+  grid-template-rows: 56px 52px minmax(0, 1fr) 62px;
+  width: min(980px, calc(100vw - 32px));
+  height: min(760px, calc(100dvh - 28px));
+  max-width: 980px;
+  max-height: none;
+}
+
 .salon-ui #skill-choice-modal .skill-command-header {
   padding-bottom: 12px;
   border-bottom: 1px solid rgba(128, 153, 207, 0.15);
@@ -2544,6 +2558,13 @@ html[data-pro-font="classic"] body.pro-player-mode .raise-amount-meta .raise-to-
   padding: 2px 4px 8px 0;
   overflow: auto;
   scrollbar-color: rgba(80, 225, 232, 0.36) transparent;
+}
+
+.salon-ui #skill-choice-modal[data-variant="dossier"] .skill-choice-body {
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .salon-ui #skill-choice-modal[data-variant="default"] .skill-choice-body,
@@ -2764,6 +2785,8 @@ html[data-pro-font="classic"] body.pro-player-mode .raise-amount-meta .raise-to-
 .salon-ui #skill-choice-modal .dossier-skill-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-rows: 58px;
+  align-content: start;
   gap: 8px;
 }
 
@@ -2772,6 +2795,7 @@ html[data-pro-font="classic"] body.pro-player-mode .raise-amount-meta .raise-to-
   grid-template-columns: 28px minmax(0, 1fr);
   align-items: center;
   gap: 8px;
+  height: 58px;
   min-height: 58px;
   padding: 8px;
   border: 1px solid rgba(128, 153, 207, 0.15);
@@ -2830,6 +2854,10 @@ html[data-pro-font="classic"] body.pro-player-mode .raise-amount-meta .raise-to-
 .salon-ui #skill-choice-modal .skill-command-actions {
   padding-top: 12px;
   border-top: 1px solid rgba(128, 153, 207, 0.14);
+}
+
+.salon-ui #skill-choice-modal[data-variant="dossier"] .skill-command-actions {
+  margin-top: 0;
 }
 
 .salon-ui #skill-choice-modal .skill-command-actions .button {
@@ -3081,6 +3109,23 @@ html[data-pro-font="classic"] body.pro-player-mode .raise-amount-meta .raise-to-
     border-radius: 15px;
   }
 
+  .salon-ui #skill-choice-modal .skill-lab-filter {
+    min-height: 44px;
+    padding: 7px 11px;
+  }
+
+  .salon-ui #skill-choice-modal[data-variant="dossier"] {
+    align-items: center;
+  }
+
+  .salon-ui #skill-choice-modal[data-variant="dossier"] .skill-command-panel {
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    width: 100%;
+    height: 100%;
+    max-width: 100%;
+    max-height: none;
+  }
+
   .salon-ui #skill-choice-modal .skill-choice-body,
   .salon-ui #skill-choice-modal .cheat-exchange-console,
   .salon-ui #skill-choice-modal .cheat-source-rail,
@@ -3159,17 +3204,26 @@ html[data-pro-font="classic"] body.pro-player-mode .raise-amount-meta .raise-to-
 
   .salon-ui #skill-choice-modal .dossier-skill-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-auto-rows: 52px;
     gap: 6px;
   }
 
   .salon-ui #skill-choice-modal .dossier-skill-choice {
+    height: 52px;
     min-height: 52px;
     padding: 6px;
   }
 
   .salon-ui #skill-choice-modal .skill-command-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 7px;
     padding-top: 9px;
+  }
+
+  .salon-ui #skill-choice-modal .skill-command-actions .button {
+    width: 100%;
+    min-width: 0;
+    min-height: 46px;
   }
 }
 
@@ -5711,11 +5765,16 @@ body.pro-player-mode.salon-ui #screen-game .action-button .action-en {
 }
 
 .salon-ui #screen-game .opponent-zone {
+  z-index: 4;
   grid-row: 1;
-  grid-template-columns: minmax(205px, 290px) auto minmax(126px, 150px);
+  grid-template-columns: minmax(205px, 275px) auto minmax(190px, 235px);
   align-self: center;
   gap: 8px;
-  width: min(710px, 100%);
+  width: min(760px, 100%);
+}
+
+.salon-ui #screen-game .opponent-zone:has(.opponent-skill-field.is-mobile-open) {
+  z-index: 40;
 }
 
 .salon-ui #screen-game .table-center {
@@ -5882,13 +5941,13 @@ body.pro-player-mode.salon-ui #screen-game .action-button .action-en {
 .salon-ui #screen-game .opponent-intel-summary {
   position: relative;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto;
   align-items: center;
-  gap: 3px 7px;
+  gap: 5px;
   min-width: 0;
   min-height: 50px;
-  padding: 7px 22px 7px 9px;
+  padding: 7px 24px 7px 9px;
   border: 0;
   border-radius: 10px;
   color: rgba(217, 228, 245, 0.86);
@@ -5896,6 +5955,17 @@ body.pro-player-mode.salon-ui #screen-game .action-button .action-en {
   box-shadow: inset 2px 0 0 rgba(80, 225, 232, 0.18);
   text-align: left;
   cursor: pointer;
+}
+
+.salon-ui #screen-game .opponent-intel-cluster {
+  position: relative;
+  z-index: 41;
+  align-self: center;
+  min-width: 0;
+}
+
+.salon-ui #screen-game .opponent-intel-cluster .opponent-intel-summary {
+  width: 100%;
 }
 
 .salon-ui #screen-game .opponent-intel-summary:hover,
@@ -5907,8 +5977,10 @@ body.pro-player-mode.salon-ui #screen-game .action-button .action-en {
 }
 
 .salon-ui #screen-game .opponent-intel-summary-copy {
-  display: grid;
-  gap: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   min-width: 0;
 }
 
@@ -5920,45 +5992,85 @@ body.pro-player-mode.salon-ui #screen-game .action-button .action-en {
 }
 
 .salon-ui #screen-game .opponent-intel-summary-copy strong {
-  overflow: hidden;
-  font-size: 0.55rem;
-  font-weight: 760;
-  text-overflow: ellipsis;
+  flex: 0 0 auto;
+  color: rgba(179, 192, 217, 0.7);
+  font-size: 0.45rem;
+  font-weight: 720;
+  letter-spacing: 0.02em;
   white-space: nowrap;
 }
 
-.salon-ui #screen-game .opponent-intel-slots {
-  display: inline-grid;
-  grid-template-columns: repeat(4, 8px);
+.salon-ui #screen-game .opponent-intel-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 4px;
+  min-width: 0;
+  max-width: 100%;
 }
 
-.salon-ui #screen-game .opponent-intel-slots i {
-  width: 7px;
-  height: 7px;
-  border: 1px solid rgba(143, 155, 185, 0.28);
-  border-radius: 2px;
-  background: rgba(143, 155, 185, 0.06);
-  transform: rotate(45deg);
+.salon-ui #screen-game .opponent-intel-tags.is-empty,
+.salon-ui #screen-game .opponent-intel-tags:empty {
+  display: none;
 }
 
-.salon-ui #screen-game .opponent-intel-slots i.is-known {
-  border-color: rgba(80, 225, 232, 0.82);
-  background: rgba(80, 225, 232, 0.46);
-  box-shadow: 0 0 7px rgba(80, 225, 232, 0.32);
+.salon-ui #screen-game .opponent-intel-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 21px;
+  padding: 3px 7px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 0.52rem;
+  font-weight: 760;
+  line-height: 1.12;
 }
 
-.salon-ui #screen-game .opponent-intel-slots i.is-suspected {
-  border-color: rgba(240, 197, 111, 0.78);
-  background: rgba(240, 197, 111, 0.34);
+.salon-ui #screen-game .opponent-intel-tag.is-confirmed {
+  border-color: rgba(80, 225, 232, 0.42);
+  color: rgba(178, 249, 244, 0.94);
+  background: rgba(29, 151, 156, 0.15);
+  box-shadow: inset 0 0 0 1px rgba(80, 225, 232, 0.045);
+}
+
+.salon-ui #screen-game .opponent-intel-tag.is-suspected {
+  border-color: rgba(240, 197, 111, 0.4);
+  color: rgba(255, 220, 151, 0.94);
+  background: rgba(170, 111, 24, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(240, 197, 111, 0.04);
+}
+
+.salon-ui #screen-game .opponent-intel-tag-mark {
+  flex: 0 0 auto;
+  width: 1em;
+  font-size: 0.92em;
+  font-weight: 900;
+  text-align: center;
+}
+
+.salon-ui #screen-game .opponent-intel-tag-name {
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .salon-ui #screen-game .opponent-intel-chevron {
   position: absolute;
+  top: 50%;
   right: 8px;
   color: rgba(80, 225, 232, 0.56);
   font-size: 1rem;
   line-height: 1;
+  transform: translateY(-50%) rotate(0deg);
+  transition: transform 200ms ease;
+}
+
+.salon-ui #screen-game .opponent-intel-summary[aria-expanded="true"] .opponent-intel-chevron {
+  transform: translateY(-50%) rotate(180deg);
 }
 
 .salon-ui #screen-game .table-center {
@@ -6036,33 +6148,49 @@ body.pro-player-mode.salon-ui #screen-game .action-button .action-en {
 
 .salon-ui #screen-game .opponent-skill-field {
   position: absolute;
-  z-index: 38;
-  top: 9px;
-  bottom: 9px;
-  left: 9px;
+  z-index: 42;
+  top: calc(100% + 7px);
+  right: auto;
+  bottom: auto;
+  left: 0;
   grid-column: auto;
   grid-row: auto;
   display: grid;
   grid-template-rows: auto auto minmax(0, 1fr) auto;
-  gap: 10px;
-  width: min(350px, calc(100% - 18px));
+  gap: 8px;
+  width: clamp(240px, 18vw, 276px);
+  max-width: calc(100vw - 24px);
+  max-height: min(350px, calc(100dvh - 190px));
   min-height: 0;
-  padding: 13px;
+  padding: 12px;
+  overflow: hidden;
   border: 0;
-  border-radius: 15px;
+  border-radius: 13px;
   opacity: 0;
+  visibility: hidden;
   background: linear-gradient(180deg, rgba(7, 13, 28, 0.985), rgba(3, 6, 15, 0.995));
-  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.58);
+  box-shadow:
+    0 22px 48px rgba(0, 0, 0, 0.54),
+    inset 0 1px 0 rgba(80, 225, 232, 0.09);
   backdrop-filter: blur(16px);
+  clip-path: inset(0 0 100% 0 round 13px);
   pointer-events: none;
-  transform: translateX(calc(-100% - 18px));
-  transition: transform 180ms ease, opacity 180ms ease;
+  transform: translateY(-8px);
+  transform-origin: 50% 0;
+  transition:
+    clip-path 220ms cubic-bezier(0.22, 0.72, 0.2, 1),
+    transform 220ms cubic-bezier(0.22, 0.72, 0.2, 1),
+    opacity 150ms ease,
+    visibility 0s linear 220ms;
 }
 
 .salon-ui #screen-game .opponent-skill-field.is-mobile-open {
   opacity: 1;
+  visibility: visible;
+  clip-path: inset(0 0 0 0 round 13px);
   pointer-events: auto;
-  transform: translateX(0);
+  transform: translateY(0);
+  transition-delay: 0s;
 }
 
 .salon-ui #screen-game .opponent-skill-field .rail-heading {
@@ -6112,8 +6240,13 @@ body.pro-player-mode.salon-ui #screen-game .action-button .action-en {
 
 .salon-ui #screen-game .opponent-skill-field .opponent-skill-bar {
   grid-row: auto;
-  grid-template-rows: repeat(4, minmax(46px, 1fr));
+  grid-template-rows: repeat(4, minmax(46px, auto));
+  max-height: 202px;
   padding-top: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .salon-ui #screen-game .opponent-skill-field .intel-edit-button {
@@ -6287,6 +6420,8 @@ body.pro-player-mode.salon-ui #screen-game .action-button,
   .salon-ui:has(#screen-game.active) {
     --table-card-w: clamp(34px, 10vw, 40px);
     --table-command-row: 50px;
+    --mobile-action-dock-height: 58px;
+    --mobile-skill-clearance: 0px;
   }
 
   body.salon-ui:has(#screen-game.game-screen.active) .app-shell {
@@ -6294,8 +6429,37 @@ body.pro-player-mode.salon-ui #screen-game .action-button,
   }
 
   .salon-ui #screen-game.game-screen.active {
-    grid-template-rows: 38px minmax(0, 1fr) auto;
+    grid-template-rows: 44px minmax(0, 1fr) auto;
     gap: 4px;
+  }
+
+  .salon-ui #screen-game .game-topbar {
+    min-height: 44px;
+    height: 44px;
+    padding: 0 48px 0 0;
+  }
+
+  .salon-ui #screen-game #btn-back-game,
+  .salon-ui #screen-game .history-chip {
+    height: 44px;
+    min-height: 44px;
+    padding: 0 7px;
+    gap: 4px;
+    font-size: clamp(0.59rem, 2.7vw, 0.68rem);
+  }
+
+  .salon-ui #screen-game .game-exit-label {
+    display: inline-flex;
+  }
+
+  .salon-ui:has(#screen-game.active) .settings-trigger {
+    top: max(4px, var(--safe-top));
+    right: max(4px, var(--safe-right));
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+    border: 0;
   }
 
   .salon-ui #screen-game .poker-board,
@@ -6329,11 +6493,52 @@ body.pro-player-mode.salon-ui #screen-game .action-button,
     max-width: 100%;
   }
 
+  .salon-ui #screen-game .opponent-intel-cluster {
+    grid-column: 1;
+    grid-row: 2;
+    align-self: stretch;
+    min-width: 0;
+  }
+
   .salon-ui #screen-game .opponent-zone .player-console {
     grid-column: 1;
     grid-row: 1;
     min-height: 45px;
     padding: 4px 7px;
+  }
+
+  .salon-ui #screen-game .player-main,
+  .salon-ui #screen-game .player-title-row,
+  .salon-ui #screen-game .player-metrics,
+  .salon-ui #screen-game .hand-hint {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .salon-ui #screen-game .player-title-row > strong {
+    min-width: 0;
+    overflow: hidden;
+    font-size: clamp(0.68rem, 3vw, 0.76rem);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .salon-ui #screen-game .player-metrics {
+    flex-wrap: wrap;
+    row-gap: 2px;
+    font-size: clamp(0.56rem, 2.5vw, 0.64rem);
+  }
+
+  .salon-ui #screen-game .hand-hint,
+  .salon-ui #screen-game .hand-hint strong {
+    font-size: clamp(0.55rem, 2.45vw, 0.63rem);
+  }
+
+  .salon-ui #screen-game .opponent-energy-metric {
+    position: relative;
+    min-height: 30px;
+    margin-block: -6px;
+    padding: 6px 3px;
   }
 
   .salon-ui #screen-game .opponent-cards {
@@ -6347,31 +6552,36 @@ body.pro-player-mode.salon-ui #screen-game .action-button,
   .salon-ui #screen-game .opponent-intel-summary {
     grid-column: 1;
     grid-row: 2;
-    grid-template-columns: minmax(0, 1fr) auto;
-    min-height: 27px;
-    padding: 4px 21px 4px 7px;
-    border-radius: 8px;
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 44px;
+    padding: 7px 24px 7px 8px;
+    border-radius: 10px;
   }
 
   .salon-ui #screen-game .opponent-intel-summary-copy {
     display: flex;
     align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
     gap: 7px;
   }
 
-  .salon-ui #screen-game .opponent-intel-summary-copy small,
-  .salon-ui #screen-game .opponent-intel-summary-copy strong {
-    font-size: 0.47rem;
+  .salon-ui #screen-game .opponent-intel-summary-copy small {
+    font-size: clamp(0.6rem, 2.55vw, 0.67rem);
   }
 
-  .salon-ui #screen-game .opponent-intel-slots {
-    grid-template-columns: repeat(4, 7px);
+  .salon-ui #screen-game .opponent-intel-summary-copy strong {
+    font-size: clamp(0.48rem, 2.1vw, 0.55rem);
+  }
+
+  .salon-ui #screen-game .opponent-intel-tags {
     gap: 3px;
   }
 
-  .salon-ui #screen-game .opponent-intel-slots i {
-    width: 6px;
-    height: 6px;
+  .salon-ui #screen-game .opponent-intel-tag {
+    min-height: 21px;
+    padding: 3px 6px;
+    font-size: clamp(0.62rem, 2.5vw, 0.68rem);
   }
 
   .salon-ui #screen-game .feed-tab,
@@ -6384,9 +6594,9 @@ body.pro-player-mode.salon-ui #screen-game .action-button,
     grid-template-rows: 1fr;
     align-items: center;
     gap: 4px;
-    min-width: 54px;
-    min-height: 27px;
-    padding: 3px 6px;
+    min-width: 62px;
+    min-height: 44px;
+    padding: 6px 8px;
     border: 0;
     border-radius: 8px;
     color: rgba(204, 217, 238, 0.72);
@@ -6400,7 +6610,7 @@ body.pro-player-mode.salon-ui #screen-game .action-button,
   }
 
   .salon-ui #screen-game .feed-tab strong {
-    font-size: 0.45rem;
+    font-size: clamp(0.6rem, 2.55vw, 0.67rem);
   }
 
   .salon-ui #screen-game .feed-tab small {
@@ -6467,7 +6677,7 @@ body.pro-player-mode.salon-ui #screen-game .action-button,
   }
 
   .salon-ui #screen-game #turn-message {
-    font-size: 0.43rem;
+    font-size: clamp(0.5rem, 2.25vw, 0.58rem);
   }
 
   .salon-ui #screen-game .self-zone {
@@ -6492,32 +6702,32 @@ body.pro-player-mode.salon-ui #screen-game .action-button,
     grid-row: 4;
     width: 100%;
     min-height: 0;
-    padding: 4px 5px 5px;
+    padding: 5px 6px 6px;
     border-radius: 10px;
     background: rgba(4, 10, 21, 0.72);
   }
 
   .salon-ui #screen-game .own-skill-arsenal .skill-hud {
-    grid-template-rows: 17px auto;
-    gap: 3px;
+    grid-template-rows: auto auto;
+    gap: 4px;
     height: auto;
   }
 
   .salon-ui #screen-game .own-skill-arsenal .skill-energy-row {
     flex-wrap: nowrap;
     justify-content: flex-start;
-    min-height: 17px;
-    padding: 0 2px 2px;
+    min-height: 22px;
+    padding: 0 2px 3px;
     border-bottom: 0;
-    font-size: 0.45rem;
+    font-size: clamp(0.52rem, 2.35vw, 0.6rem);
   }
 
   .salon-ui #screen-game .own-skill-arsenal .skill-hud-label {
-    font-size: 0.5rem;
+    font-size: clamp(0.58rem, 2.5vw, 0.66rem);
   }
 
   .salon-ui #screen-game .own-skill-arsenal .skill-energy-meter strong {
-    font-size: 0.58rem;
+    font-size: clamp(0.62rem, 2.65vw, 0.72rem);
   }
 
   .salon-ui #screen-game .own-skill-arsenal #skill-silence-flag:not(.hidden) {
@@ -6529,8 +6739,8 @@ body.pro-player-mode.salon-ui #screen-game .action-button,
   .salon-ui #screen-game .own-skill-arsenal .skill-bar,
   .salon-ui #screen-game .own-skill-arsenal .skill-bar[data-count="1"] {
     grid-template-columns: minmax(0, 1fr);
-    grid-auto-rows: 42px;
-    gap: 3px;
+    grid-auto-rows: 46px;
+    gap: 4px;
   }
 
   .salon-ui #screen-game .own-skill-arsenal .skill-bar[data-count="2"] {
@@ -6547,57 +6757,106 @@ body.pro-player-mode.salon-ui #screen-game .action-button,
 
   .salon-ui #screen-game .own-skill-arsenal .skill-slot,
   .salon-ui #screen-game .own-skill-arsenal .skill-use-btn {
-    min-height: 42px;
-    height: 42px;
+    min-height: 46px;
+    height: 46px;
   }
 
   .salon-ui #screen-game .own-skill-arsenal .skill-use-btn {
-    padding: 5px 27px 5px 6px;
-    font-size: clamp(0.48rem, 2.2vw, 0.57rem);
+    align-items: center;
+    padding: 5px 31px 5px 7px;
+    overflow: hidden;
+    font-size: clamp(0.61rem, 2.55vw, 0.69rem);
+    line-height: 1.12;
+    white-space: normal;
+  }
+
+  .salon-ui #screen-game .own-skill-arsenal .skill-use-name {
+    display: -webkit-box;
+    min-width: 0;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
   }
 
   .salon-ui #screen-game .own-skill-arsenal .skill-slot .skill-zoom-button {
     right: 3px;
     bottom: 3px;
-    width: 22px;
-    height: 22px;
+    width: 28px;
+    height: 28px;
   }
 
   .salon-ui #screen-game .opponent-skill-field,
   .salon-ui #screen-game .table-telemetry,
   .salon-ui #screen-game .poker-board.skills-disabled .table-telemetry {
-    position: absolute;
-    z-index: 38;
-    top: 5px;
-    bottom: 5px;
-    display: grid;
-    width: min(92vw, 344px);
-    min-height: 0;
-    padding: 11px;
-    opacity: 0;
-    pointer-events: none;
-  }
-
-  .salon-ui #screen-game .opponent-skill-field {
+    position: fixed;
+    z-index: 92;
+    top: auto;
     right: auto;
-    left: 5px;
-    transform: translateX(calc(-100% - 10px));
+    bottom: calc(var(--safe-bottom) + var(--mobile-action-dock-height) + 8px);
+    left: 50%;
+    display: grid;
+    width: min(430px, calc(100vw - var(--safe-left) - var(--safe-right) - 16px));
+    max-width: none;
+    max-height: min(48dvh, 390px);
+    min-height: 0;
+    padding: 12px;
+    overflow: hidden;
+    border-radius: 16px;
+    opacity: 0;
+    visibility: hidden;
+    background: linear-gradient(180deg, rgba(7, 13, 28, 0.985), rgba(3, 6, 15, 0.995));
+    box-shadow: 0 22px 52px rgba(0, 0, 0, 0.62), inset 0 1px 0 rgba(80, 225, 232, 0.1);
+    clip-path: inset(100% 0 0 0 round 16px);
+    pointer-events: none;
+    transform: translate(-50%, 14px);
+    transition:
+      clip-path 220ms cubic-bezier(0.22, 0.72, 0.2, 1),
+      transform 220ms cubic-bezier(0.22, 0.72, 0.2, 1),
+      opacity 150ms ease,
+      visibility 0s linear 220ms;
   }
 
-  .salon-ui #screen-game .table-telemetry,
-  .salon-ui #screen-game .poker-board.skills-disabled .table-telemetry {
-    right: 5px;
-    left: auto;
-    background: linear-gradient(180deg, rgba(7, 13, 28, 0.985), rgba(3, 6, 15, 0.995));
-    box-shadow: 0 22px 52px rgba(0, 0, 0, 0.56);
-    transform: translateX(calc(100% + 10px));
+  .salon-ui #screen-game .opponent-skill-field .rail-close-button,
+  .salon-ui #screen-game .table-telemetry .rail-close-button {
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
   }
 
   .salon-ui #screen-game .opponent-skill-field.is-mobile-open,
   .salon-ui #screen-game .table-telemetry.is-feed-open {
     opacity: 1;
+    visibility: visible;
+    clip-path: inset(0 0 0 0 round 16px);
     pointer-events: auto;
-    transform: translateX(0);
+    transform: translate(-50%, 0);
+    transition-delay: 0s;
+  }
+
+  .salon-ui #screen-game .table-telemetry.is-feed-open {
+    position: fixed;
+    z-index: 92;
+    top: auto;
+    right: auto;
+    bottom: calc(var(--safe-bottom) + var(--mobile-action-dock-height) + 8px);
+    left: 50%;
+    display: grid;
+    width: min(430px, calc(100vw - var(--safe-left) - var(--safe-right) - 16px));
+    max-width: none;
+    max-height: min(48dvh, 390px);
+    padding: 12px;
+    border: 0;
+    border-radius: 16px;
+    opacity: 1;
+    visibility: visible;
+    background: linear-gradient(180deg, rgba(7, 13, 28, 0.985), rgba(3, 6, 15, 0.995));
+    box-shadow: 0 22px 52px rgba(0, 0, 0, 0.62), inset 0 1px 0 rgba(80, 225, 232, 0.1);
+    clip-path: inset(0 0 0 0 round 16px);
+    pointer-events: auto;
+    transform: translate(-50%, 0);
+    transition-delay: 0s;
   }
 
   .salon-ui #screen-game .table-telemetry.is-feed-open .skill-log {
@@ -6640,8 +6899,9 @@ body.pro-player-mode.salon-ui #screen-game .action-button,
   .salon-ui #screen-game .action-button .action-zh,
   .salon-ui #screen-game .action-button .action-en,
   body.pro-player-mode.salon-ui #screen-game .action-button .action-en {
-    font-size: clamp(0.56rem, 2.65vw, 0.72rem);
+    font-size: clamp(0.65rem, 2.8vw, 0.76rem);
     letter-spacing: 0.035em;
+    white-space: nowrap;
   }
 
   .salon-ui #screen-game .raise-console .raise-heading,
@@ -6651,21 +6911,43 @@ body.pro-player-mode.salon-ui #screen-game .action-button,
   }
 
   .salon-ui #screen-game .raise-console.expanded .raise-panel {
-    right: 0;
-    bottom: calc(100% + 7px);
-    width: min(360px, calc(100vw - 12px));
-    padding: 9px;
+    position: fixed;
+    z-index: 94;
+    right: auto;
+    bottom: calc(var(--safe-bottom) + var(--mobile-action-dock-height) + var(--mobile-skill-clearance) + 8px);
+    left: 50%;
+    width: min(430px, calc(100vw - var(--safe-left) - var(--safe-right) - 16px));
+    max-height: min(34dvh, 250px);
+    margin: 0;
+    padding: 10px;
+    overflow: auto;
+    overscroll-behavior: contain;
+    transform: translateX(-50%);
+  }
+
+  .salon-ui #screen-game .raise-presets button {
+    min-height: 44px;
+  }
+
+  .salon-ui #screen-game:has(#skill-bar[data-count="1"]),
+  .salon-ui #screen-game:has(#skill-bar[data-count="2"]),
+  .salon-ui #screen-game:has(#skill-bar[data-count="3"]) {
+    --mobile-skill-clearance: 112px;
+  }
+
+  .salon-ui #screen-game:has(#skill-bar[data-count="4"]) {
+    --mobile-skill-clearance: 172px;
   }
 }
 
 @media (max-width: 340px) {
   .salon-ui:has(#screen-game.active) {
     --table-card-w: 34px;
-    --table-command-row: 47px;
+    --table-command-row: 50px;
   }
 
   .salon-ui #screen-game .game-exit-label {
-    display: none;
+    display: inline-flex;
   }
 
   .salon-ui #screen-game .poker-board,
@@ -6680,10 +6962,10 @@ body.pro-player-mode.salon-ui #screen-game .action-button,
   }
 
   .salon-ui #screen-game .opponent-intel-summary-copy small {
-    display: none;
+    display: inline;
   }
 
-  .salon-ui #screen-game .opponent-intel-slots {
+  .salon-ui #screen-game .opponent-intel-tags {
     gap: 2px;
   }
 
@@ -6720,13 +7002,13 @@ body.pro-player-mode.salon-ui #screen-game .action-button,
   .salon-ui #screen-game .own-skill-arsenal .skill-bar[data-count="2"],
   .salon-ui #screen-game .own-skill-arsenal .skill-bar[data-count="3"],
   .salon-ui #screen-game .own-skill-arsenal .skill-bar[data-count="4"] {
-    grid-auto-rows: 39px;
+    grid-auto-rows: 46px;
   }
 
   .salon-ui #screen-game .own-skill-arsenal .skill-slot,
   .salon-ui #screen-game .own-skill-arsenal .skill-use-btn {
-    min-height: 39px;
-    height: 39px;
+    min-height: 46px;
+    height: 46px;
   }
 
   .salon-ui #screen-game .poker-actions-layer {
@@ -6736,6 +7018,20 @@ body.pro-player-mode.salon-ui #screen-game .action-button,
   .salon-ui #screen-game .raise-console .raise-heading,
   .salon-ui #screen-game .raise-console.collapsed .raise-heading {
     grid-template-columns: 55px minmax(42px, 1fr);
+  }
+}
+
+@media (max-width: 360px) {
+  .salon-ui #screen-game .own-skill-arsenal .skill-bar[data-count="3"] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .salon-ui #screen-game .own-skill-arsenal .skill-bar[data-count="3"] .skill-slot:nth-child(3) {
+    grid-column: 1 / -1;
+  }
+
+  .salon-ui #screen-game:has(#skill-bar[data-count="3"]) {
+    --mobile-skill-clearance: 172px;
   }
 }
 
@@ -6765,11 +7061,33 @@ body.pro-player-mode.salon-ui #screen-game .action-button,
 
   .salon-ui #screen-game .opponent-zone {
     position: relative;
-    z-index: 3;
+    z-index: 4;
     grid-template-columns: minmax(170px, 1fr) auto minmax(100px, 118px) 52px;
     grid-template-rows: minmax(0, 1fr);
     gap: 4px;
     width: 100%;
+  }
+
+  .salon-ui #screen-game .opponent-intel-summary-copy {
+    display: block;
+    min-width: 0;
+  }
+
+  .salon-ui #screen-game .opponent-intel-summary-copy small {
+    display: none;
+  }
+
+  .salon-ui #screen-game .opponent-intel-summary-copy strong {
+    display: block;
+    min-width: 0;
+    overflow: hidden;
+    font-size: 0.55rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .salon-ui #screen-game .opponent-intel-tags {
+    display: none;
   }
 
   .salon-ui #screen-game .opponent-zone .player-console {
@@ -6780,6 +7098,12 @@ body.pro-player-mode.salon-ui #screen-game .action-button,
   .salon-ui #screen-game .opponent-cards {
     grid-column: 2;
     grid-row: 1;
+  }
+
+  .salon-ui #screen-game .opponent-intel-cluster {
+    grid-column: 3;
+    grid-row: 1;
+    align-self: center;
   }
 
   .salon-ui #screen-game .opponent-intel-summary {
@@ -6929,5 +7253,195 @@ body.pro-player-mode.salon-ui #screen-game .action-button,
   .salon-ui #screen-game .table-telemetry,
   .salon-ui #screen-game .opponent-intel-summary {
     transition: none;
+  }
+}
+
+/* --------------------------------------------------------------------------
+   TABLE V7 / ADAPTIVE TACTICAL TRAY
+   On desktop, equipped skills are a compact board-anchored HUD. The tray is
+   removed from grid flow so its bottom edge stays fixed while 1-4 real skills
+   grow upward. Portrait layouts intentionally continue using the mobile flow.
+   -------------------------------------------------------------------------- */
+
+@media (min-width: 761px) {
+  .salon-ui:has(#screen-game.active) {
+    --table-skill-tray: clamp(220px, 15vw, 238px);
+  }
+
+  .salon-ui #screen-game .poker-board {
+    position: relative;
+    grid-template-rows: 94px minmax(166px, 1fr) 94px;
+  }
+
+  .salon-ui #screen-game .poker-board:not(.skills-disabled) {
+    grid-template-columns: minmax(470px, 1fr) var(--table-right-rail);
+  }
+
+  .salon-ui #screen-game .poker-board:not(.skills-disabled) > .opponent-zone,
+  .salon-ui #screen-game .poker-board:not(.skills-disabled) > .table-center,
+  .salon-ui #screen-game .poker-board:not(.skills-disabled) > .self-zone {
+    grid-column: 1;
+  }
+
+  .salon-ui #screen-game .own-skill-arsenal {
+    position: absolute;
+    z-index: 12;
+    grid-column: auto;
+    grid-row: auto;
+    right: auto;
+    bottom: 10px;
+    left: clamp(10px, 0.85vw, 14px);
+    display: block;
+    width: var(--table-skill-tray);
+    height: auto;
+    min-width: 0;
+    min-height: 0;
+    padding: 7px 8px 8px;
+    overflow: visible;
+    border: 1px solid rgba(102, 185, 207, 0.13);
+    border-radius: 12px;
+    background:
+      linear-gradient(150deg, rgba(8, 20, 34, 0.72), rgba(3, 8, 18, 0.78)),
+      rgba(4, 10, 21, 0.64);
+    box-shadow:
+      inset 0 1px 0 rgba(151, 224, 237, 0.055),
+      0 10px 25px rgba(0, 0, 0, 0.18);
+    backdrop-filter: blur(9px);
+  }
+
+  .salon-ui #screen-game .own-skill-arsenal .skill-hud {
+    grid-template-rows: auto auto;
+    gap: 4px;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+  }
+
+  .salon-ui #screen-game .own-skill-arsenal .skill-energy-row {
+    flex-wrap: nowrap;
+    min-height: 22px;
+    padding: 0 2px 4px;
+    border-bottom-color: rgba(151, 176, 226, 0.07);
+    font-size: 0.53rem;
+  }
+
+  .salon-ui #screen-game .own-skill-arsenal .skill-hud-label {
+    font-size: 0.66rem;
+  }
+
+  .salon-ui #screen-game .own-skill-arsenal .skill-energy-meter strong {
+    font-size: 0.68rem;
+  }
+
+  .salon-ui #screen-game .own-skill-arsenal .skill-bar,
+  .salon-ui #screen-game .own-skill-arsenal .skill-bar[data-count="1"],
+  .salon-ui #screen-game .own-skill-arsenal .skill-bar[data-count="2"],
+  .salon-ui #screen-game .own-skill-arsenal .skill-bar[data-count="3"],
+  .salon-ui #screen-game .own-skill-arsenal .skill-bar[data-count="4"] {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: none;
+    grid-auto-rows: 40px;
+    align-content: end;
+    gap: 4px;
+    min-height: 0;
+    overflow: visible;
+  }
+
+  .salon-ui #screen-game .own-skill-arsenal .skill-slot,
+  .salon-ui #screen-game .own-skill-arsenal .skill-use-btn {
+    min-height: 40px;
+    height: 40px;
+  }
+
+  .salon-ui #screen-game .own-skill-arsenal .skill-use-btn {
+    padding: 4px 30px 4px 8px;
+    border-radius: 8px;
+    font-size: 0.59rem;
+  }
+
+  .salon-ui #screen-game .own-skill-arsenal .skill-slot .skill-zoom-button {
+    right: 4px;
+    bottom: 4px;
+    width: 22px;
+    height: 22px;
+  }
+
+  .salon-ui #screen-game .table-telemetry {
+    grid-column: 2;
+  }
+
+  .salon-ui #screen-game .poker-board:not(.skills-disabled) + .action-dock {
+    width: clamp(760px, calc(100% - var(--table-right-rail) - 42px), 1040px);
+    transform: translateX(calc(var(--table-right-rail) / -2));
+  }
+
+  .salon-ui #screen-game .poker-board.skills-disabled + .action-dock {
+    width: min(1040px, calc(100% - 24px));
+    transform: none;
+  }
+}
+
+@media (min-width: 761px) and (max-height: 560px) {
+  .salon-ui:has(#screen-game.active) {
+    --table-skill-tray: clamp(172px, 17vw, 206px);
+  }
+
+  .salon-ui #screen-game .poker-board:not(.skills-disabled) {
+    grid-template-columns: var(--table-skill-tray) minmax(430px, 1fr);
+    grid-template-rows: 58px minmax(74px, 1fr) 58px;
+  }
+
+  .salon-ui #screen-game .poker-board:not(.skills-disabled) > .opponent-zone,
+  .salon-ui #screen-game .poker-board:not(.skills-disabled) > .table-center,
+  .salon-ui #screen-game .poker-board:not(.skills-disabled) > .self-zone {
+    grid-column: 2;
+  }
+
+  .salon-ui #screen-game .own-skill-arsenal {
+    bottom: 5px;
+    left: 8px;
+    width: var(--table-skill-tray);
+    height: auto;
+    padding: 6px;
+  }
+
+  .salon-ui #screen-game .own-skill-arsenal .skill-hud {
+    gap: 4px;
+    height: auto;
+  }
+
+  .salon-ui #screen-game .own-skill-arsenal .skill-energy-row {
+    min-height: 20px;
+    padding-bottom: 3px;
+  }
+
+  .salon-ui #screen-game .own-skill-arsenal .skill-bar,
+  .salon-ui #screen-game .own-skill-arsenal .skill-bar[data-count="1"],
+  .salon-ui #screen-game .own-skill-arsenal .skill-bar[data-count="2"],
+  .salon-ui #screen-game .own-skill-arsenal .skill-bar[data-count="3"],
+  .salon-ui #screen-game .own-skill-arsenal .skill-bar[data-count="4"] {
+    grid-auto-rows: 32px;
+    gap: 3px;
+  }
+
+  .salon-ui #screen-game .own-skill-arsenal .skill-slot,
+  .salon-ui #screen-game .own-skill-arsenal .skill-use-btn {
+    min-height: 32px;
+    height: 32px;
+  }
+
+  .salon-ui #screen-game .own-skill-arsenal .skill-use-btn {
+    padding: 3px 24px 3px 6px;
+    font-size: 0.48rem;
+  }
+
+  .salon-ui #screen-game .own-skill-arsenal .skill-slot .skill-zoom-button {
+    width: 19px;
+    height: 19px;
+  }
+
+  .salon-ui #screen-game .poker-board:not(.skills-disabled) + .action-dock {
+    width: min(820px, calc(100% - 12px));
+    transform: none;
   }
 }

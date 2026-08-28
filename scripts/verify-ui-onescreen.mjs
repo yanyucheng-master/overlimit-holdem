@@ -120,7 +120,12 @@ async function auditSettlementCardGeometry(page) {
     }
     modal.classList.remove("hidden");
   });
-  await page.waitForTimeout(700);
+  await page.waitForFunction(() => {
+    const revealed = [...document.querySelectorAll("#settle-community .card.flip-reveal")];
+    return revealed.length === 3 && revealed.every((card) => (
+      card.getAnimations().every((animation) => animation.playState === "finished")
+    ));
+  }, null, { timeout: 3000 });
   const geometry = await page.evaluate(() => {
     const modal = document.getElementById("hand-settle-modal");
     const row = document.getElementById("settle-community");
@@ -144,6 +149,183 @@ async function auditSettlementCardGeometry(page) {
     };
   });
   return geometry;
+}
+
+async function auditDesktopSettlementLayout(page, viewport, variant) {
+  await page.setViewportSize(viewport);
+  await page.evaluate(({ variant }) => {
+    const modal = document.getElementById("hand-settle-modal");
+    const writeCards = (selector, cards) => {
+      const row = modal.querySelector(selector);
+      row.textContent = "";
+      cards.forEach(([rank, suit]) => {
+        const card = document.createElement("div");
+        card.className = `card${"♥♦".includes(suit) ? " red" : ""}`;
+        const rankNode = document.createElement("strong");
+        const suitNode = document.createElement("span");
+        rankNode.textContent = rank;
+        suitNode.textContent = suit;
+        card.append(rankNode, suitNode);
+        row.appendChild(card);
+      });
+    };
+    writeCards("#settle-community", [
+      ["5", "♠"], ["K", "♥"], ["10", "♦"], ["5", "♣"], ["7", "♠"],
+    ]);
+    writeCards("#settle-self-cards", [["3", "♣"], ["7", "♥"]]);
+    writeCards("#settle-opp-cards", [["6", "♦"], ["J", "♠"]]);
+    modal.querySelector("#settle-verdict").textContent = "胜利";
+    modal.querySelector("#settle-detail").textContent = "你赢得本手，筹码与能量已经完成结算";
+    modal.querySelector("#settle-self-label").textContent = "PLAYER1";
+    modal.querySelector("#settle-opp-label").textContent = "超限AI";
+    modal.querySelector("#settle-self-hand").textContent = "两对";
+    modal.querySelector("#settle-opp-hand").textContent = "一对";
+    modal.querySelector("#settle-hand-name").textContent = "你：两对 ｜ 超限AI：一对";
+    const ledger = modal.querySelector("#settle-chip-ledger");
+    const steps = modal.querySelector("#settle-chip-steps");
+    const lines = variant === "rich"
+      ? [
+          "底池 1650",
+          "标准收益 +825",
+          "标准筹码转移 825",
+          "牌型奖励 +25",
+          "血战倍率 ×2",
+          "防守修正 −50",
+          "协议奖励不触发",
+          "未匹配投入退回 100",
+          "技能结算差额 +25",
+          "最终筹码转移 900",
+        ]
+      : ["底池 1650", "标准收益 +825", "标准筹码转移 825", "最终筹码转移 825"];
+    steps.textContent = "";
+    lines.forEach((line) => {
+      const item = document.createElement("li");
+      item.textContent = line;
+      steps.appendChild(item);
+    });
+    ledger.classList.remove("hidden");
+    modal.querySelector("#settle-chip-total").textContent = variant === "rich"
+      ? "本手实际获得 900"
+      : "本手实际获得 825";
+    const energy = modal.querySelector("#settle-opp-energy");
+    energy.classList.remove("hidden");
+    energy.textContent = "对方剩余能量 3";
+    modal.querySelector("#settle-next").textContent = "下一手即将开始";
+    modal.classList.remove("hidden");
+  }, { variant });
+  await page.waitForTimeout(120);
+  const audit = await page.evaluate(({ width, height, variant }) => {
+    const modal = document.getElementById("hand-settle-modal");
+    const panel = modal.querySelector(".settle-panel");
+    const rect = (selector) => document.querySelector(selector)?.getBoundingClientRect() || null;
+    const insideViewport = (bounds) => Boolean(
+      bounds &&
+      bounds.width > 1 &&
+      bounds.height > 1 &&
+      bounds.left >= -1 &&
+      bounds.top >= -1 &&
+      bounds.right <= innerWidth + 1 &&
+      bounds.bottom <= innerHeight + 1
+    );
+    const overlaps = (left, right) => Boolean(
+      left &&
+      right &&
+      left.right > right.left + 1 &&
+      left.left < right.right - 1 &&
+      left.bottom > right.top + 1 &&
+      left.top < right.bottom - 1
+    );
+    const panelBounds = panel.getBoundingClientRect();
+    const modalStyle = getComputedStyle(modal);
+    const panelStyle = getComputedStyle(panel);
+    const header = rect("#hand-settle-modal .settle-header");
+    const detail = rect("#settle-detail");
+    const board = rect("#settle-board");
+    const outcome = rect("#hand-settle-modal .settle-outcome");
+    const community = [...document.querySelectorAll("#settle-community .card")]
+      .map((card) => card.getBoundingClientRect());
+    const selfCards = [...document.querySelectorAll("#settle-self-cards .card")]
+      .map((card) => card.getBoundingClientRect());
+    const opponentCards = [...document.querySelectorAll("#settle-opp-cards .card")]
+      .map((card) => card.getBoundingClientRect());
+    const allCards = [...community, ...selfCards, ...opponentCards];
+    const widths = allCards.map((card) => card.width);
+    const selfHand = rect("#hand-settle-modal .settle-hand:first-child");
+    const opponentHand = rect("#hand-settle-modal .settle-hand:last-child");
+    const steps = document.getElementById("settle-chip-steps");
+    const energy = rect("#settle-opp-energy");
+    const next = rect("#settle-next");
+    const coreSelectors = [
+      "#settle-community",
+      "#settle-self-cards",
+      "#settle-opp-cards",
+      "#settle-self-hand",
+      "#settle-opp-hand",
+      "#settle-hand-name",
+      "#settle-chip-ledger",
+      "#settle-chip-total",
+      "#settle-opp-energy",
+      "#settle-next",
+    ];
+    const sections = [header, detail, board, outcome];
+    return {
+      requested: { width, height },
+      actual: { width: innerWidth, height: innerHeight },
+      variant,
+      panelInsideViewport: insideViewport(panelBounds),
+      coreInsideViewport: coreSelectors.every((selector) => insideViewport(rect(selector))),
+      noPageScroll:
+        document.documentElement.scrollHeight <= innerHeight + 1 &&
+        document.body.scrollHeight <= innerHeight + 1,
+      modalDoesNotScroll:
+        modalStyle.overflowY === "hidden" &&
+        modal.scrollHeight <= modal.clientHeight + 1,
+      panelDoesNotScrollOrClip:
+        panelStyle.overflowY === "hidden" &&
+        panel.scrollHeight <= panel.clientHeight + 1,
+      sectionsDoNotOverlap: sections.every((section, index) => (
+        index === 0 || !overlaps(sections[index - 1], section)
+      )),
+      communityOneRow:
+        community.length === 5 &&
+        new Set(community.map((card) => Math.round(card.top))).size === 1,
+      handsSideBySide: Boolean(
+        selfHand &&
+        opponentHand &&
+        Math.abs(selfHand.top - opponentHand.top) <= 1 &&
+        selfHand.right <= opponentHand.left + 1
+      ),
+      completeCardSet: community.length === 5 && selfCards.length === 2 && opponentCards.length === 2,
+      cardSizeDelta: widths.length
+        ? (Math.max(...widths) - Math.min(...widths)) / Math.max(...widths)
+        : 1,
+      cardsInsideViewport: allCards.every(insideViewport),
+      metaOnOneRow: Boolean(
+        energy &&
+        next &&
+        Math.abs((energy.top + energy.bottom) / 2 - (next.top + next.bottom) / 2) <= 1
+      ),
+      ledgerScrollsInternally: steps.scrollHeight > steps.clientHeight + 1,
+      ledgerInsidePanel: Boolean(
+        rect("#settle-chip-ledger") &&
+        rect("#settle-chip-ledger").left >= panelBounds.left - 1 &&
+        rect("#settle-chip-ledger").right <= panelBounds.right + 1 &&
+        rect("#settle-chip-ledger").bottom <= panelBounds.bottom + 1
+      ),
+    };
+  }, { ...viewport, variant });
+  await page.evaluate(() => {
+    const modal = document.getElementById("hand-settle-modal");
+    modal.classList.add("hidden");
+    ["settle-community", "settle-self-cards", "settle-opp-cards", "settle-chip-steps"]
+      .forEach((id) => {
+        const node = document.getElementById(id);
+        if (node) node.textContent = "";
+      });
+    document.getElementById("settle-chip-ledger")?.classList.add("hidden");
+    document.getElementById("settle-opp-energy")?.classList.add("hidden");
+  });
+  return audit;
 }
 
 async function clickProtocol(page, gameMode, skillMode, action) {
@@ -203,12 +385,23 @@ async function main() {
   }
   await page.setViewportSize({ width: 1440, height: 900 });
   const settlementCards = await auditSettlementCardGeometry(page);
+  const settlementLayouts = [];
+  for (const viewport of [
+    { width: 1920, height: 1080 },
+    { width: 1600, height: 900 },
+    { width: 1440, height: 900 },
+    { width: 1366, height: 768 },
+  ]) {
+    settlementLayouts.push(await auditDesktopSettlementLayout(page, viewport, "normal"));
+    settlementLayouts.push(await auditDesktopSettlementLayout(page, viewport, "rich"));
+  }
   report.push({
     step: "lobby",
     lobbyFields,
     lobbyFit: await fit(page),
     lobbyViewports,
     settlementCards,
+    settlementLayouts,
   });
 
   await page.click("#btn-open-skill-lab");
@@ -302,6 +495,7 @@ async function main() {
   const lobbyFit = report.find((r) => r.step === "lobby")?.lobbyFit;
   const lobbyViewportAudits = report.find((r) => r.step === "lobby")?.lobbyViewports || [];
   const settlementCardAudit = report.find((r) => r.step === "lobby")?.settlementCards;
+  const settlementLayoutAudits = report.find((r) => r.step === "lobby")?.settlementLayouts || [];
   const labFit = report.find((r) => r.step === "skill-lab")?.labFit;
   const waitFit = report.find((r) => r.step === "wait-create")?.waitFit;
   const gameFit = report.find((r) => r.step === "abyss-solo")?.gameFit;
@@ -341,6 +535,27 @@ async function main() {
     settlementCardAudit.cards.some((card) => Math.abs(card.ratio - 1.42) > 0.03)
   ) {
     failures.push("settlement cards and empty slots do not share one geometry");
+  }
+  if (
+    settlementLayoutAudits.length !== 8 ||
+    settlementLayoutAudits.some((audit) => (
+      !audit.panelInsideViewport ||
+      !audit.coreInsideViewport ||
+      !audit.noPageScroll ||
+      !audit.modalDoesNotScroll ||
+      !audit.panelDoesNotScrollOrClip ||
+      !audit.sectionsDoNotOverlap ||
+      !audit.communityOneRow ||
+      !audit.handsSideBySide ||
+      !audit.completeCardSet ||
+      audit.cardSizeDelta > 0.1 ||
+      !audit.cardsInsideViewport ||
+      !audit.metaOnOneRow ||
+      !audit.ledgerInsidePanel ||
+      (audit.variant === "rich" && !audit.ledgerScrollsInternally)
+    ))
+  ) {
+    failures.push("desktop settlement does not fit one screen across required viewports");
   }
   if (!lab.active || lab.cards < 8) failures.push("skill lab incomplete");
   if (labFit?.needsScroll && labFit?.bodyOverflow !== "hidden") failures.push("skill lab page scrolls");

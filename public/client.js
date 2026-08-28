@@ -298,6 +298,11 @@ const el = {
   btnQuickStartHands: byId("btn-quickstart-hands"),
   btnQuickStartRules: byId("btn-quickstart-rules"),
   btnQuickStartSkills: byId("btn-quickstart-skills"),
+  quickStartImageModal: byId("quickstart-image-modal"),
+  quickStartImageExpanded: byId("quickstart-image-expanded"),
+  quickStartImageTitle: byId("quickstart-image-title"),
+  quickStartImageCaption: byId("quickstart-image-caption"),
+  btnCloseQuickStartImage: byId("btn-close-quickstart-image"),
   rulesModal: byId("rules-handbook-modal"),
   btnCloseRules: byId("btn-close-rules"),
   rulesSearch: byId("rules-search"),
@@ -467,6 +472,7 @@ const el = {
   opponentBuildStatus: byId("opponent-build-status"),
   opponentIntelCount: byId("opponent-intel-count"),
   opponentIntelSlots: byId("opponent-intel-slots"),
+  opponentIntelLive: byId("opponent-intel-live"),
   btnMarkOpponentSkills: byId("btn-mark-opponent-skills"),
   btnToggleOpponentIntel: byId("btn-toggle-opponent-intel"),
   btnCloseOpponentIntel: byId("btn-close-opponent-intel"),
@@ -642,6 +648,7 @@ let rulesScrollFrame = 0;
 let rulesHighlightTimer = 0;
 let rulesReadingAnchorId = "rule-overview";
 let quickStartReturnFocus = null;
+let quickStartImageReturnFocus = null;
 let quickStartPointer = null;
 let skillCatalogPromise = null;
 const uiPendingTimers = new Map();
@@ -1847,7 +1854,7 @@ function getSkillFxManager() {
       self: el.selfArea,
       opponent: el.opponentArea,
       selfEnergy: el.selfEnergy?.closest(".skill-energy-row") || el.selfArea,
-      opponentEnergy: el.opponentEnergy?.parentElement || el.opponentArea,
+      opponentEnergy: el.opponentEnergy?.closest(".skill-energy-row") || el.opponentArea,
       selfCards: el.selfCards,
       opponentCards: el.opponentCards,
       community: el.community,
@@ -3904,6 +3911,39 @@ function isQuickStartOpen() {
   return Boolean(el.quickStartModal && !el.quickStartModal.classList.contains("hidden"));
 }
 
+function isQuickStartImageOpen() {
+  return Boolean(el.quickStartImageModal && !el.quickStartImageModal.classList.contains("hidden"));
+}
+
+function openQuickStartImage(shot, returnFocus = shot) {
+  if (!isQuickStartOpen() || isQuickStartImageOpen() || !shot) return false;
+  const source = shot.querySelector("img");
+  if (!source || !el.quickStartImageExpanded) return false;
+  const title = shot.dataset.quickstartZoomTitle || source.alt || "教程图片";
+  quickStartImageReturnFocus = returnFocus && document.contains(returnFocus) ? returnFocus : shot;
+  el.quickStartImageExpanded.src = source.currentSrc || source.src;
+  el.quickStartImageExpanded.alt = source.alt || title;
+  if (el.quickStartImageTitle) el.quickStartImageTitle.textContent = title;
+  if (el.quickStartImageCaption) el.quickStartImageCaption.textContent = source.alt || title;
+  el.quickStartImageModal.classList.remove("hidden");
+  el.btnCloseQuickStartImage?.focus({ preventScroll: true });
+  if (document.activeElement !== el.btnCloseQuickStartImage) {
+    requestAnimationFrame(() => el.btnCloseQuickStartImage?.focus({ preventScroll: true }));
+  }
+  return true;
+}
+
+function closeQuickStartImage({ restoreFocus = true } = {}) {
+  if (!isQuickStartImageOpen()) return false;
+  el.quickStartImageModal.classList.add("hidden");
+  const target = quickStartImageReturnFocus && document.contains(quickStartImageReturnFocus)
+    ? quickStartImageReturnFocus
+    : el.btnCloseQuickStart;
+  quickStartImageReturnFocus = null;
+  if (restoreFocus) requestAnimationFrame(() => target?.focus?.({ preventScroll: true }));
+  return true;
+}
+
 function updateQuickStartEntryState() {
   if (!el.quickStartEntry) return;
   el.quickStartEntry.classList.toggle("is-read", state.quickStartSeen);
@@ -4052,10 +4092,28 @@ el.btnQuickStartHands?.addEventListener("click", () => openRulesFromQuickStart("
 el.btnQuickStartRules?.addEventListener("click", () => openRulesFromQuickStart("rule-overview"));
 el.btnQuickStartSkills?.addEventListener("click", openSkillsFromQuickStart);
 el.quickStartModal?.addEventListener("click", (event) => {
+  const shot = event.target.closest?.("[data-quickstart-zoom]");
+  if (shot) {
+    event.preventDefault();
+    openQuickStartImage(shot);
+    return;
+  }
   if (event.target === el.quickStartModal) closeQuickStart();
 });
+el.quickStartModal?.addEventListener("keydown", (event) => {
+  if (!["Enter", " "].includes(event.key)) return;
+  const shot = event.target.closest?.("[data-quickstart-zoom]");
+  if (!shot) return;
+  event.preventDefault();
+  event.stopPropagation();
+  openQuickStartImage(shot);
+});
+el.btnCloseQuickStartImage?.addEventListener("click", () => closeQuickStartImage());
+el.quickStartImageModal?.addEventListener("click", (event) => {
+  if (event.target === el.quickStartImageModal) closeQuickStartImage();
+});
 el.quickStartViewport?.addEventListener("pointerdown", (event) => {
-  if (event.button !== 0 || event.target.closest("button, a, input, select, textarea")) return;
+  if (event.button !== 0 || event.target.closest("button, a, input, select, textarea, [data-quickstart-zoom]")) return;
   quickStartPointer = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
   try {
     el.quickStartViewport.setPointerCapture(event.pointerId);
@@ -4703,7 +4761,9 @@ document.addEventListener("keydown", (event) => {
     if (isNullifyTargeting()) cancelNullifyTargeting();
     return;
   }
-  if (top === el.quickStartModal) {
+  if (top === el.quickStartImageModal) {
+    closeQuickStartImage();
+  } else if (top === el.quickStartModal) {
     closeQuickStart();
   } else if (top === el.skillPreviewModal) {
     closeSkillPreview();
@@ -5424,9 +5484,31 @@ function createIntelSkillCard(skillId, certainty) {
   return card;
 }
 
+function syncOpponentIntelToggleAccessibility(accessibleDetails = null) {
+  if (!el.btnToggleOpponentIntel) return;
+  const details = accessibleDetails
+    || el.btnToggleOpponentIntel.dataset.intelSummary
+    || "完全未知";
+  const expanded = el.btnToggleOpponentIntel.getAttribute("aria-expanded") === "true";
+  el.btnToggleOpponentIntel.dataset.intelSummary = details;
+  el.btnToggleOpponentIntel.setAttribute(
+    "aria-label",
+    "构筑情报，" + details + "。" + (expanded ? "关闭详情。" : "打开详情。")
+  );
+  el.btnToggleOpponentIntel.title = "构筑情报 · " + details;
+}
+
 function syncOpponentIntelSummary(opponent, known, suspected) {
-  const confirmedCount = Math.min(4, known.ids.length);
-  const suspectedCount = Math.min(Math.max(0, 4 - confirmedCount), suspected.length);
+  const confirmedIds = uniqueSkillIds(known?.ids).slice(0, 4);
+  const suspectedIds = uniqueSkillIds(suspected)
+    .filter((skillId) => !confirmedIds.includes(skillId))
+    .slice(0, Math.max(0, 4 - confirmedIds.length));
+  const confirmedCount = confirmedIds.length;
+  const suspectedCount = suspectedIds.length;
+  const entries = [
+    ...confirmedIds.map((skillId) => ({ skillId, certainty: "confirmed" })),
+    ...suspectedIds.map((skillId) => ({ skillId, certainty: "suspected" })),
+  ];
   const summary = !opponent
     ? "等待对手"
     : confirmedCount && suspectedCount
@@ -5437,18 +5519,66 @@ function syncOpponentIntelSummary(opponent, known, suspected) {
           ? "推测 " + suspectedCount
           : "完全未知";
   if (el.opponentIntelCount) el.opponentIntelCount.textContent = summary;
-  if (el.btnToggleOpponentIntel) {
-    el.btnToggleOpponentIntel.setAttribute("aria-label", summary + "，打开对手技能情报");
-    el.btnToggleOpponentIntel.title = "打开对手技能情报";
+
+  const confirmedNames = confirmedIds.map((skillId) => skillDefinition(skillId).name);
+  const suspectedNames = suspectedIds.map((skillId) => skillDefinition(skillId).name);
+  const accessibleDetails = !opponent
+    ? "等待对手"
+    : entries.length
+      ? [
+          confirmedNames.length ? "已确认：" + confirmedNames.join("、") : "",
+          suspectedNames.length ? "推测：" + suspectedNames.join("、") : "",
+        ].filter(Boolean).join("；")
+      : "完全未知";
+
+  if (el.opponentIntelSlots) {
+    const currentTags = [...el.opponentIntelSlots.children];
+    const usedTags = new Set();
+    entries.forEach((entry) => {
+      const intelKey = entry.certainty + ":" + entry.skillId;
+      let tag = currentTags.find((candidate) => (
+        !usedTags.has(candidate) && candidate.dataset.intelKey === intelKey
+      ));
+      if (!tag) {
+        tag = document.createElement("span");
+        const mark = document.createElement("span");
+        mark.className = "opponent-intel-tag-mark";
+        mark.setAttribute("aria-hidden", "true");
+        const name = document.createElement("span");
+        name.className = "opponent-intel-tag-name";
+        tag.append(mark, name);
+      }
+      const def = skillDefinition(entry.skillId);
+      const confirmed = entry.certainty === "confirmed";
+      const semanticLabel = (confirmed ? "已确认：" : "推测：") + def.name;
+      tag.className = "opponent-intel-tag is-" + entry.certainty;
+      tag.dataset.intelKey = intelKey;
+      tag.dataset.skillId = entry.skillId;
+      tag.dataset.certainty = entry.certainty;
+      tag.title = semanticLabel;
+      tag.setAttribute("aria-label", semanticLabel);
+      tag.querySelector(".opponent-intel-tag-mark").textContent = confirmed ? "✓" : "?";
+      tag.querySelector(".opponent-intel-tag-name").textContent = def.name;
+      el.opponentIntelSlots.appendChild(tag);
+      usedTags.add(tag);
+    });
+    currentTags.forEach((tag) => {
+      if (!usedTags.has(tag)) tag.remove();
+    });
+    el.opponentIntelSlots.classList.toggle("is-empty", entries.length === 0);
+    el.opponentIntelSlots.setAttribute(
+      "aria-label",
+      entries.length ? accessibleDetails : "当前没有已确认或推测的技能"
+    );
   }
-  [...(el.opponentIntelSlots?.children || [])].forEach((slot, index) => {
-    const certainty = index < confirmedCount
-      ? "known"
-      : index < confirmedCount + suspectedCount
-        ? "suspected"
-        : "unknown";
-    slot.className = "is-" + certainty;
-  });
+
+  if (el.btnToggleOpponentIntel) {
+    el.btnToggleOpponentIntel.classList.toggle("has-intel-tags", entries.length > 0);
+    syncOpponentIntelToggleAccessibility(accessibleDetails);
+  }
+  if (el.opponentIntelLive && el.opponentIntelLive.textContent !== accessibleDetails) {
+    el.opponentIntelLive.textContent = accessibleDetails;
+  }
 }
 
 function renderOpponentSkillIntel() {
@@ -6290,7 +6420,8 @@ function openSuspectPicker() {
         if (activeFilter === filter.id) return;
         activeFilter = filter.id;
         applyFilter();
-        grid.querySelector("button:not(:disabled):not(.is-filtered-out)")?.focus();
+        if (el.skillChoiceBody) el.skillChoiceBody.scrollTop = 0;
+        grid.querySelector("button:not(:disabled):not(.is-filtered-out)")?.focus({ preventScroll: true });
       });
       el.skillChoiceFilters.appendChild(filterButton);
     });
@@ -6426,6 +6557,7 @@ function toggleTableRail(target) {
   el.tableTelemetry?.classList.toggle("is-feed-open", openingFeed);
   el.btnToggleOpponentIntel?.setAttribute("aria-expanded", openingIntel ? "true" : "false");
   el.btnToggleSkillFeed?.setAttribute("aria-expanded", openingFeed ? "true" : "false");
+  syncOpponentIntelToggleAccessibility();
   syncTableRailAccessibility();
 }
 
@@ -6472,12 +6604,18 @@ el.btnMarkOpponentSkills?.addEventListener("click", openSuspectPicker);
 el.btnCloseOpponentIntel?.addEventListener("click", () => {
   if (!el.opponentSkillField?.classList.contains("is-mobile-open")) return;
   toggleTableRail("intel");
-  requestAnimationFrame(() => el.btnToggleOpponentIntel?.focus());
+  el.btnToggleOpponentIntel?.focus({ preventScroll: true });
+  if (document.activeElement !== el.btnToggleOpponentIntel) {
+    requestAnimationFrame(() => el.btnToggleOpponentIntel?.focus({ preventScroll: true }));
+  }
 });
 el.btnCloseSkillFeed?.addEventListener("click", () => {
   if (!el.tableTelemetry?.classList.contains("is-feed-open")) return;
   toggleTableRail("feed");
-  requestAnimationFrame(() => el.btnToggleSkillFeed?.focus());
+  el.btnToggleSkillFeed?.focus({ preventScroll: true });
+  if (document.activeElement !== el.btnToggleSkillFeed) {
+    requestAnimationFrame(() => el.btnToggleSkillFeed?.focus({ preventScroll: true }));
+  }
 });
 el.btnHandHistory?.addEventListener("click", openHandHistoryModal);
 el.btnHistoryClose?.addEventListener("click", closeHandHistoryModal);
@@ -6503,11 +6641,20 @@ el.energyPopInfer?.addEventListener("keydown", (event) => {
   }
 });
 document.addEventListener("click", (event) => {
-  if (!isOpponentEnergyPopOpen()) return;
-  if (el.opponentEnergyPop?.contains(event.target)) return;
-  if (el.btnOpponentEnergy?.contains(event.target)) return;
-  if (el.settleOppEnergy?.contains(event.target)) return;
-  closeOpponentEnergyPop();
+  if (isOpponentEnergyPopOpen()) {
+    if (
+      !el.opponentEnergyPop?.contains(event.target)
+      && !el.btnOpponentEnergy?.contains(event.target)
+      && !el.settleOppEnergy?.contains(event.target)
+    ) {
+      closeOpponentEnergyPop();
+    }
+  }
+  if (!el.opponentSkillField?.classList.contains("is-mobile-open")) return;
+  if (event.target.closest?.(".modal-layer")) return;
+  if (el.opponentSkillField.contains(event.target)) return;
+  if (el.btnToggleOpponentIntel?.contains(event.target)) return;
+  toggleTableRail("intel");
 });
 document.addEventListener("keydown", (event) => {
   if (event.key !== "Escape") return;

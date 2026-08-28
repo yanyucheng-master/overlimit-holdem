@@ -332,7 +332,14 @@
                 </div>
                 <p class="quickstart-rule-key">对手筹码归零 = 获得比赛胜利</p>
               </div>
-              <figure class="quickstart-shot quickstart-shot-table quickstart-shot-objective">
+              <figure
+                class="quickstart-shot quickstart-shot-table quickstart-shot-objective"
+                data-quickstart-zoom
+                data-quickstart-zoom-title="翻牌前牌桌"
+                role="button"
+                tabindex="0"
+                aria-label="放大查看翻牌前牌桌图片"
+              >
                 <img src="./assets/tutorial/shot-01-preflop.png" alt="真实牌桌翻牌前画面，显示双方筹码、底牌、公共牌区和底池" width="1440" height="797" decoding="async" />
                 <figcaption>
                   <span class="quickstart-callout callout-opponent">对手筹码</span>
@@ -352,7 +359,14 @@
                 </ol>
                 <p class="quickstart-combine"><strong>2 张底牌 + 5 张公共牌</strong><span>组成最强的 5 张牌</span></p>
               </div>
-              <figure class="quickstart-shot quickstart-shot-table quickstart-shot-hand">
+              <figure
+                class="quickstart-shot quickstart-shot-table quickstart-shot-hand"
+                data-quickstart-zoom
+                data-quickstart-zoom-title="翻牌阶段牌桌"
+                role="button"
+                tabindex="0"
+                aria-label="放大查看翻牌阶段牌桌图片"
+              >
                 <img src="./assets/tutorial/shot-02-flop.png" alt="真实翻牌阶段牌桌，显示自己的两张底牌、三张公共牌和操作区" width="1440" height="797" loading="lazy" decoding="async" />
                 <figcaption>
                   <span class="quickstart-callout callout-hole">你的底牌</span>
@@ -384,7 +398,14 @@
                   <div class="is-peak"><span>皇家同花顺</span><strong>+500</strong></div>
                 </div>
               </div>
-              <figure class="quickstart-shot quickstart-shot-settlement">
+              <figure
+                class="quickstart-shot quickstart-shot-settlement"
+                data-quickstart-zoom
+                data-quickstart-zoom-title="摊牌结算"
+                role="button"
+                tabindex="0"
+                aria-label="放大查看摊牌结算图片"
+              >
                 <img src="./assets/tutorial/shot-03-showdown.png" alt="真实摊牌结算画面，显示双方底牌、公共牌、获胜牌型和筹码结算" width="1440" height="797" loading="lazy" decoding="async" />
                 <figcaption>真实摊牌结算</figcaption>
               </figure>
@@ -405,11 +426,25 @@
                 <p class="quickstart-build-note">每手失败后通常恢复 1 点能量。完整构筑不会在开局时公开给对手。</p>
               </div>
               <div class="quickstart-build-shots" aria-label="真实技能构筑和实战界面">
-                <figure class="quickstart-shot quickstart-shot-loadout">
+                <figure
+                  class="quickstart-shot quickstart-shot-loadout"
+                  data-quickstart-zoom
+                  data-quickstart-zoom-title="技能构筑"
+                  role="button"
+                  tabindex="0"
+                  aria-label="放大查看技能构筑图片"
+                >
                   <img src="./assets/tutorial/shot-04-loadout.png" alt="真实技能构筑界面，显示已选技能和总负载" width="1440" height="797" loading="lazy" decoding="async" />
                   <figcaption>构筑 · 技能与负载</figcaption>
                 </figure>
-                <figure class="quickstart-shot quickstart-shot-skillhud">
+                <figure
+                  class="quickstart-shot quickstart-shot-skillhud"
+                  data-quickstart-zoom
+                  data-quickstart-zoom-title="技能实战界面"
+                  role="button"
+                  tabindex="0"
+                  aria-label="放大查看技能实战界面图片"
+                >
                   <img src="./assets/tutorial/shot-05-skill-table.png" alt="真实技能牌桌，显示当前能量、技能按钮和未知对手构筑" width="1440" height="797" loading="lazy" decoding="async" />
                   <figcaption>实战 · 能量与发动窗口</figcaption>
                 </figure>
@@ -447,6 +482,29 @@
           </div>
           <button id="btn-quickstart-next" class="button button-primary quickstart-next" type="button">下一页</button>
         </footer>
+      </section>
+    </div>
+
+    <div
+      id="quickstart-image-modal"
+      class="modal-layer quickstart-image-layer hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="quickstart-image-title"
+      aria-describedby="quickstart-image-caption"
+    >
+      <section class="modal-panel quickstart-image-viewer" tabindex="-1">
+        <header class="quickstart-image-header">
+          <div>
+            <span>IMAGE REVIEW</span>
+            <strong id="quickstart-image-title">教程图片</strong>
+          </div>
+          <button id="btn-close-quickstart-image" class="icon-button quickstart-image-close" type="button" aria-label="关闭放大图片">×</button>
+        </header>
+        <figure class="quickstart-image-stage">
+          <img id="quickstart-image-expanded" alt="" decoding="async" draggable="false" />
+          <figcaption id="quickstart-image-caption">点击图片外区域或按 Esc 关闭</figcaption>
+        </figure>
       </section>
     </div>
 
@@ -603,8 +661,10 @@
         <p id="settle-detail" class="settle-detail"></p>
 
         <div id="settle-board" class="settle-board">
-          <span class="settle-label">公共牌</span>
-          <div id="settle-community" class="settle-card-row"></div>
+          <div class="settle-community-block">
+            <span class="settle-label">公共牌</span>
+            <div id="settle-community" class="settle-card-row"></div>
+          </div>
           <div class="settle-hands-grid">
             <div class="settle-hand">
               <span id="settle-self-label" class="settle-label">你</span>
@@ -618,16 +678,20 @@
             </div>
           </div>
         </div>
-        <p id="settle-hand-name" class="settle-hand-name"></p>
-        <div id="settle-chip-ledger" class="settle-ledger hidden">
-          <span class="settle-label">筹码结算</span>
-          <ol id="settle-chip-steps" class="settle-chip-steps"></ol>
-          <p id="settle-chip-total" class="settle-chip-total"></p>
+        <div class="settle-outcome">
+          <p id="settle-hand-name" class="settle-hand-name"></p>
+          <div id="settle-chip-ledger" class="settle-ledger hidden">
+            <span class="settle-label">筹码结算</span>
+            <ol id="settle-chip-steps" class="settle-chip-steps"></ol>
+            <p id="settle-chip-total" class="settle-chip-total"></p>
+          </div>
+          <div class="settle-meta-row">
+            <button id="settle-opp-energy" class="settle-energy hidden" type="button" aria-controls="opponent-energy-pop">
+              对方剩余能量 —
+            </button>
+            <p id="settle-next" class="settle-next">下一手即将开始</p>
+          </div>
         </div>
-        <button id="settle-opp-energy" class="settle-energy hidden" type="button" aria-controls="opponent-energy-pop">
-          对方剩余能量 —
-        </button>
-        <p id="settle-next" class="settle-next">下一手即将开始</p>
       </section>
     </div>
 
@@ -1007,22 +1071,49 @@
               <div id="opponent-state" class="player-state">等待</div>
             </div>
             <div id="opponent-cards" class="cards-row opponent-cards" aria-label="对手底牌"></div>
-            <button
-              id="btn-toggle-opponent-intel"
-              class="opponent-intel-summary"
-              type="button"
-              aria-controls="opponent-skill-field"
-              aria-expanded="false"
-            >
-              <span class="opponent-intel-summary-copy">
-                <small>构筑情报</small>
-                <strong id="opponent-intel-count">完全未知</strong>
-              </span>
-              <span id="opponent-intel-slots" class="opponent-intel-slots" aria-hidden="true">
-                <i class="is-unknown"></i><i class="is-unknown"></i><i class="is-unknown"></i><i class="is-unknown"></i>
-              </span>
-              <span class="opponent-intel-chevron" aria-hidden="true">›</span>
-            </button>
+            <div class="opponent-intel-cluster">
+              <button
+                id="btn-toggle-opponent-intel"
+                class="opponent-intel-summary"
+                type="button"
+                aria-controls="opponent-skill-field"
+                aria-expanded="false"
+                aria-label="构筑情报，完全未知。打开详情。"
+              >
+                <span class="opponent-intel-summary-copy">
+                  <small>构筑情报</small>
+                  <strong id="opponent-intel-count">完全未知</strong>
+                </span>
+                <span
+                  id="opponent-intel-slots"
+                  class="opponent-intel-tags is-empty"
+                  role="group"
+                  aria-label="当前没有已确认或推测的技能"
+                ></span>
+                <span class="opponent-intel-chevron" aria-hidden="true">⌄</span>
+              </button>
+              <span id="opponent-intel-live" class="sr-only" aria-live="polite" aria-atomic="true"></span>
+
+              <aside id="opponent-skill-field" class="table-side-rail opponent-skill-field" aria-labelledby="opponent-skill-title">
+                <header class="rail-heading">
+                  <h2 id="opponent-skill-title">对手技能</h2>
+                  <div class="rail-heading-actions">
+                    <span id="opponent-build-status" class="intel-status">未确认</span>
+                    <button id="btn-close-opponent-intel" class="rail-close-button" type="button" aria-label="关闭对手技能情报">×</button>
+                  </div>
+                </header>
+                <div class="intel-legend" aria-label="技能情报图例">
+                  <span title="系统确认"><i class="known"></i><span class="sr-only">系统确认</span></span>
+                  <span title="本地推测"><i class="suspected"></i><span class="sr-only">本地推测</span></span>
+                </div>
+                <div id="opponent-skill-bar" class="opponent-skill-bar" aria-label="对手已知与推测技能"></div>
+                <button id="btn-mark-opponent-skills" class="intel-edit-button" type="button" title="标记仅保存在本机，不会同步或影响结算">
+                  <span aria-hidden="true">＋</span>
+                  <span>标记推测</span>
+                </button>
+                <p class="intel-privacy sr-only">标记只保存在本机，不会同步或影响结算。</p>
+              </aside>
+            </div>
             <button
               id="btn-toggle-skill-feed"
               class="table-rail-tab feed-tab"
@@ -1119,26 +1210,6 @@
               </div>
               <div id="skill-bar" class="skill-bar" aria-label="已装备技能"></div>
             </div>
-          </aside>
-
-          <aside id="opponent-skill-field" class="table-side-rail opponent-skill-field" aria-labelledby="opponent-skill-title">
-            <header class="rail-heading">
-              <h2 id="opponent-skill-title">对手技能</h2>
-              <div class="rail-heading-actions">
-                <span id="opponent-build-status" class="intel-status">未确认</span>
-                <button id="btn-close-opponent-intel" class="rail-close-button" type="button" aria-label="关闭对手技能情报">×</button>
-              </div>
-            </header>
-            <div class="intel-legend" aria-label="技能情报图例">
-              <span title="系统确认"><i class="known"></i><span class="sr-only">系统确认</span></span>
-              <span title="本地推测"><i class="suspected"></i><span class="sr-only">本地推测</span></span>
-            </div>
-            <div id="opponent-skill-bar" class="opponent-skill-bar" aria-label="对手已知与推测技能"></div>
-            <button id="btn-mark-opponent-skills" class="intel-edit-button" type="button" title="标记仅保存在本机，不会同步或影响结算">
-              <span aria-hidden="true">＋</span>
-              <span>标记推测</span>
-            </button>
-            <p class="intel-privacy sr-only">标记只保存在本机，不会同步或影响结算。</p>
           </aside>
 
           <aside id="table-telemetry" class="table-side-rail table-telemetry" aria-label="战术播报">

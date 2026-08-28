@@ -3,6 +3,15 @@ import playwrightRuntime from "./playwright-runtime.js";
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:3002";
 const LOADOUT = ["DEEP_BREATH", "RECYCLE", "BLOOD_BATTLE", "PROBE"];
+const MOBILE_TARGET_VIEWPORTS = [
+  { width: 320, height: 700 },
+  { width: 360, height: 800 },
+  { width: 375, height: 812 },
+  { width: 390, height: 844 },
+  { width: 393, height: 852 },
+  { width: 412, height: 915 },
+  { width: 430, height: 932 },
+];
 
 async function visible(page, selector) {
   return page.locator(selector).isVisible().catch(() => false);
@@ -158,8 +167,23 @@ async function skillCountLayoutAudit(page, viewport) {
   await page.waitForTimeout(120);
   return page.evaluate(() => {
     const bar = document.getElementById("skill-bar");
+    const tray = document.getElementById("own-skill-arsenal");
     const slots = [...document.querySelectorAll("#skill-bar .skill-slot")];
-    if (!bar || slots.length < 4) return { available: false, cases: [] };
+    if (!bar || !tray || slots.length < 4) return { available: false, cases: [] };
+    const board = document.getElementById("board");
+    const dock = document.querySelector("#screen-game .action-dock");
+    const selfZone = document.getElementById("self-area");
+    const selfCards = document.getElementById("self-cards");
+    const turnClock = document.getElementById("action-countdown");
+    const community = document.getElementById("community-cards");
+    const overlaps = (left, right) => Boolean(
+      left &&
+      right &&
+      left.right > right.left + 1 &&
+      left.left < right.right - 1 &&
+      left.bottom > right.top + 1 &&
+      left.top < right.bottom - 1
+    );
     const originalCount = bar.dataset.count || String(slots.length);
     const originalDisplay = slots.map((slot) => slot.style.display);
     const cases = [];
@@ -168,13 +192,31 @@ async function skillCountLayoutAudit(page, viewport) {
       slots.forEach((slot, index) => {
         slot.style.display = index < count ? "" : "none";
       });
-      void bar.offsetWidth;
+      void tray.offsetHeight;
       const bounds = bar.getBoundingClientRect();
+      const trayBounds = tray.getBoundingClientRect();
+      const boardBounds = board?.getBoundingClientRect();
+      const dockBounds = dock?.getBoundingClientRect();
+      const selfBounds = selfZone?.getBoundingClientRect();
+      const selfCardBounds = selfCards?.getBoundingClientRect();
+      const clockBounds = turnClock?.getBoundingClientRect();
+      const communityBounds = community?.getBoundingClientRect();
+      const criticalRects = {
+        actionDock: dockBounds,
+        selfZone: selfBounds,
+        selfCards: selfCardBounds,
+        turnClock: clockBounds,
+        community: communityBounds,
+      };
+      const criticalOverlaps = Object.entries(criticalRects)
+        .filter(([, candidate]) => overlaps(trayBounds, candidate))
+        .map(([name]) => name);
       const rects = slots.slice(0, count).map((slot) => slot.getBoundingClientRect());
       const columns = new Set(rects.map((rect) => Math.round(rect.left))).size;
       const rows = new Set(rects.map((rect) => Math.round(rect.top))).size;
       cases.push({
         count,
+        visibleCount: rects.filter((rect) => rect.width > 1 && rect.height > 1).length,
         columns,
         rows,
         allInside: rects.every((rect) => (
@@ -184,14 +226,400 @@ async function skillCountLayoutAudit(page, viewport) {
           rect.bottom <= bounds.bottom + 1
         )),
         overflows: bar.scrollWidth > bar.clientWidth + 1,
+        trayOverflows:
+          tray.scrollWidth > tray.clientWidth + 1 ||
+          tray.scrollHeight > tray.clientHeight + 1,
+        tray: {
+          left: trayBounds.left,
+          top: trayBounds.top,
+          width: trayBounds.width,
+          height: trayBounds.height,
+          right: trayBounds.right,
+          bottom: trayBounds.bottom,
+          position: getComputedStyle(tray).position,
+        },
+        anchoredInsideBoard: Boolean(
+          boardBounds &&
+          trayBounds.left >= boardBounds.left - 1 &&
+          trayBounds.right <= boardBounds.right + 1 &&
+          trayBounds.top >= boardBounds.top - 1 &&
+          trayBounds.bottom <= boardBounds.bottom + 1
+        ),
+        clearOfCriticalUi: criticalOverlaps.length === 0,
+        criticalOverlaps,
       });
     }
     slots.forEach((slot, index) => {
       slot.style.display = originalDisplay[index];
     });
     bar.dataset.count = originalCount;
-    return { available: true, cases };
+    void tray.offsetHeight;
+    const desktop = matchMedia("(min-width: 761px)").matches;
+    const widths = cases.map((entry) => entry.tray.width);
+    const bottoms = cases.map((entry) => entry.tray.bottom);
+    const lefts = cases.map((entry) => entry.tray.left);
+    const heights = cases.map((entry) => entry.tray.height);
+    const tops = cases.map((entry) => entry.tray.top);
+    const spread = (values) => Math.max(...values) - Math.min(...values);
+    return {
+      available: true,
+      desktop,
+      cases,
+      adaptive: desktop
+        ? {
+            fixedWidth: spread(widths) <= 1,
+            fixedBottom: spread(bottoms) <= 1,
+            fixedLeft: spread(lefts) <= 1,
+            growsWithContent: heights.every((height, index) => index === 0 || height > heights[index - 1]),
+            growsUpward: tops.every((top, index) => index === 0 || top < tops[index - 1]),
+          }
+        : null,
+    };
   });
+}
+
+async function dossierFilterGeometryAudit(page, viewport) {
+  const sequence = ["all", "intel", "attack", "defense", "resource", "edit", "protocol", "all"];
+  await page.setViewportSize(viewport);
+  await page.waitForTimeout(340);
+  const steps = [];
+  for (const filterId of sequence) {
+    await page.click(`#skill-choice-filters [data-skill-filter="${filterId}"]`);
+    await page.waitForFunction((id) => (
+      document.querySelector(`#skill-choice-filters [data-skill-filter="${id}"]`)
+        ?.getAttribute("aria-pressed") === "true"
+    ), filterId);
+    await page.waitForTimeout(30);
+    steps.push(await page.evaluate((id) => {
+      const round = (value) => Math.round(Number(value || 0) * 100) / 100;
+      const rect = (selector) => {
+        const bounds = document.querySelector(selector)?.getBoundingClientRect();
+        return bounds ? {
+          x: round(bounds.x),
+          y: round(bounds.y),
+          width: round(bounds.width),
+          height: round(bounds.height),
+        } : null;
+      };
+      const modal = document.getElementById("skill-choice-modal");
+      const panel = modal?.querySelector(".skill-command-panel");
+      const body = document.getElementById("skill-choice-body");
+      const visibleCards = [...document.querySelectorAll(".dossier-skill-choice")]
+        .filter((card) => !card.classList.contains("is-filtered-out"));
+      return {
+        filterId: id,
+        visibleCount: visibleCards.length,
+        panel: rect("#skill-choice-modal .skill-command-panel"),
+        header: rect("#skill-choice-modal .skill-command-header"),
+        filters: rect("#skill-choice-filters"),
+        body: rect("#skill-choice-body"),
+        actions: rect("#skill-choice-modal .skill-command-actions"),
+        grid: rect("#skill-choice-modal .dossier-skill-grid"),
+        firstCard: visibleCards[0] ? (() => {
+          const bounds = visibleCards[0].getBoundingClientRect();
+          return {
+            x: round(bounds.x),
+            y: round(bounds.y),
+            width: round(bounds.width),
+            height: round(bounds.height),
+          };
+        })() : null,
+        bodyClientWidth: body?.clientWidth || 0,
+        bodyScrollWidth: body?.scrollWidth || 0,
+        bodyClientHeight: body?.clientHeight || 0,
+        bodyScrollHeight: body?.scrollHeight || 0,
+        bodyScrollTop: body?.scrollTop || 0,
+        bodyOverflowY: body ? getComputedStyle(body).overflowY : "",
+        bodyScrollbarGutter: body ? getComputedStyle(body).scrollbarGutter : "",
+        modalScrolls: Boolean(modal && modal.scrollHeight > modal.clientHeight + 1),
+        panelScrolls: Boolean(panel && panel.scrollHeight > panel.clientHeight + 1),
+        pageScrolls: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+      };
+    }, filterId));
+  }
+
+  const reference = steps[0];
+  const close = (left, right, tolerance = 0.25) => Math.abs(left - right) <= tolerance;
+  const sameRect = (left, right) => Boolean(
+    left && right && ["x", "y", "width", "height"].every((key) => close(left[key], right[key]))
+  );
+  const stableRects = steps.every((step) => (
+    ["panel", "header", "filters", "body", "actions"].every((key) => sameRect(step[key], reference[key])) &&
+    step.grid && reference.grid &&
+    close(step.grid.x, reference.grid.x) &&
+    close(step.grid.y, reference.grid.y) &&
+    close(step.grid.width, reference.grid.width) &&
+    sameRect(step.firstCard, reference.firstCard)
+  ));
+  const stableListWidth = steps.every((step) => (
+    step.bodyClientWidth === reference.bodyClientWidth &&
+    step.bodyScrollWidth === reference.bodyScrollWidth
+  ));
+  return {
+    viewport,
+    sequence: steps.map((step) => step.filterId),
+    stableRects,
+    stableListWidth,
+    fixedInternalViewport: steps.every((step) => step.bodyClientHeight === reference.bodyClientHeight),
+    scrollbarGutterReserved: steps.every((step) => step.bodyScrollbarGutter.includes("stable")),
+    scrollResetStable: steps.every((step) => step.bodyScrollTop === 0),
+    outerNeverScrolls: steps.every((step) => !step.modalScrolls && !step.panelScrolls && !step.pageScrolls),
+    internalOverflowObserved: steps.some((step) => step.bodyScrollHeight > step.bodyClientHeight + 1),
+    naturalBlankObserved: steps.some((step) => step.bodyScrollHeight <= step.bodyClientHeight + 1),
+    steps,
+  };
+}
+
+async function opponentIntelDropdownAudit(page, viewports) {
+  const results = [];
+  const readState = () => page.evaluate(() => {
+    const readRect = (selector) => {
+      const bounds = document.querySelector(selector)?.getBoundingClientRect();
+      if (!bounds) return null;
+      return {
+        x: bounds.x,
+        y: bounds.y,
+        width: bounds.width,
+        height: bounds.height,
+        top: bounds.top,
+        right: bounds.right,
+        bottom: bounds.bottom,
+        left: bounds.left,
+      };
+    };
+    const panel = document.getElementById("opponent-skill-field");
+    const summary = document.getElementById("btn-toggle-opponent-intel");
+    const panelBounds = panel?.getBoundingClientRect();
+    const panelStyle = panel ? getComputedStyle(panel) : null;
+    const transform = panelStyle?.transform && panelStyle.transform !== "none"
+      ? new DOMMatrixReadOnly(panelStyle.transform)
+      : new DOMMatrixReadOnly();
+    const clipInset = panelStyle?.clipPath?.match(/^inset\((.*?)(?:\s+round\s+.*)?\)$/i)?.[1]
+      ?.trim()
+      ?.split(/\s+/)
+      ?.map((value) => Number.parseFloat(value));
+    const clipInsetBottom = Array.isArray(clipInset) && clipInset.length
+      ? clipInset.length === 1
+        ? clipInset[0]
+        : clipInset.length === 2
+          ? clipInset[0]
+          : clipInset[2]
+      : Number.NaN;
+    const hit = panelBounds
+      ? document.elementFromPoint(
+        panelBounds.left + Math.min(24, panelBounds.width / 2),
+        panelBounds.top + Math.min(24, panelBounds.height / 2)
+      )
+      : null;
+    return {
+      board: readRect("#board"),
+      center: readRect("#table-center"),
+      opponent: readRect("#opponent-area"),
+      self: readRect("#self-area"),
+      dock: readRect("#screen-game .action-dock"),
+      topbar: readRect("#screen-game .game-topbar"),
+      summary: readRect("#btn-toggle-opponent-intel"),
+      panel: readRect("#opponent-skill-field"),
+      open: Boolean(panel?.classList.contains("is-mobile-open")),
+      expanded: summary?.getAttribute("aria-expanded"),
+      ariaHidden: panel?.getAttribute("aria-hidden"),
+      inert: Boolean(panel?.inert),
+      parentClass: panel?.parentElement?.className || "",
+      opacity: panelStyle?.opacity || "",
+      visibility: panelStyle?.visibility || "",
+      clipPath: panelStyle?.clipPath || "",
+      clipInsetBottom,
+      transition: panelStyle?.transition || "",
+      transformX: transform.m41,
+      transformY: transform.m42,
+      hitInsidePanel: Boolean(hit && panel?.contains(hit)),
+    };
+  });
+  const stableRect = (left, right, tolerance = 0.5) => Boolean(
+    left && right && ["x", "y", "width", "height"].every(
+      (key) => Math.abs(left[key] - right[key]) <= tolerance
+    )
+  );
+
+  for (const viewport of viewports) {
+    await page.setViewportSize(viewport);
+    await page.waitForTimeout(100);
+    if (await page.locator("#opponent-skill-field.is-mobile-open").count()) {
+      await page.click("#btn-close-opponent-intel");
+    }
+    await page.waitForFunction(() => {
+      const panel = document.getElementById("opponent-skill-field");
+      return !panel?.classList.contains("is-mobile-open")
+        && getComputedStyle(panel).visibility === "hidden";
+    });
+    await page.waitForTimeout(40);
+    const closed = await readState();
+    await page.click("#btn-toggle-opponent-intel");
+    await page.waitForFunction(() => (
+      document.getElementById("opponent-skill-field")?.classList.contains("is-mobile-open")
+    ));
+    await page.waitForFunction(() => {
+      const panel = document.getElementById("opponent-skill-field");
+      const style = panel ? getComputedStyle(panel) : null;
+      const matrix = style?.transform && style.transform !== "none"
+        ? new DOMMatrixReadOnly(style.transform)
+        : new DOMMatrixReadOnly();
+      return style?.visibility === "visible"
+        && Number.parseFloat(style.opacity || "0") >= 0.99
+        && Math.abs(matrix.m42) <= 0.1;
+    });
+    await page.waitForTimeout(40);
+    const opened = await readState();
+    await page.click("#table-center");
+    await page.waitForFunction(() => (
+      getComputedStyle(document.getElementById("opponent-skill-field")).visibility === "hidden"
+    ));
+    await page.waitForTimeout(40);
+    const outsideClosed = await readState();
+    await page.click("#btn-toggle-opponent-intel");
+    await page.waitForFunction(() => (
+      document.getElementById("opponent-skill-field")?.classList.contains("is-mobile-open")
+    ));
+    await page.waitForFunction(() => Number.parseFloat(
+      getComputedStyle(document.getElementById("opponent-skill-field")).opacity || "0"
+    ) >= 0.99);
+    await page.waitForTimeout(80);
+    await page.click("#btn-toggle-opponent-intel");
+    await page.waitForFunction(() => (
+      getComputedStyle(document.getElementById("opponent-skill-field")).visibility === "hidden"
+    ));
+    await page.waitForTimeout(40);
+    const repeatedClosed = await readState();
+
+    const tableStable = ["board", "center", "opponent", "self", "dock"].every(
+      (key) => stableRect(closed[key], opened[key])
+    );
+    results.push({
+      viewport,
+      closed,
+      opened,
+      outsideClosed,
+      repeatedClosed,
+      tableStable,
+      anchoredBelow: Boolean(
+        opened.summary
+        && opened.panel
+        && opened.panel.top >= opened.summary.bottom + 4
+        && Math.abs(opened.panel.left - opened.summary.left) <= 1
+      ),
+      compactWidth: Boolean(
+        opened.summary
+        && opened.panel
+        && opened.panel.width >= opened.summary.width
+        && opened.panel.width <= 310
+      ),
+      insideBoard: Boolean(
+        opened.board
+        && opened.panel
+        && opened.panel.left >= opened.board.left - 1
+        && opened.panel.right <= opened.board.right + 1
+        && opened.panel.top >= opened.board.top - 1
+        && opened.panel.bottom <= opened.board.bottom + 1
+      ),
+      belowToolbar: Boolean(
+        !opened.topbar || !opened.panel || opened.panel.top >= opened.topbar.bottom
+      ),
+      verticalMotionContract: Boolean(
+        Math.abs(closed.transformX) <= 0.1
+        && closed.transformY < 0
+        && closed.clipInsetBottom >= 99
+        && closed.transition.includes("clip-path")
+        && closed.transition.includes("transform")
+        && Math.abs(opened.transformX) <= 0.1
+        && Math.abs(opened.transformY) <= 0.1
+        && opened.clipInsetBottom <= 1
+      ),
+    });
+  }
+  return results;
+}
+
+async function opponentIntelProjectionAudit(page, viewports) {
+  const results = [];
+  for (const viewport of viewports) {
+    await page.setViewportSize(viewport);
+    await page.waitForTimeout(80);
+    results.push(await page.evaluate((requestedViewport) => {
+      const sync = typeof window.syncOpponentIntelSummary === "function"
+        ? window.syncOpponentIntelSummary
+        : null;
+      const restore = typeof window.renderOpponentSkillIntel === "function"
+        ? window.renderOpponentSkillIntel
+        : null;
+      if (!sync || !restore) return { viewport: requestedViewport, available: false, cases: {} };
+
+      const readSummary = () => {
+        const button = document.getElementById("btn-toggle-opponent-intel");
+        const tagHost = document.getElementById("opponent-intel-slots");
+        const buttonBounds = button?.getBoundingClientRect();
+        const tags = [...(tagHost?.children || [])].map((tag) => {
+          const bounds = tag.getBoundingClientRect();
+          return {
+            id: tag.dataset.skillId || "",
+            certainty: tag.dataset.certainty || "",
+            name: tag.querySelector(".opponent-intel-tag-name")?.textContent.trim() || "",
+            mark: tag.querySelector(".opponent-intel-tag-mark")?.textContent.trim() || "",
+            title: tag.title || "",
+            ariaLabel: tag.getAttribute("aria-label") || "",
+            bounds: {
+              left: bounds.left,
+              right: bounds.right,
+              top: bounds.top,
+              bottom: bounds.bottom,
+            },
+          };
+        });
+        const tagsInside = Boolean(buttonBounds && tags.every((tag) => (
+          tag.bounds.left >= buttonBounds.left - 1 &&
+          tag.bounds.right <= buttonBounds.right + 1 &&
+          tag.bounds.top >= buttonBounds.top - 1 &&
+          tag.bounds.bottom <= buttonBounds.bottom + 1
+        )));
+        const tagsDoNotOverlap = tags.every((left, leftIndex) => tags.every((right, rightIndex) => (
+          leftIndex >= rightIndex ||
+          left.bounds.right <= right.bounds.left + 0.5 ||
+          right.bounds.right <= left.bounds.left + 0.5 ||
+          left.bounds.bottom <= right.bounds.top + 0.5 ||
+          right.bounds.bottom <= left.bounds.top + 0.5
+        )));
+        return {
+          countText: document.getElementById("opponent-intel-count")?.textContent.trim() || "",
+          buttonAriaLabel: button?.getAttribute("aria-label") || "",
+          liveText: document.getElementById("opponent-intel-live")?.textContent.trim() || "",
+          hostAriaLabel: tagHost?.getAttribute("aria-label") || "",
+          tags,
+          tagsInside,
+          tagsDoNotOverlap,
+          unknownPlaceholders: tagHost?.querySelectorAll(".is-unknown").length || 0,
+          pageHorizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+          summaryHorizontalOverflow: Boolean(button && button.scrollWidth > button.clientWidth + 1),
+        };
+      };
+
+      const opponent = { playerId: "UI_AUDIT_OPPONENT" };
+      const cases = {};
+      const run = (name, knownIds, suspectedIds) => {
+        sync(opponent, { ids: knownIds, complete: false }, suspectedIds);
+        cases[name] = readSummary();
+      };
+      run("unknown", [], []);
+      run("suspectedOne", [], ["NULLIFICATION"]);
+      run("suspectedThree", [], ["NULLIFICATION", "DEFENSE", "LOAN"]);
+      run("confirmedOne", ["BLOOD_BATTLE"], []);
+      run("mixed", ["BLOOD_BATTLE"], ["NULLIFICATION", "DEFENSE"]);
+      run("confirmedSupersedesSuspected", ["BLOOD_BATTLE"], ["BLOOD_BATTLE"]);
+      run("fewerThanFourKnown", ["BLOOD_BATTLE"], []);
+      run("fourSkillsLongNames", ["RECYCLE"], ["DEEP_BREATH", "NULLIFICATION", "DEFENSE"]);
+      restore();
+      return { viewport: requestedViewport, available: true, cases };
+    }, viewport));
+  }
+  return results;
 }
 
 async function mobileDrawerAudit(page) {
@@ -208,6 +636,7 @@ async function mobileDrawerAudit(page) {
       ariaHidden: drawer?.getAttribute("aria-hidden"),
       inert: Boolean(drawer?.inert),
       expanded: document.getElementById("btn-toggle-opponent-intel")?.getAttribute("aria-expanded"),
+      toggleLabel: document.getElementById("btn-toggle-opponent-intel")?.getAttribute("aria-label") || "",
     };
   });
   await page.click("#btn-close-opponent-intel");
@@ -216,6 +645,7 @@ async function mobileDrawerAudit(page) {
     ariaHidden: document.getElementById("opponent-skill-field")?.getAttribute("aria-hidden"),
     inert: Boolean(document.getElementById("opponent-skill-field")?.inert),
     focusReturned: document.activeElement === document.getElementById("btn-toggle-opponent-intel"),
+    toggleLabel: document.getElementById("btn-toggle-opponent-intel")?.getAttribute("aria-label") || "",
   }));
 
   await page.click("#btn-toggle-skill-feed");
@@ -225,8 +655,14 @@ async function mobileDrawerAudit(page) {
     const drawer = document.getElementById("table-telemetry");
     const feed = document.getElementById("skill-broadcast");
     const bounds = drawer?.getBoundingClientRect();
+    const dockBounds = document.querySelector("#screen-game .action-dock")?.getBoundingClientRect();
+    const style = drawer ? getComputedStyle(drawer) : null;
     return {
       visible: Boolean(bounds && bounds.width > 1 && bounds.height > 1 && bounds.left >= -1 && bounds.right <= innerWidth + 1),
+      fixed: style?.position === "fixed",
+      lowerSheet: Boolean(bounds && bounds.top >= innerHeight * 0.35),
+      aboveDock: Boolean(bounds && dockBounds && bounds.bottom <= dockBounds.top - 4),
+      dockGap: bounds && dockBounds ? dockBounds.top - bounds.bottom : null,
       ariaHidden: feed?.getAttribute("aria-hidden"),
       inert: Boolean(feed?.inert),
       expanded: document.getElementById("btn-toggle-skill-feed")?.getAttribute("aria-expanded"),
@@ -241,8 +677,8 @@ async function mobileDrawerAudit(page) {
   return { intelOpen, intelClosed, feedOpen, feedClosed };
 }
 
-async function raisePopoverAudit(page) {
-  await page.setViewportSize({ width: 1440, height: 900 });
+async function raisePopoverAudit(page, viewport = { width: 1440, height: 900 }) {
+  await page.setViewportSize(viewport);
   await page.waitForTimeout(120);
   const button = page.locator("#btn-raise-options");
   if (!(await button.count()) || await button.isDisabled()) return { available: false };
@@ -265,9 +701,15 @@ async function raisePopoverAudit(page) {
       dock: read("#screen-game .action-dock"),
       self: read("#self-area"),
       actions: read("#screen-game .poker-actions-layer"),
+      skills: read("#own-skill-arsenal"),
       panel: read("#raise-panel"),
       expanded: document.getElementById("btn-raise-options")?.getAttribute("aria-expanded"),
       panelDisplay: getComputedStyle(document.getElementById("raise-panel")).display,
+      pageScrolls:
+        document.documentElement.scrollWidth > document.documentElement.clientWidth + 1 ||
+        document.documentElement.scrollHeight > document.documentElement.clientHeight + 1,
+      presetHeights: [...document.querySelectorAll("#raise-panel .raise-presets button")]
+        .map((button) => button.getBoundingClientRect().height),
     };
   });
   const before = await geometry();
@@ -288,7 +730,18 @@ async function raisePopoverAudit(page) {
     stableWhileOpen: stable(before, opened),
     stableAfterClose: stable(before, closed),
     panelAboveDock: Boolean(opened.panel && opened.dock && opened.panel.bottom <= opened.dock.top + 1),
-    panelInsideViewport: Boolean(opened.panel && opened.panel.left >= -1 && opened.panel.right <= 1441 && opened.panel.top >= -1),
+    panelClearOfSkills: Boolean(
+      !opened.skills || !opened.panel || opened.panel.bottom <= opened.skills.top + 1
+    ),
+    panelInsideViewport: Boolean(
+      opened.panel &&
+      opened.panel.left >= -1 &&
+      opened.panel.right <= viewport.width + 1 &&
+      opened.panel.top >= -1 &&
+      opened.panel.bottom <= viewport.height + 1
+    ),
+    presetsTouchable: opened.presetHeights.every((height) => height >= 43),
+    noPageScroll: !opened.pageScrolls && !closed.pageScrolls,
   };
 }
 
@@ -362,8 +815,18 @@ async function competitiveTableAudit(page, viewport) {
     const board = rect(byId("board"));
     const dock = rect(document.querySelector("#screen-game .action-dock"));
     const ownRect = rect(ownRail);
+    const ownStyle = ownRail ? getComputedStyle(ownRail) : null;
     const intelRect = rect(intelDrawer);
     const rightRect = rect(rightRail);
+    const selfEnergyTarget = rect(byId("self-energy")?.closest(".skill-energy-row"));
+    const opponentEnergyTarget = rect(byId("opponent-energy")?.closest(".skill-energy-row"));
+    const selfCardsTarget = rect(byId("self-cards"));
+    const opponentCardsTarget = rect(byId("opponent-cards"));
+    const communityTarget = rect(byId("community-cards"));
+    const selfTarget = rect(byId("self-area"));
+    const opponentTarget = rect(byId("opponent-area"));
+    const boardTarget = rect(byId("table-center"));
+    const potTarget = rect(byId("pot-core"));
     const opponentSummary = byId("btn-toggle-opponent-intel");
     const opponentSummaryText = byId("opponent-intel-count")?.textContent.trim() || "";
     const opponentSummarySlots = [...(byId("opponent-intel-slots")?.children || [])];
@@ -376,6 +839,14 @@ async function competitiveTableAudit(page, viewport) {
       : 1;
     const skillColumns = new Set(skillSlots.map((slot) => Math.round(slot?.left || 0))).size;
     const skillRows = new Set(skillSlots.map((slot) => Math.round(slot?.top || 0))).size;
+    const validFxAnchor = (bounds, minSize = 8) => Boolean(
+      bounds &&
+      bounds.width >= minSize &&
+      bounds.height >= minSize &&
+      bounds.right > 1 &&
+      bounds.bottom > 1 &&
+      !(Math.abs(bounds.left) <= 1 && Math.abs(bounds.top) <= 1)
+    );
     const selfMinimal = {
       avatarHidden: hidden(byId("self-avatar")),
       connectionHidden: hidden(byId("self-connection")),
@@ -390,6 +861,13 @@ async function competitiveTableAudit(page, viewport) {
     return {
       requested: { width, height },
       actual: { width: innerWidth, height: innerHeight },
+      layoutMetrics: {
+        board: board ? { left: board.left, top: board.top, width: board.width, height: board.height, right: board.right, bottom: board.bottom } : null,
+        ownTray: ownRect ? { left: ownRect.left, top: ownRect.top, width: ownRect.width, height: ownRect.height, right: ownRect.right, bottom: ownRect.bottom } : null,
+        ownPosition: ownStyle?.position || "",
+        ownBottomGap: board && ownRect ? board.bottom - ownRect.bottom : null,
+        rightRailWidth: rightRect?.width || 0,
+      },
       contracts: {
         "TABLE-CLEAN-01": Boolean(
           hidden(runtime) &&
@@ -447,10 +925,23 @@ async function competitiveTableAudit(page, viewport) {
           ? Boolean(skillSlots.length === 4 && skillColumns === 2 && skillRows === 2)
           : Boolean(skillSlots.length === 4 && skillColumns === 1 && skillRows === 4),
         "TABLE-CLEAN-09": Boolean(
-          deckAnchor?.width > 20 &&
-          deckAnchor?.height > 20 &&
-          stageAnchor?.width > 20 &&
-          stageAnchor?.height > 20
+          validFxAnchor(deckAnchor, 20) &&
+          validFxAnchor(stageAnchor, 20) &&
+          validFxAnchor(selfEnergyTarget) &&
+          validFxAnchor(opponentEnergyTarget) &&
+          validFxAnchor(selfCardsTarget) &&
+          validFxAnchor(opponentCardsTarget) &&
+          validFxAnchor(communityTarget) &&
+          validFxAnchor(selfTarget) &&
+          validFxAnchor(opponentTarget) &&
+          validFxAnchor(boardTarget) &&
+          validFxAnchor(potTarget) &&
+          (!ownRect || !selfEnergyTarget || (
+            selfEnergyTarget.left >= ownRect.left - 1 &&
+            selfEnergyTarget.right <= ownRect.right + 1 &&
+            selfEnergyTarget.top >= ownRect.top - 1 &&
+            selfEnergyTarget.bottom <= ownRect.bottom + 1
+          ))
         ),
         "TABLE-CLEAN-10": Boolean(
           board &&
@@ -473,11 +964,20 @@ async function competitiveTableAudit(page, viewport) {
         "TABLE-CLEAN-12": compact
           ? true
           : Boolean(
-              ownRect?.width >= 213 &&
-              ownRect?.width <= 245 &&
+              ownRect?.width >= 219 &&
+              ownRect?.width <= 239 &&
+              ownRect?.height < (board?.height || 0) * 0.62 &&
+              ownStyle?.position === "absolute" &&
+              board &&
+              ownRect.left >= board.left - 1 &&
+              ownRect.right <= board.right + 1 &&
+              ownRect.bottom <= board.bottom + 1 &&
+              board.bottom - ownRect.bottom >= 8 &&
+              board.bottom - ownRect.bottom <= 12 &&
               rightRect?.width >= 183 &&
               rightRect?.width <= 215 &&
-              intelRect?.right <= board.left + 1
+              intelDrawer?.parentElement?.classList.contains("opponent-intel-cluster") &&
+              getComputedStyle(intelDrawer).visibility === "hidden"
             ),
         "TABLE-CLEAN-13": Boolean(
           communityCards.length === 5 &&
@@ -487,7 +987,16 @@ async function competitiveTableAudit(page, viewport) {
         ),
         "TABLE-CLEAN-14": Boolean(
           visible(opponentSummary) &&
-          opponentSummarySlots.length === 4 &&
+          opponentSummarySlots.length <= 4 &&
+          opponentSummarySlots.every((tag) => (
+            tag.classList.contains("opponent-intel-tag") &&
+            ["confirmed", "suspected"].includes(tag.dataset.certainty) &&
+            Boolean(tag.dataset.skillId) &&
+            !tag.classList.contains("is-unknown")
+          )) &&
+          (opponentSummaryText !== "完全未知" || opponentSummarySlots.length === 0) &&
+          opponentSummary?.getAttribute("aria-label")?.includes("构筑情报") &&
+          opponentSummary?.getAttribute("aria-label")?.includes("打开详情") &&
           !/\d+\s*\/\s*4/.test(opponentSummaryText) &&
           !/负载/.test(opponentSummaryText)
         ),
@@ -718,11 +1227,63 @@ async function main() {
   await page.waitForSelector("#quickstart-modal:not(.hidden)", { timeout: 5000 });
   report.quickstart.initial = await page.evaluate(() => ({
     pageCount: document.querySelectorAll("[data-quickstart-page]").length,
+    zoomTriggerCount: document.querySelectorAll("[data-quickstart-zoom]").length,
     pageStatus: document.getElementById("quickstart-page-status")?.textContent || "",
     activePage: document.querySelector('[data-quickstart-page][aria-hidden="false"]')?.dataset.quickstartPage || "",
     mainInert: Boolean(document.getElementById("main-content")?.inert),
     images: [...document.querySelectorAll("#quickstart-modal img")].map((image) => image.getAttribute("src")),
   }));
+  await page.click('[data-quickstart-page="1"] [data-quickstart-zoom]');
+  await page.waitForSelector("#quickstart-image-modal:not(.hidden)", { timeout: 5000 });
+  await page.waitForFunction(
+    () => {
+      const image = document.getElementById("quickstart-image-expanded");
+      return image?.complete && image.naturalWidth > 0;
+    },
+    null,
+    { timeout: 5000 }
+  );
+  report.quickstart.imageZoomOpen = await page.evaluate(() => {
+    const modal = document.getElementById("quickstart-image-modal");
+    const tutorial = document.getElementById("quickstart-modal");
+    const source = document.querySelector('[data-quickstart-page="1"] [data-quickstart-zoom] img');
+    const expanded = document.getElementById("quickstart-image-expanded");
+    const sourceRect = source?.getBoundingClientRect();
+    const expandedRect = expanded?.getBoundingClientRect();
+    return {
+      visible: Boolean(modal && !modal.classList.contains("hidden")),
+      sourceMatches: Boolean(expanded?.src.endsWith("/assets/tutorial/shot-01-preflop.png")),
+      altPreserved: expanded?.alt === source?.alt,
+      title: document.getElementById("quickstart-image-title")?.textContent || "",
+      caption: document.getElementById("quickstart-image-caption")?.textContent || "",
+      tutorialCovered: Boolean(tutorial?.inert && tutorial.getAttribute("aria-hidden") === "true"),
+      closeFocused: document.activeElement?.id === "btn-close-quickstart-image",
+      expandedOnDesktop: Boolean(sourceRect && expandedRect && expandedRect.width > sourceRect.width * 1.25),
+      insideViewport: Boolean(
+        expandedRect &&
+        expandedRect.left >= 0 &&
+        expandedRect.top >= 0 &&
+        expandedRect.right <= window.innerWidth &&
+        expandedRect.bottom <= window.innerHeight
+      ),
+    };
+  });
+  await page.keyboard.press("Escape");
+  await page.waitForSelector("#quickstart-image-modal", { state: "hidden", timeout: 5000 });
+  await page.waitForFunction(() => document.activeElement?.matches?.("[data-quickstart-zoom]"));
+  report.quickstart.imageZoomClose = await page.evaluate(() => ({
+    tutorialStillOpen: !document.getElementById("quickstart-modal")?.classList.contains("hidden"),
+    pageStatus: document.getElementById("quickstart-page-status")?.textContent || "",
+    focusReturned: document.activeElement?.matches?.("[data-quickstart-zoom]") || false,
+  }));
+  await page.keyboard.press("Enter");
+  await page.waitForSelector("#quickstart-image-modal:not(.hidden)", { timeout: 5000 });
+  report.quickstart.imageZoomKeyboard = await page.evaluate(() => ({
+    opened: !document.getElementById("quickstart-image-modal")?.classList.contains("hidden"),
+    closeFocused: document.activeElement?.id === "btn-close-quickstart-image",
+  }));
+  await page.click("#btn-close-quickstart-image");
+  await page.waitForSelector("#quickstart-image-modal", { state: "hidden", timeout: 5000 });
   await page.click("#btn-quickstart-next");
   await page.waitForFunction(() => document.getElementById("quickstart-page-status")?.textContent === "02 / 04");
   await page.keyboard.press("ArrowRight");
@@ -927,6 +1488,7 @@ async function main() {
   await page.waitForFunction(() => document.getElementById("opponent-skill-field")?.classList.contains("is-mobile-open"));
   await page.click("#btn-mark-opponent-skills");
   await page.waitForSelector('#skill-choice-modal[data-variant="dossier"]:not(.hidden)');
+  report.game.suspectPickerGeometry = await dossierFilterGeometryAudit(page, { width: 1440, height: 900 });
   report.game.suspectPicker = await page.evaluate(() => {
     const modal = document.getElementById("skill-choice-modal");
     const filters = [...document.querySelectorAll("#skill-choice-filters [data-skill-filter]")];
@@ -966,20 +1528,81 @@ async function main() {
       '#skill-choice-filters [data-skill-filter="all"]'
     )?.getAttribute("aria-pressed") === "true",
   }), { skillId: selectedSkillId, resourceCount: resourceVisible });
+  await page.click("#btn-skill-choice-confirm");
+  await page.waitForSelector("#skill-choice-modal", { state: "hidden" });
+  report.game.suspectPicker.savedSummary = await page.evaluate((skillId) => {
+    const tag = document.querySelector(
+      `#opponent-intel-slots .opponent-intel-tag[data-skill-id="${skillId}"]`
+    );
+    return {
+      foundImmediately: Boolean(tag),
+      certainty: tag?.dataset.certainty || "",
+      name: tag?.querySelector(".opponent-intel-tag-name")?.textContent.trim() || "",
+      mark: tag?.querySelector(".opponent-intel-tag-mark")?.textContent.trim() || "",
+      ariaLabel: document.getElementById("btn-toggle-opponent-intel")?.getAttribute("aria-label") || "",
+    };
+  }, selectedSkillId);
+  await page.click("#btn-mark-opponent-skills");
+  await page.waitForSelector('#skill-choice-modal[data-variant="dossier"]:not(.hidden)');
+  const savedChoice = page.locator(`.dossier-skill-choice[data-skill-id="${selectedSkillId}"]`);
+  await savedChoice.click();
+  await page.click("#btn-skill-choice-confirm");
+  await page.waitForSelector("#skill-choice-modal", { state: "hidden" });
+  report.game.suspectPicker.deletedSummary = await page.evaluate((skillId) => ({
+    removedImmediately: !document.querySelector(
+      `#opponent-intel-slots .opponent-intel-tag[data-skill-id="${skillId}"]`
+    ),
+    countText: document.getElementById("opponent-intel-count")?.textContent.trim() || "",
+    ariaLabel: document.getElementById("btn-toggle-opponent-intel")?.getAttribute("aria-label") || "",
+  }), selectedSkillId);
+  await page.click("#btn-close-opponent-intel");
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.click("#btn-toggle-opponent-intel");
+  await page.waitForFunction(() => document.getElementById("opponent-skill-field")?.classList.contains("is-mobile-open"));
+  await page.click("#btn-mark-opponent-skills");
+  await page.waitForSelector('#skill-choice-modal[data-variant="dossier"]:not(.hidden)');
+  report.mobile.suspectPickerGeometry = await dossierFilterGeometryAudit(page, { width: 390, height: 844 });
   await page.click("#btn-skill-choice-cancel");
   await page.click("#btn-close-opponent-intel");
 
-  for (const viewport of [
+  report.game.intelDropdown = await opponentIntelDropdownAudit(page, [
     { width: 1920, height: 1080 },
     { width: 1440, height: 900 },
     { width: 1366, height: 768 },
+  ]);
+  report.game.intelSummaryProjection = await opponentIntelProjectionAudit(page, [
+    { width: 1920, height: 1080 },
+    { width: 1440, height: 900 },
+    { width: 1366, height: 768 },
+    { width: 430, height: 932 },
     { width: 390, height: 844 },
     { width: 360, height: 800 },
     { width: 320, height: 700 },
+  ]);
+
+  const requiredDesktopViewports = [
+    { width: 1920, height: 1080 },
+    { width: 1600, height: 900 },
+    { width: 1440, height: 900 },
+    { width: 1366, height: 768 },
+  ];
+  for (const viewport of [
+    ...requiredDesktopViewports,
+    ...MOBILE_TARGET_VIEWPORTS,
   ]) {
     report.tableClean.push(await competitiveTableAudit(page, viewport));
   }
-  report.game.skillCounts = await skillCountLayoutAudit(page, { width: 1440, height: 900 });
+  report.game.desktopSkillCounts = [];
+  for (const viewport of requiredDesktopViewports) {
+    report.game.desktopSkillCounts.push({
+      viewport,
+      ...(await skillCountLayoutAudit(page, viewport)),
+    });
+  }
+  report.game.skillCounts = report.game.desktopSkillCounts.find(
+    (entry) => entry.viewport.width === 1440 && entry.viewport.height === 900
+  );
   await page.setViewportSize({ width: 1280, height: 720 });
   await page.waitForTimeout(120);
   report.game.hitAudit = await buttonHitAudit(page, "#screen-game");
@@ -994,6 +1617,13 @@ async function main() {
   );
 
   report.game.raiseOptions = await raisePopoverAudit(page);
+  report.mobile.raiseOptions = [];
+  for (const viewport of MOBILE_TARGET_VIEWPORTS) {
+    report.mobile.raiseOptions.push({
+      viewport,
+      ...(await raisePopoverAudit(page, viewport)),
+    });
+  }
 
   report.game.actionGate = await page.evaluate(() => {
     const order = ["check", "call", "fold"];
@@ -1062,6 +1692,43 @@ async function main() {
   report.compact.layout = await phoneTableLayout(page);
   report.compact.hitAudit = await buttonHitAudit(page, "#screen-game");
 
+  report.game.intelUpgradeFlow = await page.evaluate(() => {
+    const required = [
+      window.getOpponent,
+      window.knownOpponentSkillIntel,
+      window.saveSuspectedSkillIds,
+      window.rememberPublicSkillIntel,
+      window.renderOpponentSkillIntel,
+    ];
+    if (required.some((fn) => typeof fn !== "function")) return { available: false };
+    const opponent = window.getOpponent();
+    if (!opponent?.playerId) return { available: false };
+    const alreadyKnown = window.knownOpponentSkillIntel(opponent).ids || [];
+    const candidate = ["NULLIFICATION", "DESTINY", "ENDGAME", "DEFENSE", "LOAN"]
+      .find((skillId) => !alreadyKnown.includes(skillId));
+    if (!candidate) return { available: false };
+    const readTags = () => [...document.querySelectorAll("#opponent-intel-slots .opponent-intel-tag")]
+      .map((tag) => ({
+        id: tag.dataset.skillId || "",
+        certainty: tag.dataset.certainty || "",
+        mark: tag.querySelector(".opponent-intel-tag-mark")?.textContent.trim() || "",
+        name: tag.querySelector(".opponent-intel-tag-name")?.textContent.trim() || "",
+      }));
+    window.saveSuspectedSkillIds([candidate]);
+    window.renderOpponentSkillIntel();
+    const before = readTags().filter((tag) => tag.id === candidate);
+    window.rememberPublicSkillIntel({ casterId: opponent.playerId, skillId: candidate });
+    window.renderOpponentSkillIntel();
+    const after = readTags().filter((tag) => tag.id === candidate);
+    return {
+      available: true,
+      candidate,
+      before,
+      after,
+      ariaLabel: document.getElementById("btn-toggle-opponent-intel")?.getAttribute("aria-label") || "",
+    };
+  });
+
   const landscapeLayout = () => page.evaluate(() => {
     const dock = document.querySelector(".action-dock")?.getBoundingClientRect();
     const board = document.getElementById("board")?.getBoundingClientRect();
@@ -1126,10 +1793,25 @@ async function main() {
     report.quickstart.autoStart.stored !== null ||
     report.quickstart.autoStart.entryAction !== "开始阅读" ||
     report.quickstart.initial.pageCount !== 4 ||
+    report.quickstart.initial.zoomTriggerCount !== 5 ||
     report.quickstart.initial.pageStatus !== "01 / 04" ||
     report.quickstart.initial.activePage !== "1" ||
     !report.quickstart.initial.mainInert ||
     report.quickstart.initial.images.length !== 5 ||
+    !report.quickstart.imageZoomOpen.visible ||
+    !report.quickstart.imageZoomOpen.sourceMatches ||
+    !report.quickstart.imageZoomOpen.altPreserved ||
+    report.quickstart.imageZoomOpen.title !== "翻牌前牌桌" ||
+    !report.quickstart.imageZoomOpen.caption ||
+    !report.quickstart.imageZoomOpen.tutorialCovered ||
+    !report.quickstart.imageZoomOpen.closeFocused ||
+    !report.quickstart.imageZoomOpen.expandedOnDesktop ||
+    !report.quickstart.imageZoomOpen.insideViewport ||
+    !report.quickstart.imageZoomClose.tutorialStillOpen ||
+    report.quickstart.imageZoomClose.pageStatus !== "01 / 04" ||
+    !report.quickstart.imageZoomClose.focusReturned ||
+    !report.quickstart.imageZoomKeyboard.opened ||
+    !report.quickstart.imageZoomKeyboard.closeFocused ||
     report.quickstart.finalPage.pageStatus !== "04 / 04" ||
     report.quickstart.finalPage.finishLabel !== "开始游戏" ||
     !report.quickstart.finalPage.nextCornerHidden ||
@@ -1197,19 +1879,33 @@ async function main() {
     failures.push("desktop four-skill HUD overflow");
   }
   const expectedDesktopSkillCases = [1, 2, 3, 4].map((count) => ({ count, columns: 1, rows: count }));
-  if (
-    !report.game.skillCounts.available ||
-    report.game.skillCounts.cases.length !== expectedDesktopSkillCases.length ||
-    report.game.skillCounts.cases.some((current, index) => {
-      const expected = expectedDesktopSkillCases[index];
-      return current.count !== expected.count ||
-        current.columns !== expected.columns ||
-        current.rows !== expected.rows ||
-        !current.allInside ||
-        current.overflows;
-    })
-  ) {
-    failures.push("desktop 1-4 skill arsenal layout contract failed");
+  for (const audit of report.game.desktopSkillCounts || []) {
+    if (
+      !audit.available ||
+      audit.cases.length !== expectedDesktopSkillCases.length ||
+      !audit.adaptive?.fixedWidth ||
+      !audit.adaptive?.fixedBottom ||
+      !audit.adaptive?.fixedLeft ||
+      !audit.adaptive?.growsWithContent ||
+      !audit.adaptive?.growsUpward ||
+      audit.cases.some((current, index) => {
+        const expected = expectedDesktopSkillCases[index];
+        return current.count !== expected.count ||
+          current.visibleCount !== expected.count ||
+          current.columns !== expected.columns ||
+          current.rows !== expected.rows ||
+          !current.allInside ||
+          !current.anchoredInsideBoard ||
+          !current.clearOfCriticalUi ||
+          current.tray.position !== "absolute" ||
+          current.overflows ||
+          current.trayOverflows;
+      })
+    ) {
+      failures.push(
+        `desktop 1-4 adaptive skill tray failed at ${audit.viewport.width}x${audit.viewport.height}`
+      );
+    }
   }
   if (
     report.game.zoomButtons !== 4 ||
@@ -1241,9 +1937,102 @@ async function main() {
     report.game.suspectPicker.afterFilter.resourceVisible >= report.game.suspectPicker.initialVisible ||
     !report.game.suspectPicker.afterFilter.selectedPersisted ||
     !report.game.suspectPicker.afterFilter.allActive ||
-    remainingAfterSelection !== initialRemaining - 1
+    remainingAfterSelection !== initialRemaining - 1 ||
+    !report.game.suspectPicker.savedSummary.foundImmediately ||
+    report.game.suspectPicker.savedSummary.certainty !== "suspected" ||
+    report.game.suspectPicker.savedSummary.mark !== "?" ||
+    !report.game.suspectPicker.savedSummary.name ||
+    !report.game.suspectPicker.savedSummary.ariaLabel.includes("推测：") ||
+    !report.game.suspectPicker.deletedSummary.removedImmediately ||
+    report.game.suspectPicker.deletedSummary.countText !== "完全未知" ||
+    !report.game.suspectPicker.deletedSummary.ariaLabel.includes("完全未知")
   ) {
-    failures.push("opponent skill tag filtering or remaining-slot summary failed");
+    failures.push("opponent skill tag filtering, immediate save, or immediate delete failed");
+  }
+  const expectedDossierSequence = "all|intel|attack|defense|resource|edit|protocol|all";
+  for (const [surface, audit] of [
+    ["desktop", report.game.suspectPickerGeometry],
+    ["mobile", report.mobile.suspectPickerGeometry],
+  ]) {
+    if (
+      audit.sequence.join("|") !== expectedDossierSequence ||
+      !audit.stableRects ||
+      !audit.stableListWidth ||
+      !audit.fixedInternalViewport ||
+      !audit.scrollbarGutterReserved ||
+      !audit.scrollResetStable ||
+      !audit.outerNeverScrolls ||
+      !audit.internalOverflowObserved ||
+      !audit.naturalBlankObserved
+    ) {
+      failures.push(`${surface} opponent dossier resized or shifted while filtering`);
+    }
+  }
+  for (const audit of report.game.intelSummaryProjection) {
+    const cases = audit.cases || {};
+    const allCases = Object.values(cases);
+    const unknown = cases.unknown;
+    const suspectedOne = cases.suspectedOne;
+    const suspectedThree = cases.suspectedThree;
+    const confirmedOne = cases.confirmedOne;
+    const mixed = cases.mixed;
+    const upgraded = cases.confirmedSupersedesSuspected;
+    const fewer = cases.fewerThanFourKnown;
+    const fourSkills = cases.fourSkillsLongNames;
+    const valid = Boolean(
+      audit.available &&
+      allCases.length === 8 &&
+      allCases.every((entry) => (
+        entry.tagsInside &&
+        entry.tagsDoNotOverlap &&
+        entry.unknownPlaceholders === 0 &&
+        !entry.pageHorizontalOverflow &&
+        !entry.summaryHorizontalOverflow
+      )) &&
+      unknown?.countText === "完全未知" &&
+      unknown?.tags.length === 0 &&
+      unknown?.buttonAriaLabel.includes("完全未知") &&
+      suspectedOne?.tags.length === 1 &&
+      suspectedOne.tags[0].id === "NULLIFICATION" &&
+      suspectedOne.tags[0].certainty === "suspected" &&
+      suspectedOne.tags[0].name === "零化" &&
+      suspectedOne.tags[0].mark === "?" &&
+      suspectedOne.buttonAriaLabel.includes("推测：零化") &&
+      suspectedThree?.tags.map((tag) => tag.id).join("|") === "NULLIFICATION|DEFENSE|LOAN" &&
+      confirmedOne?.tags.length === 1 &&
+      confirmedOne.tags[0].id === "BLOOD_BATTLE" &&
+      confirmedOne.tags[0].certainty === "confirmed" &&
+      confirmedOne.tags[0].name === "血战" &&
+      confirmedOne.tags[0].mark === "✓" &&
+      confirmedOne.buttonAriaLabel.includes("已确认：血战") &&
+      mixed?.tags.map((tag) => tag.id).join("|") === "BLOOD_BATTLE|NULLIFICATION|DEFENSE" &&
+      mixed.tags.map((tag) => tag.certainty).join("|") === "confirmed|suspected|suspected" &&
+      upgraded?.tags.length === 1 &&
+      upgraded.tags[0].id === "BLOOD_BATTLE" &&
+      upgraded.tags[0].certainty === "confirmed" &&
+      fewer?.tags.length === 1 &&
+      fewer.unknownPlaceholders === 0 &&
+      fourSkills?.tags.map((tag) => tag.id).join("|") === "RECYCLE|DEEP_BREATH|NULLIFICATION|DEFENSE" &&
+      fourSkills.tags.map((tag) => tag.name).join("|") === "回收利用|深呼吸|零化|防守"
+    );
+    if (!valid) {
+      failures.push(
+        `opponent intel summary projection failed at ${audit.viewport.width}x${audit.viewport.height}`
+      );
+    }
+  }
+  if (
+    !report.game.intelUpgradeFlow.available ||
+    report.game.intelUpgradeFlow.before?.length !== 1 ||
+    report.game.intelUpgradeFlow.before[0].certainty !== "suspected" ||
+    report.game.intelUpgradeFlow.before[0].mark !== "?" ||
+    report.game.intelUpgradeFlow.after?.length !== 1 ||
+    report.game.intelUpgradeFlow.after[0].certainty !== "confirmed" ||
+    report.game.intelUpgradeFlow.after[0].mark !== "✓" ||
+    report.game.intelUpgradeFlow.after[0].name !== report.game.intelUpgradeFlow.before[0].name ||
+    !report.game.intelUpgradeFlow.ariaLabel.includes("已确认：")
+  ) {
+    failures.push("suspected opponent skill did not upgrade to one confirmed tag");
   }
   for (const audit of report.tableClean) {
     const failedContracts = Object.entries(audit.contracts)
@@ -1252,6 +2041,36 @@ async function main() {
     if (failedContracts.length) {
       failures.push(
         `competitive table contracts failed at ${audit.requested.width}x${audit.requested.height}: ${failedContracts.join(", ")}`
+      );
+    }
+  }
+  for (const audit of report.game.intelDropdown) {
+    const checks = {
+      tableStable: audit.tableStable,
+      anchoredBelow: audit.anchoredBelow,
+      compactWidth: audit.compactWidth,
+      insideBoard: audit.insideBoard,
+      belowToolbar: audit.belowToolbar,
+      verticalMotion: audit.verticalMotionContract,
+      parent: audit.opened.parentClass === "opponent-intel-cluster",
+      openedExpanded: audit.opened.expanded === "true",
+      openedAria: audit.opened.ariaHidden === "false",
+      openedInteractive: !audit.opened.inert,
+      openedVisible: audit.opened.visibility === "visible",
+      openedHitTarget: audit.opened.hitInsidePanel,
+      outsideClosed: !audit.outsideClosed.open
+        && audit.outsideClosed.expanded === "false"
+        && audit.outsideClosed.ariaHidden === "true"
+        && audit.outsideClosed.inert,
+      repeatedClosed: !audit.repeatedClosed.open
+        && audit.repeatedClosed.expanded === "false"
+        && audit.repeatedClosed.ariaHidden === "true"
+        && audit.repeatedClosed.inert,
+    };
+    const failedChecks = Object.entries(checks).filter(([, passed]) => !passed).map(([name]) => name);
+    if (failedChecks.length) {
+      failures.push(
+        `opponent intel dropdown failed at ${audit.viewport.width}x${audit.viewport.height}: ${failedChecks.join(", ")}`
       );
     }
   }
@@ -1273,10 +2092,29 @@ async function main() {
       !report.game.raiseOptions.stableWhileOpen ||
       !report.game.raiseOptions.stableAfterClose ||
       !report.game.raiseOptions.panelAboveDock ||
-      !report.game.raiseOptions.panelInsideViewport
+      !report.game.raiseOptions.panelInsideViewport ||
+      !report.game.raiseOptions.noPageScroll
     )
   ) {
     failures.push("raise options popover moved the table or escaped its overlay lane");
+  }
+  for (const audit of report.mobile.raiseOptions || []) {
+    if (
+      audit.available &&
+      (
+        !audit.opened ||
+        !audit.closed ||
+        !audit.stableWhileOpen ||
+        !audit.stableAfterClose ||
+        !audit.panelAboveDock ||
+        !audit.panelClearOfSkills ||
+        !audit.panelInsideViewport ||
+        !audit.presetsTouchable ||
+        !audit.noPageScroll
+      )
+    ) {
+      failures.push(`mobile raise overlay failed at ${audit.viewport.width}x${audit.viewport.height}`);
+    }
   }
   if (
     !report.allin.functionAvailable ||
@@ -1313,6 +2151,12 @@ async function main() {
     { count: 3, columns: 3, rows: 1 },
     { count: 4, columns: 2, rows: 2 },
   ];
+  const expectedCompactSkillCases = [
+    { count: 1, columns: 1, rows: 1 },
+    { count: 2, columns: 2, rows: 1 },
+    { count: 3, columns: 2, rows: 2 },
+    { count: 4, columns: 2, rows: 2 },
+  ];
   if (
     !report.mobile.skillCounts.available ||
     report.mobile.skillCounts.cases.length !== expectedMobileSkillCases.length ||
@@ -1332,10 +2176,15 @@ async function main() {
     report.mobile.drawers.intelOpen.ariaHidden !== "false" ||
     report.mobile.drawers.intelOpen.inert ||
     report.mobile.drawers.intelOpen.expanded !== "true" ||
+    !report.mobile.drawers.intelOpen.toggleLabel.endsWith("关闭详情。") ||
     report.mobile.drawers.intelClosed.ariaHidden !== "true" ||
     !report.mobile.drawers.intelClosed.inert ||
     !report.mobile.drawers.intelClosed.focusReturned ||
+    !report.mobile.drawers.intelClosed.toggleLabel.endsWith("打开详情。") ||
     !report.mobile.drawers.feedOpen.visible ||
+    !report.mobile.drawers.feedOpen.fixed ||
+    !report.mobile.drawers.feedOpen.lowerSheet ||
+    !report.mobile.drawers.feedOpen.aboveDock ||
     report.mobile.drawers.feedOpen.ariaHidden !== "false" ||
     report.mobile.drawers.feedOpen.inert ||
     report.mobile.drawers.feedOpen.expanded !== "true" ||
@@ -1374,9 +2223,9 @@ async function main() {
   }
   if (
     !report.compact.skillCounts.available ||
-    report.compact.skillCounts.cases.length !== expectedMobileSkillCases.length ||
+    report.compact.skillCounts.cases.length !== expectedCompactSkillCases.length ||
     report.compact.skillCounts.cases.some((current, index) => {
-      const expected = expectedMobileSkillCases[index];
+      const expected = expectedCompactSkillCases[index];
       return current.count !== expected.count ||
         current.columns !== expected.columns ||
         current.rows !== expected.rows ||

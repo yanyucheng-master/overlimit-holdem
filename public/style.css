@@ -4519,6 +4519,38 @@ body.river-phase .poker-board {
 
 .history-panel {
   width: min(560px, 100%);
+  max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 48px);
+  padding: clamp(16px, 2.2vw, 22px);
+  overflow: hidden;
+}
+
+.history-panel .settle-header {
+  align-items: center;
+  gap: 14px;
+}
+
+.history-panel .settle-header > div {
+  min-width: 0;
+}
+
+.history-panel .settle-header .eyebrow {
+  margin-bottom: 3px;
+  font-size: clamp(0.52rem, 0.8vw, 0.62rem);
+  letter-spacing: 0.18em;
+}
+
+.history-panel .settle-header h2 {
+  margin: 0;
+  font-size: clamp(1.15rem, 2.2vw, 1.55rem);
+  line-height: 1.05;
+  text-transform: none;
+}
+
+.history-panel #btn-history-close {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 7px 12px;
+  font-size: 0.78rem;
 }
 
 .history-empty {
@@ -4530,9 +4562,11 @@ body.river-phase .poker-board {
 .history-list {
   display: grid;
   gap: 8px;
-  margin-top: 14px;
-  max-height: min(52vh, 420px);
+  margin-top: 10px;
+  max-height: min(68dvh, 620px);
   overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
 }
 
 .history-item {
@@ -5422,30 +5456,87 @@ body.low-performance .hand-settle-modal {
 
   .modal-layer {
     align-items: end;
-    padding-right: var(--safe-right);
-    padding-bottom: var(--safe-bottom);
-    padding-left: var(--safe-left);
+    padding-top: max(8px, var(--safe-top));
+    padding-right: max(8px, var(--safe-right));
+    padding-bottom: max(8px, var(--safe-bottom));
+    padding-left: max(8px, var(--safe-left));
   }
 
   .modal-panel {
+    width: 100%;
     max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 20px);
     overflow: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
     border-radius: 18px 18px 10px 10px;
   }
 
+  .modal-header > div,
+  .settle-header > div,
+  .setting-row > span,
+  .skill-preview-header > div {
+    min-width: 0;
+  }
+
+  .modal-header h2,
+  .settle-header h2,
+  .setting-row strong,
+  .setting-row small {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .modal-header .icon-button,
+  .skill-preview-header .icon-button {
+    flex: 0 0 44px;
+    width: 44px;
+    min-width: 44px;
+    height: 44px;
+    min-height: 44px;
+  }
+
   .settings-panel {
-    padding: 18px 14px;
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr) auto;
+    padding: 13px 11px 11px;
+    overflow: hidden;
   }
 
   .settings-panel .settings-grid {
-    gap: 8px;
-    margin-top: 14px;
+    gap: 6px;
+    min-height: 0;
+    margin-top: 10px;
+    padding-right: 2px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
   }
 
   .settings-panel .setting-row {
-    grid-template-columns: minmax(0, 1fr) minmax(110px, 160px);
-    gap: 10px;
-    padding: 10px 12px;
+    grid-template-columns: minmax(0, 1fr) minmax(94px, 132px);
+    gap: 8px;
+    min-height: 52px;
+    padding: 8px 9px;
+  }
+
+  .settings-panel .setting-row strong {
+    font-size: 0.78rem;
+    line-height: 1.25;
+  }
+
+  .settings-panel .setting-row small,
+  .settings-panel .setting-row > p {
+    font-size: 0.64rem;
+    line-height: 1.3;
+  }
+
+  .settings-panel .setting-row select,
+  .settings-panel .setting-row input[type="range"],
+  .settings-panel .settings-rules-go,
+  .settings-panel .settings-navigation .button,
+  .settings-panel #btn-preview-allin {
+    min-height: 44px;
   }
 
   .settings-panel .setting-row.switch-row {
@@ -5454,16 +5545,36 @@ body.low-performance .hand-settle-modal {
 
   .settings-panel .setting-row.allin-style-setting {
     grid-template-columns: minmax(0, 1fr);
+    gap: 7px;
+    min-height: 210px;
+    padding: 9px;
+  }
+
+  .settings-panel .allin-style-picker {
+    grid-template-columns: none;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(128px, 44vw);
+    gap: 7px;
+    padding: 2px 2px 6px;
+    overflow-x: auto;
+    overscroll-behavior-inline: contain;
+    scroll-snap-type: x proximity;
+    scrollbar-width: thin;
+  }
+
+  .settings-panel .allin-style-option {
+    scroll-snap-align: start;
   }
 
   .settings-panel .allin-style-option-body {
     grid-template-columns: minmax(0, 1fr);
-    gap: 6px;
-    min-height: 112px;
+    gap: 4px;
+    min-height: 92px;
+    padding: 6px;
   }
 
   .settings-panel .allin-style-swatch {
-    height: 48px;
+    height: 44px;
   }
 
   .settings-panel .allin-style-copy {
@@ -5475,11 +5586,15 @@ body.low-performance .hand-settle-modal {
   }
 
   .settings-panel .settings-note {
-    margin-top: 12px;
+    margin-top: 8px;
+    font-size: 0.62rem;
   }
 
   .settings-panel .settings-navigation {
-    margin-top: 10px;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    margin-top: 8px;
+    padding: 7px 8px;
   }
 
   .modal-actions {
@@ -5492,21 +5607,111 @@ body.low-performance .hand-settle-modal {
   }
 
   .settle-panel {
-    padding: 18px 13px;
+    width: 100%;
+    padding: 13px 10px 11px;
+    overflow-x: hidden;
+    overflow-y: auto;
   }
 
   .settle-countdown {
-    width: 56px;
-    height: 56px;
+    width: 48px;
+    height: 48px;
   }
 
   .settle-board {
-    padding: 10px;
+    gap: 8px;
+    padding: 8px;
   }
 
   .settle-card-row {
     --card-w: clamp(35px, 10.5vw, 49px);
     gap: 4px;
+    flex-wrap: nowrap;
+    min-width: 0;
+  }
+
+  .settle-hands-grid {
+    gap: 7px;
+  }
+
+  .settle-hand {
+    min-width: 0;
+    padding: 8px;
+  }
+
+  .settle-hand > strong,
+  .settle-detail,
+  .settle-hand-name,
+  .settle-chip-steps,
+  .settle-chip-total {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .settle-outcome {
+    display: grid;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  .settle-hand-name {
+    margin-block: 2px;
+    font-size: clamp(1rem, 5.2vw, 1.2rem);
+    line-height: 1.2;
+  }
+
+  .settle-ledger {
+    gap: 6px;
+    margin: 0;
+    padding: 9px 10px;
+  }
+
+  .settle-chip-steps {
+    font-size: 0.76rem;
+    line-height: 1.42;
+  }
+
+  .settle-meta-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: 5px 12px;
+  }
+
+  .settle-energy {
+    min-height: 44px;
+    padding: 7px 10px;
+  }
+
+  .settle-next {
+    min-width: 0;
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .history-panel {
+    display: grid;
+    grid-template-rows: auto auto minmax(0, 1fr);
+    width: 100%;
+    max-height: min(78dvh, calc(100dvh - var(--safe-top) - var(--safe-bottom) - 20px));
+    padding: 13px 11px 11px;
+    overflow: hidden;
+  }
+
+  .history-panel .settle-header h2 {
+    font-size: clamp(1rem, 5vw, 1.22rem);
+  }
+
+  .history-panel #btn-history-close {
+    min-height: 44px;
+    padding: 8px 12px;
+  }
+
+  .history-panel .history-list {
+    min-height: 0;
+    max-height: none;
+    overflow-y: auto;
   }
 
   .allin-text {
@@ -7016,5 +7221,263 @@ body.reduce-motion .skill-fx-secret:not(.hidden) {
 .chip-view-hidden .self-bet,
 .chip-view-hidden .opponent-bet {
   font-variant-numeric: tabular-nums;
+}
+
+/* --------------------------------------------------------------------------
+   SETTLEMENT V2 / DESKTOP ONE-SCREEN REVIEW
+   Mobile keeps the existing document flow. Desktop uses compact semantic
+   groups and only the optional calculation list may scroll when unusually
+   long; the settlement layer and panel themselves remain fixed to one screen.
+   -------------------------------------------------------------------------- */
+
+.settle-community-block,
+.settle-outcome,
+.settle-meta-row {
+  display: contents;
+}
+
+@media (min-width: 761px) {
+  .hand-settle-modal {
+    place-items: center;
+    padding:
+      max(8px, var(--safe-top))
+      max(10px, var(--safe-right))
+      max(8px, var(--safe-bottom))
+      max(10px, var(--safe-left));
+    overflow: hidden;
+  }
+
+  .hand-settle-modal .settle-panel {
+    display: grid;
+    grid-template-rows: auto auto auto minmax(0, auto);
+    gap: 7px;
+    width: min(890px, 100%);
+    max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 16px);
+    padding: 14px 18px 15px;
+    overflow: hidden;
+  }
+
+  .hand-settle-modal .settle-header {
+    align-items: center;
+    min-height: 54px;
+    gap: 14px;
+  }
+
+  .hand-settle-modal .settle-header .eyebrow {
+    margin-bottom: 2px;
+    font-size: 0.55rem;
+    letter-spacing: 0.17em;
+  }
+
+  .hand-settle-modal .settle-header h2 {
+    font-size: clamp(1.75rem, 3.1vw, 2.65rem);
+    line-height: 0.96;
+  }
+
+  .hand-settle-modal .settle-countdown {
+    flex: 0 0 auto;
+    width: 52px;
+    height: 52px;
+    font-size: 1.08rem;
+  }
+
+  .hand-settle-modal .settle-detail {
+    min-height: 18px;
+    margin: 0;
+    font-size: 0.8rem;
+    line-height: 1.25;
+  }
+
+  .hand-settle-modal .settle-board {
+    gap: 8px;
+    padding: 10px 12px;
+    border-radius: 12px;
+  }
+
+  .hand-settle-modal .settle-community-block {
+    display: grid;
+    grid-template-columns: auto auto;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .hand-settle-modal .settle-card-row {
+    --card-w: clamp(50px, 4vw, 60px);
+    --card-h: calc(var(--card-w) * 1.42);
+    flex-wrap: nowrap;
+    gap: 6px;
+  }
+
+  .hand-settle-modal .settle-hands-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .hand-settle-modal .settle-hand {
+    grid-template-columns: auto auto minmax(74px, 1fr);
+    align-items: center;
+    gap: 8px;
+    min-height: 76px;
+    padding: 7px 10px;
+    border-color: rgba(120, 145, 210, 0.11);
+    background: rgba(2, 5, 18, 0.24);
+  }
+
+  .hand-settle-modal .settle-hand > strong {
+    overflow-wrap: anywhere;
+    font-size: 0.78rem;
+    line-height: 1.3;
+    text-align: left;
+  }
+
+  .hand-settle-modal .settle-outcome {
+    display: grid;
+    gap: 6px;
+    min-height: 0;
+  }
+
+  .hand-settle-modal .settle-hand-name {
+    min-height: 24px;
+    margin: 0;
+    font-size: clamp(1.02rem, 2vw, 1.28rem);
+    line-height: 1.15;
+  }
+
+  .hand-settle-modal .settle-ledger {
+    gap: 5px;
+    min-height: 0;
+    margin: 0;
+    padding: 8px 11px 9px;
+    border-radius: 11px;
+  }
+
+  .hand-settle-modal .settle-chip-steps {
+    max-height: min(110px, 15dvh);
+    padding-right: 8px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    font-size: 0.76rem;
+    line-height: 1.35;
+  }
+
+  .hand-settle-modal .settle-chip-total {
+    font-size: 0.86rem;
+    line-height: 1.25;
+    text-align: center;
+  }
+
+  .hand-settle-modal .settle-meta-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px 14px;
+    min-height: 22px;
+    padding-top: 1px;
+  }
+
+  .hand-settle-modal .settle-meta-row > :not(.hidden) + :not(.hidden)::before {
+    content: "｜";
+    margin-right: 14px;
+    color: rgba(143, 155, 185, 0.45);
+  }
+
+  .hand-settle-modal .settle-energy,
+  .hand-settle-modal .settle-next {
+    width: auto;
+    min-height: 0;
+    margin: 0;
+    font-size: 0.76rem;
+    line-height: 1.25;
+    letter-spacing: 0.055em;
+  }
+}
+
+@media (min-width: 761px) and (max-height: 820px) {
+  .hand-settle-modal {
+    padding-top: max(5px, var(--safe-top));
+    padding-bottom: max(5px, var(--safe-bottom));
+  }
+
+  .hand-settle-modal .settle-panel {
+    gap: 5px;
+    max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 10px);
+    padding: 10px 14px 11px;
+  }
+
+  .hand-settle-modal .settle-header {
+    min-height: 44px;
+  }
+
+  .hand-settle-modal .settle-header .eyebrow {
+    margin: 0 0 1px;
+    font-size: 0.49rem;
+  }
+
+  .hand-settle-modal .settle-header h2 {
+    font-size: clamp(1.45rem, 2.7vw, 2rem);
+  }
+
+  .hand-settle-modal .settle-countdown {
+    width: 44px;
+    height: 44px;
+    font-size: 0.94rem;
+  }
+
+  .hand-settle-modal .settle-detail {
+    min-height: 16px;
+    font-size: 0.72rem;
+  }
+
+  .hand-settle-modal .settle-board {
+    gap: 6px;
+    padding: 7px 10px;
+  }
+
+  .hand-settle-modal .settle-card-row {
+    --card-w: clamp(48px, 3.8vw, 55px);
+    gap: 5px;
+  }
+
+  .hand-settle-modal .settle-hand {
+    min-height: 69px;
+    padding: 5px 8px;
+  }
+
+  .hand-settle-modal .settle-outcome {
+    gap: 4px;
+  }
+
+  .hand-settle-modal .settle-hand-name {
+    min-height: 20px;
+    font-size: 0.98rem;
+  }
+
+  .hand-settle-modal .settle-ledger {
+    gap: 3px;
+    padding: 6px 9px 7px;
+  }
+
+  .hand-settle-modal .settle-chip-steps {
+    max-height: min(82px, 12dvh);
+    font-size: 0.71rem;
+    line-height: 1.28;
+  }
+
+  .hand-settle-modal .settle-chip-total {
+    font-size: 0.8rem;
+  }
+
+  .hand-settle-modal .settle-meta-row {
+    min-height: 19px;
+  }
+
+  .hand-settle-modal .settle-energy,
+  .hand-settle-modal .settle-next {
+    font-size: 0.7rem;
+  }
 }
 

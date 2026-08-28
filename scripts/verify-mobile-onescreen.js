@@ -7,8 +7,13 @@ const { chromiumLaunchOptions } = require("./playwright-runtime");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:3002";
 const VIEWPORTS = [
+  { name: "320x700", width: 320, height: 700 },
+  { name: "360x800", width: 360, height: 800 },
+  { name: "375x812", width: 375, height: 812 },
   { name: "390x844", width: 390, height: 844 },
-  { name: "375x667", width: 375, height: 667 },
+  { name: "393x852", width: 393, height: 852 },
+  { name: "412x915", width: 412, height: 915 },
+  { name: "430x932", width: 430, height: 932 },
 ];
 
 const CRITICAL = {
@@ -28,6 +33,8 @@ const CRITICAL = {
     "button[data-action='allin']",
     "#btn-raise",
     "#skill-hud",
+    "#btn-toggle-opponent-intel",
+    "#btn-toggle-skill-feed",
   ],
 };
 
@@ -49,12 +56,22 @@ async function measure(page, screenId, selectors) {
           top: Math.round(r.top),
           bottom: Math.round(r.bottom),
           height: Math.round(r.height),
-          inView: r.top >= -1 && r.bottom <= vh + 1 && r.height > 0 && r.width > 0,
+          inView:
+            r.left >= -1 &&
+            r.right <= window.innerWidth + 1 &&
+            r.top >= -1 &&
+            r.bottom <= vh + 1 &&
+            r.height > 0 &&
+            r.width > 0,
           visible: style.display !== "none" && style.visibility !== "hidden",
         };
       });
       return {
-        needsScroll: de.scrollHeight > de.clientHeight + 1 || body.scrollHeight > body.clientHeight + 1,
+        needsScroll:
+          de.scrollHeight > de.clientHeight + 1 ||
+          body.scrollHeight > body.clientHeight + 1 ||
+          de.scrollWidth > de.clientWidth + 1 ||
+          body.scrollWidth > body.clientWidth + 1,
         doc: { scrollHeight: de.scrollHeight, clientHeight: de.clientHeight, vh },
         screen: screen
           ? {
@@ -122,15 +139,21 @@ async function showScreenOnly(page, key) {
       // skill layout explicitly instead of inheriting the lobby's off mode.
       const bar = document.getElementById("skill-bar");
       if (bar && !bar.children.length) {
-        bar.dataset.count = "3";
-        for (let i = 0; i < 3; i++) {
+        const names = ["深呼吸", "回收利用", "概率遮蔽", "量子底牌"];
+        bar.dataset.count = "4";
+        for (let i = 0; i < 4; i++) {
           const slot = document.createElement("div");
           slot.className = "skill-slot is-ready";
           const b = document.createElement("button");
           b.type = "button";
           b.className = "skill-use-btn is-ready";
-          b.textContent = "SKILL" + (i + 1);
-          slot.appendChild(b);
+          b.innerHTML = `<span class="skill-use-name">${names[i]}</span><span class="skill-use-cost">${i + 1}</span>`;
+          const zoom = document.createElement("button");
+          zoom.type = "button";
+          zoom.className = "skill-zoom-button";
+          zoom.setAttribute("aria-label", `放大查看技能：${names[i]}`);
+          zoom.textContent = "⌕";
+          slot.append(b, zoom);
           bar.appendChild(slot);
         }
       }
