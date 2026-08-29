@@ -20,6 +20,7 @@ describe("frontend DOM contract", () => {
   const skillFxProfiles = fs.readFileSync(path.join(publicDir, "skill-fx-profiles.js"), "utf8");
   const skillFxManager = fs.readFileSync(path.join(publicDir, "skill-fx-manager.js"), "utf8");
   const skillDefinitions = fs.readFileSync(path.join(__dirname, "..", "game", "skills", "definitions.js"), "utf8");
+  const catalogZh = fs.readFileSync(path.join(publicDir, "i18n", "catalog-zh-CN.js"), "utf8");
 
   test("HTML id 唯一", () => {
     const ids = collectMatches(html, /\bid=["']([^"']+)["']/g);
@@ -47,14 +48,28 @@ describe("frontend DOM contract", () => {
     expect(client).toContain("el.skillLabHint.textContent = skillBuildRuleText({ compact: true })");
   });
 
+  test("切语言会重绘动态文案且不误报连接恢复", () => {
+    expect(client).toContain("function listJoin(");
+    expect(client).toContain("function fillGameOverCopy(");
+    expect(client).toContain("function fillMatchInviteText(");
+    expect(client).toContain("function fillRematchStatus(");
+    expect(client).toContain("{ relocalize: true }");
+    expect(client).toContain("filterRulesHandbook(el.rulesSearch?.value || \"\")");
+    expect(client).toContain("state.matchQueueGameMode");
+    expect(client).toContain("opponentName: payload.opponentName || \"\"");
+    expect(client).not.toContain('.join("、")');
+    expect(client).not.toContain('.join("；")');
+  });
+
   test("技能构筑卡使用目录摘要且详情继续使用简易/详细规则", () => {
     expect(skillDefinitions).toContain("const catalogSummary = skill.catalogSummary || skill.shortDescription || skill.description || \"\"");
     expect(skillDefinitions).toContain("catalogSummary: skill.catalogSummary");
     expect(client).toContain("skill.catalogSummary || skill.shortDescription || skill.description || \"\"");
     expect(client).toContain('description.className = "skill-card-copy skill-card-catalog-summary"');
     expect(client).toContain("function skillDescriptionText(skill)");
-    expect(client).toContain("skill?.expertDescription || skill?.description");
-    expect(client).toContain("skill?.shortDescription || skill?.description");
+    expect(client).toContain("function skillCopy(skillOrId, field)");
+    expect(client).toContain("skill.expertDescription || skill.description");
+    expect(client).toContain("skill.shortDescription || skill.description");
   });
 
   test("所有静态按钮均声明 type 且不存在按钮嵌套", () => {
@@ -76,7 +91,7 @@ describe("frontend DOM contract", () => {
     expect(nested).toBe(false);
     expect(html).toContain('id="btn-back-game" class="button button-ghost back-button" aria-label="离开牌桌"');
     expect(html).toContain('class="history-restore-icon" width="16" height="16"');
-    expect(html).toContain('<span class="history-label">历史</span>');
+    expect(html).toMatch(/<span class="history-label"[^>]*>历史<\/span>/);
     expect(tableV2).toContain(".salon-ui #screen-game .table-tools-left");
     expect(tableV2).toContain("flex-direction: row;");
     expect(tableV2).toContain(".salon-ui #screen-game .history-restore-icon");
@@ -179,7 +194,7 @@ describe("frontend DOM contract", () => {
     expect(summaryFunction).toContain('"opponent-intel-tag is-" + entry.certainty');
     expect(summaryFunction).toContain('confirmed ? "✓" : "?"');
     expect(client).toContain('function syncOpponentIntelToggleAccessibility(accessibleDetails = null)');
-    expect(client).toContain('(expanded ? "关闭详情。" : "打开详情。")');
+    expect(client).toContain('expanded ? t("intel.closeDetails") : t("intel.openDetails")');
     expect(tableV2).toContain('.salon-ui #screen-game .opponent-intel-tags');
     expect(tableV2).toContain('.salon-ui #screen-game .opponent-intel-tag.is-confirmed');
     expect(tableV2).toContain('.salon-ui #screen-game .opponent-intel-tag.is-suspected');
@@ -295,10 +310,17 @@ describe("frontend DOM contract", () => {
       "shot-05-skill-table.png",
     ].forEach((filename) => {
       const asset = path.join(publicDir, "assets", "tutorial", filename);
+      const enAsset = path.join(publicDir, "assets", "tutorial", "en-US", filename);
       expect(fs.existsSync(asset)).toBe(true);
       expect(fs.statSync(asset).size).toBeGreaterThan(20_000);
+      expect(fs.existsSync(enAsset)).toBe(true);
+      expect(fs.statSync(enAsset).size).toBeGreaterThan(20_000);
       expect(markup).toContain(`./assets/tutorial/${filename}`);
+      expect(markup).toContain(`data-tutorial-src-zh="./assets/tutorial/${filename}"`);
+      expect(markup).toContain(`data-tutorial-src-en="./assets/tutorial/en-US/${filename}"`);
     });
+    expect(client).toContain("function applyTutorialImages");
+    expect(client).toContain("function displayPlayerName");
     ["+25", "+50", "+75", "+100", "+250", "+400", "+500"].forEach((bonus) => {
       expect(markup).toContain(`<strong>${bonus}</strong>`);
     });
@@ -323,7 +345,7 @@ describe("frontend DOM contract", () => {
     expect(client).toContain("function setRulesTocOpen");
     expect(client).toContain('target.querySelector(".rules-chapter-heading")');
     expect(client).toContain("highlight: Boolean(query)");
-    expect(client).toContain("RULEBOOK_DATA.sections.length !== 18");
+    expect(client).toContain("getRulebook().sections.length !== 18");
     expect(rulebookData).toContain('id: "rule-skills"');
     expect(rulebookData).toContain('id: "rule-protocols"');
     expect(salon).toContain(".salon-ui .rules-search-results-list");
@@ -404,7 +426,7 @@ describe("frontend DOM contract", () => {
     expect(html).toContain('id="opponent-skill-field"');
     expect(html).toContain('id="btn-mark-opponent-skills"');
     expect(html).toContain('id="skill-choice-filters"');
-    expect(client).toContain('el.skillChoiceSelection.textContent = "剩余可用 "');
+    expect(client).toContain('t("intel.remaining"');
     expect(client).toContain('skillMatchesLabFilter(skill, activeFilter)');
     expect(client).toContain("function renderOpponentSkillIntel()");
     expect(client).toContain('skillLoadout: "abyss_skill_loadout_v2"');
@@ -416,9 +438,9 @@ describe("frontend DOM contract", () => {
     expect(html).toContain('id="btn-hand-history"');
     expect(html).toContain('id="hand-history-modal"');
     expect(client).toContain("function renderSettleChipLedger");
-    expect(client).toContain("牌型奖励");
+    expect(client).toContain('t("settle.rankBonus"');
     expect(client).toContain("handRankBonusValue");
-    expect(client).toContain("只结算 50% 筹码");
+    expect(client).toContain('t("settle.defenseHalf"');
     expect(client).toContain("function openHandHistoryModal()");
     expect(html).toContain('id="opponent-energy-pop"');
     expect(html).toContain('id="btn-energy-pop-confirm"');
@@ -499,7 +521,8 @@ describe("frontend DOM contract", () => {
   test("技能牌堆审计包含最终牌区守恒检查", () => {
     expect(client).toContain("const finalZoneCodes = [");
     expect(client).toContain("finalZoneCodes.length === 52");
-    expect(client).toContain("技能审计发现牌张守恒异常");
+    expect(client).toContain('t("fairness.auditFail")');
+    expect(catalogZh).toContain("技能审计发现牌张守恒异常");
   });
 
   test("设置面板提供安全返回大厅入口且设置触发器无边框", () => {
@@ -556,9 +579,10 @@ describe("frontend DOM contract", () => {
   test("技能播报保留本人私有结果，情报看到的牌写入本机 feed", () => {
     expect(client).toContain("function rememberPrivateSkillFeed");
     expect(client).toContain("skillSelfLog");
-    expect(client).toContain("暂无公开技能事件");
+    expect(client).toContain('t("intel.feedEmpty")');
+    expect(catalogZh).toContain("暂无公开技能事件");
     expect(client).not.toContain("等待公开技能事件");
-    expect(client).toContain('time + " · 我 · " + skillName');
+    expect(client).toContain('time + " · " + t("intel.me") + " · " + skillName');
     expect(client).toContain("rememberPrivateSkillFeed({");
     expect(client).toContain("isGenericSecretSummary");
     expect(tableV2).toContain(".skill-feed-entry.is-self");

@@ -3,7 +3,7 @@
  * Mobile one-screen verification + skill solo smoke.
  */
 const { chromium } = require("playwright");
-const { chromiumLaunchOptions } = require("./playwright-runtime");
+const { chromiumLaunchOptions, pinZhCNLocale } = require("./playwright-runtime");
 
 const BASE = process.env.BASE_URL || "http://127.0.0.1:3002";
 const VIEWPORTS = [
@@ -265,6 +265,7 @@ async function runViewport(browser, vp) {
     hasTouch: true,
   });
   const page = await context.newPage();
+  await page.addInitScript(pinZhCNLocale);
   await page.addInitScript(() => {
     localStorage.setItem("overlimit_quickstart_v1", "seen");
   });

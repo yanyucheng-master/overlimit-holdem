@@ -260,7 +260,8 @@ describe("launch skill FX system contract", () => {
     expect(html).toContain('class="skill-fx-gallery-launcher hidden"');
     expect(gallery).toContain('query.get("skillfx") === "1"');
     expect(gallery).toContain("launcher.remove()");
-    expect(gallery).toContain("SUPPRESSED // 此视角无权看到该事件");
+    expect(gallery).toContain('tt("modal.gallerySuppressed")');
+    expect(fs.readFileSync(path.join(publicDir, "i18n", "catalog-zh-CN.js"), "utf8")).toContain("SUPPRESSED // 此视角无权看到该事件");
   });
 
   test("FX-STAGE-01 manager separates the table stage from the physical target", () => {
@@ -321,7 +322,7 @@ describe("launch skill FX system contract", () => {
   test("FX-STAGE-08 result-only captions use safe results unless identity is explicitly revealed", () => {
     const source = fs.readFileSync(path.join(publicDir, "skill-fx-manager.js"), "utf8");
     expect(source).toContain('node.dataset.identity = revealIdentity ? "revealed" : "result-only"');
-    expect(source).toContain('revealIdentity ? profile.name : cleanToken(event.resultTitle || profile.resultLabel)');
+    expect(source).toContain('revealIdentity ? localizedSkillName(profile) : cleanToken(event.resultTitle || profile.resultLabel)');
     expect(source).toContain('event.revealIdentity === true');
   });
 
@@ -358,7 +359,7 @@ describe("launch skill FX system contract", () => {
     expect(client).not.toContain("eventId: payload.eventId || payload.requestId");
     expect(client).not.toContain("eventId: payload.eventId || payload.requestId || payload.resultId");
     expect(client).toContain('if (status === "FAILED") return "RESOLUTION FAILED"');
-    expect(client).toContain('? `「${skillDefinition(payload.skillId).name}」结算失败`');
+    expect(client).toContain('t("skill.failed", { name: skillCopy(payload.skillId, "name") })');
   });
 
   test("FX-STAGE-13 restored and replayed events never enter the stage queue", () => {

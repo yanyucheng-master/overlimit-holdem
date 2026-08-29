@@ -29,7 +29,14 @@ const QUICKSTART_IMAGE_MIN_SCALE = 1;
 const QUICKSTART_IMAGE_MAX_SCALE = 4;
 const QUICKSTART_IMAGE_BUTTON_FACTOR = 1.25;
 const QUICKSTART_IMAGE_WHEEL_RATE = 0.0015;
-const RULEBOOK_DATA = window.OVERLIMIT_RULEBOOK_V1 || Object.freeze({ sections: [], skills: [], protocols: [] });
+const RULEBOOK_ZH = window.OVERLIMIT_RULEBOOK_V1 || Object.freeze({ sections: [], skills: [], protocols: [] });
+function getRulebook() {
+  if (typeof window !== "undefined" && currentLocale() === "en-US" && window.OVERLIMIT_RULEBOOK_EN_V1) {
+    return window.OVERLIMIT_RULEBOOK_EN_V1;
+  }
+  return RULEBOOK_ZH;
+}
+const RULEBOOK_DATA = RULEBOOK_ZH;
 const RULEBOOK_HIGHLIGHT_MS = 2600;
 const RULEBOOK_MAX_SEARCH_RESULTS = 24;
 const STORAGE = Object.freeze({
@@ -93,6 +100,102 @@ const initialRoomId = safeStorageGet("sessionStorage", STORAGE.roomId);
 const hasPendingReconnect = Boolean(initialRoomId && initialReconnectToken);
 safeStorageSet("sessionStorage", STORAGE.playerId, initialPlayerId);
 
+function t(key, vars) {
+  return window.OverlimitI18n ? window.OverlimitI18n.t(key, vars) : String(key || "");
+}
+
+function currentLocale() {
+  return window.OverlimitI18n ? window.OverlimitI18n.getLocale() : "zh-CN";
+}
+
+function displayHandHint(hint) {
+  if (!hint || hint === "waitingDeal") return t("game.waitingDeal");
+  return localizeIncoming(hint);
+}
+
+function localizeIncoming(text) {
+  if (text == null) return "";
+  const raw = String(text);
+  if (!raw) return raw;
+  if (!window.OverlimitIncomingI18n) return raw;
+  return window.OverlimitIncomingI18n.localize(raw, t, currentLocale());
+}
+
+function listSeparator(kind) {
+  const english = currentLocale() === "en-US";
+  if (kind === "colon") return english ? ": " : "：";
+  if (kind === "semicolon") return english ? "; " : "；";
+  return english ? ", " : "、";
+}
+
+function listJoin(items, kind) {
+  return (Array.isArray(items) ? items : []).join(listSeparator(kind));
+}
+
+function displayPlayerName(playerOrName, fallback) {
+  const player = playerOrName && typeof playerOrName === "object" ? playerOrName : null;
+  const name = player ? player.name : playerOrName;
+  if ((player && player.isBot) || name === "超限AI") return t("game.botName");
+  return (name && String(name).trim()) || fallback || "";
+}
+
+function skillCopy(skillOrId, field) {
+  const skill = typeof skillOrId === "string"
+    ? (state.skillCatalog.find((item) => item.id === skillOrId) || { id: skillOrId })
+    : (skillOrId || {});
+  const id = skill.id || "";
+  const key = "skills." + id + "." + field;
+  if (currentLocale() === "en-US" && id && window.OverlimitI18n?.has(key)) return t(key);
+  if (field === "catalogSummary") return skill.catalogSummary || skill.shortDescription || skill.description || "";
+  if (field === "shortDescription") return skill.shortDescription || skill.description || "";
+  if (field === "expertDescription") return skill.expertDescription || skill.description || "";
+  if (field === "name") return skill.name || id;
+  return skill[field] || "";
+}
+
+function skillTagLabel(tag) {
+  const map = {
+    ACTIVE: "skill.tagActive",
+    PASSIVE: "skill.tagPassive",
+    RESOURCE: "skill.tagResource",
+    INFORMATION: "skill.tagIntel",
+    DEFENSE: "skill.tagDefense",
+    CONTROL: "skill.tagControl",
+    SETTLEMENT: "skill.tagSettle",
+    SECRET: "skill.tagSecret",
+    HOLE_EDIT: "skill.tagHole",
+    DECK_EDIT: "skill.tagDeck",
+    BOARD_EDIT: "skill.tagBoard",
+    ONCE_PER_HAND: "skill.tagOnce",
+    PROTOCOL: "skill.tagProtocol",
+  };
+  return map[tag] ? t(map[tag]) : String(tag || "");
+}
+
+function skillPhaseLabel(phase) {
+  const key = "phase." + String(phase || "");
+  return window.OverlimitI18n?.has(key) ? t(key) : String(phase || "");
+}
+
+function phaseLabel(phase) {
+  const key = "phase." + String(phase || "");
+  return window.OverlimitI18n?.has(key) ? t(key) : (PHASE_LABELS[phase] || String(phase || ""));
+}
+
+function actionLabel(action) {
+  const map = {
+    fold: "action.fold",
+    check: "action.check",
+    call: "action.call",
+    bet: "action.bet",
+    raise: "action.raise",
+    allin: "action.allin",
+    win_by_fold: "action.winByFold",
+  };
+  const key = map[action];
+  return key && window.OverlimitI18n?.has(key) ? t(key) : (ACTION_LABELS[action] || String(action || ""));
+}
+
 function loadSettings() {
   const defaults = {
     animation: "high",
@@ -104,6 +207,8 @@ function loadSettings() {
     music: 0,
     lowPerformance: false,
     skillExpertText: false,
+    language: "zh-CN",
+    languageChosen: false,
   };
   let stored = {};
   try {
@@ -112,6 +217,11 @@ function loadSettings() {
   } catch (_error) {
     stored = {};
   }
+  const chosen = stored.languageChosen === true && (stored.language === "en-US" || stored.language === "zh-CN");
+  const language = chosen
+    ? stored.language
+    : (window.OverlimitI18n ? window.OverlimitI18n.detectBrowserLanguage() : defaults.language);
+  if (window.OverlimitI18n) window.OverlimitI18n.setLocale(language, { silent: true });
   return {
     animation: ["high", "medium", "low"].includes(stored.animation)
       ? stored.animation
@@ -134,6 +244,8 @@ function loadSettings() {
         : defaults.lowPerformance,
     skillExpertText:
       typeof stored.skillExpertText === "boolean" ? stored.skillExpertText : defaults.skillExpertText,
+    language,
+    languageChosen: chosen,
   };
 }
 
@@ -212,7 +324,7 @@ const state = {
   actionDeadline: null,
   turnId: null,
   actionCountdownRaf: 0,
-  handHint: "等待发牌",
+  handHint: "waitingDeal",
   handCategory: 0,
   handSettling: false,
   handSettleEndAt: 0,
@@ -241,8 +353,11 @@ const state = {
   },
   matching: false,
   matchQueuedAt: 0,
+  matchQueueGameMode: GAME_MODE.STANDARD,
+  matchQueueSkillMode: "off",
   matchWaitRaf: 0,
   pendingMatchInvite: null,
+  rematchHumanCount: 0,
   matchInviteRaf: 0,
   matchSource: null,
   quickStartPage: 1,
@@ -326,6 +441,8 @@ const el = {
   rulesEmpty: byId("rules-empty"),
   btnRulesTop: byId("btn-rules-top"),
   settingAnimation: byId("setting-animation"),
+  settingLanguage: byId("setting-language"),
+  langButtons: [...document.querySelectorAll(".lang-btn")],
   settingAllInStyles: [...document.querySelectorAll('input[name="allin-style"]')],
   btnPreviewAllIn: byId("btn-preview-allin"),
   settingProMode: byId("setting-pro-mode"),
@@ -634,10 +751,13 @@ const ACTION_LABELS = Object.freeze({
   win_by_fold: "赢得底池",
 });
 
+let lastHandSettlePayload = null;
+let lastGameOverPayload = null;
 let audioContext = null;
 let ambientOscillator = null;
 let ambientGain = null;
 let connectionBannerTimer = 0;
+let connectionStatusKey = "connection.ok";
 let allInEffectTimer = 0;
 let allInEffectEndsAt = 0;
 let endgameDeclareTimer = 0;
@@ -705,7 +825,7 @@ function beginUiRequest(key, timeoutMs = 4000) {
 
 function canSendRealtime({ notify = true } = {}) {
   if (socket.connected) return true;
-  if (notify) showToast("实时连接尚未恢复，请稍候再试", "error");
+  if (notify) showToast(t("connection.offlineAction"), "error");
   return false;
 }
 
@@ -890,6 +1010,7 @@ function applySettings() {
   if (el.settingProFontRow) {
     el.settingProFontRow.classList.toggle("is-disabled", !state.settings.proPlayerMode);
   }
+  if (el.settingLanguage) el.settingLanguage.value = state.settings.language === "en-US" ? "en-US" : "zh-CN";
   el.settingReduceMotion.checked = Boolean(state.settings.reduceMotion);
   el.settingSfx.value = String(state.settings.sfx);
   el.settingSfxValue.textContent = String(state.settings.sfx) + "%";
@@ -900,11 +1021,123 @@ function applySettings() {
   if (el.game?.classList.contains("active")) renderActions();
 }
 
+function setAppLanguage(nextLocale, { chosen = true } = {}) {
+  const locale = nextLocale === "en-US" ? "en-US" : "zh-CN";
+  state.settings.language = locale;
+  if (chosen) state.settings.languageChosen = true;
+  saveSettings();
+  applyLanguage();
+}
+
+function applyLanguage() {
+  const locale = state.settings.language === "en-US" ? "en-US" : "zh-CN";
+  if (window.OverlimitI18n) {
+    window.OverlimitI18n.setLocale(locale, { silent: true });
+    window.OverlimitI18n.applyDom(document);
+  }
+  applyTutorialImages();
+  document.documentElement.lang = locale === "en-US" ? "en" : "zh-CN";
+  document.documentElement.setAttribute("data-locale", locale);
+  document.title = t("meta.title");
+  document.body.classList.add("i18n-ready");
+  [
+    el.selfCards,
+    el.opponentCards,
+    el.community,
+    el.settleCommunity,
+    el.settleSelfCards,
+    el.settleOppCards,
+  ].forEach((node) => {
+    if (node) delete node.dataset.rowSignature;
+  });
+  if (el.skillBar) delete el.skillBar.dataset.signature;
+  if (el.skillLog) delete el.skillLog.dataset.feedSignature;
+  if (el.settingLanguage) el.settingLanguage.value = locale;
+  el.langButtons?.forEach((btn) => {
+    const active = btn.dataset.locale === locale;
+    btn.classList.toggle("is-active", active);
+    btn.setAttribute("aria-pressed", active ? "true" : "false");
+  });
+  rulesHandbookRendered = false;
+  updateSkillPrepUi();
+  syncProtocolUi();
+  updateQuickStartEntryState();
+  if (el.selectedModeTag) {
+    el.selectedModeTag.textContent = modeInfo(state.gameMode).code;
+  }
+  if (el.selectedSkillTag) {
+    el.selectedSkillTag.textContent = state.skillMode === "abyss" ? t("modal.skill") : t("lobby.noSkills");
+  }
+  renderSkillLabFilters();
+  if (el.skillLabHint) el.skillLabHint.textContent = skillBuildRuleText({ compact: true });
+  if (el.skillLab?.classList.contains("active")) renderSkillLab();
+  renderState();
+  renderSkillHud();
+  renderOpponentSkillIntel();
+  renderSkillFeed();
+  renderSkillDraft();
+  if (el.draftStatus && el.skillDraftPanel?.classList.contains("hidden")) {
+    el.draftStatus.textContent = skillBuildRuleText();
+  }
+  if (state.matching && el.matchQueueLane) {
+    el.matchQueueLane.textContent = laneLabel(
+      state.matchQueueGameMode || state.gameMode,
+      state.matchQueueSkillMode || state.skillMode
+    );
+  }
+  fillMatchInviteText();
+  if (el.gameOverModal && !el.gameOverModal.classList.contains("hidden") && lastGameOverPayload) {
+    fillGameOverCopy(lastGameOverPayload);
+  }
+  fillRematchStatus();
+  if (el.quickStartModal && !el.quickStartModal.classList.contains("hidden")) {
+    renderQuickStartPage(state.quickStartPage);
+  }
+  if (el.quickStartImageModal && !el.quickStartImageModal.classList.contains("hidden")) {
+    applyQuickStartImageView();
+  }
+  if (typeof window.OverlimitSkillFxGalleryRelocalize === "function") {
+    window.OverlimitSkillFxGalleryRelocalize();
+  }
+  if (el.rulesModal && !el.rulesModal.classList.contains("hidden")) {
+    renderRulesHandbook();
+    filterRulesHandbook(el.rulesSearch?.value || "");
+  } else if (el.rulesSearchStatus) {
+    el.rulesSearchStatus.textContent = t("rules.chapters", { count: 18 });
+  }
+  if (el.handHistoryModal && !el.handHistoryModal.classList.contains("hidden")) renderHandHistoryList();
+  if (el.handSettleModal && !el.handSettleModal.classList.contains("hidden") && lastHandSettlePayload) {
+    fillHandSettleModal(lastHandSettlePayload, { review: Boolean(state.settleReviewFromHistory) });
+  }
+  if (previewingSkill) showSkillPreview(previewingSkill, skillPreviewReturnFocus);
+  if (typeof socket !== "undefined") setConnectionUI(socket.connected, null, { relocalize: true });
+}
+
+function applyTutorialImages() {
+  const locale = currentLocale();
+  document.querySelectorAll("img[data-tutorial-src-en]").forEach((img) => {
+    const zh = img.getAttribute("data-tutorial-src-zh") || img.getAttribute("src");
+    const en = img.getAttribute("data-tutorial-src-en");
+    const next = locale === "en-US" ? en : zh;
+    if (next && img.getAttribute("src") !== next) img.setAttribute("src", next);
+  });
+  if (typeof isQuickStartImageOpen === "function" && isQuickStartImageOpen()) {
+    const shot = quickStartImageReturnFocus?.closest?.("[data-quickstart-zoom]") || quickStartImageReturnFocus;
+    const source = shot?.querySelector?.("img");
+    if (source && el.quickStartImageExpanded) {
+      el.quickStartImageExpanded.src = source.getAttribute("src") || source.src;
+      el.quickStartImageExpanded.alt = source.alt || "";
+      if (el.quickStartImageCaption) el.quickStartImageCaption.textContent = source.alt || el.quickStartImageCaption.textContent;
+    }
+  }
+}
+
 function showToast(message, tone) {
-  if (!message) return;
+  const text = localizeIncoming(message);
+  if (!text) return;
   const toast = document.createElement("div");
   toast.className = "toast " + (tone || "info");
-  toast.textContent = message;
+  toast.textContent = text;
   el.toastRegion.appendChild(toast);
   requestAnimationFrame(() => toast.classList.add("visible"));
   setTimeout(() => {
@@ -927,14 +1160,14 @@ function showScreen(name) {
 function modeInfo(mode) {
   return mode === GAME_MODE.OVERDRIVE
     ? {
-        name: "高爆局",
-        code: "高爆",
-        brief: "高潜力起手牌、强对抗公共牌、河牌过载。下注规则与标准局一致。",
+        name: t("lobby.overdrive"),
+        code: t("lobby.tagOverdrive"),
+        brief: t("wait.overdriveBrief"),
       }
     : {
-        name: "标准局",
-        code: "标准",
-        brief: "每一手使用独立安全洗牌，不受高爆候选算法影响。",
+        name: t("lobby.standard"),
+        code: t("lobby.tagStandard"),
+        brief: t("wait.standardShuffle"),
       };
 }
 
@@ -1077,7 +1310,7 @@ function renderOpponentEnergy() {
   el.btnOpponentEnergy?.classList.toggle("hidden", !enabled);
   el.btnOpponentEnergy?.classList.toggle("is-inferred", Boolean(enabled && inferred != null));
   if (el.btnOpponentEnergy) {
-    el.btnOpponentEnergy.title = inferred != null ? "本地推测能量，点击修改" : "查看并推测对手能量";
+    el.btnOpponentEnergy.title = inferred != null ? t("intel.energyLocal") : t("intel.energyTitle");
   }
   if (isOpponentEnergyPopOpen()) fillOpponentEnergyPop();
 }
@@ -1092,7 +1325,7 @@ function confirmOpponentEnergyInference() {
   }
   const value = Math.trunc(Number(raw));
   if (!Number.isFinite(value)) {
-    showToast("请输入有效的能量推测值", "error");
+    showToast(t("intel.invalidEnergy"), "error");
     return;
   }
   state.confirmedInferredEnergy = value;
@@ -1117,7 +1350,7 @@ function createCard(card, options) {
   }
   if (settings.back || !card || !card.rank) {
     node.classList.add("back");
-    node.setAttribute("aria-label", "隐藏底牌");
+    node.setAttribute("aria-label", t("a11y.hiddenHole"));
     const glyph = document.createElement("span");
     glyph.textContent = "◇";
     node.appendChild(glyph);
@@ -1136,7 +1369,7 @@ function createCard(card, options) {
     node.classList.remove("glow-gold");
     const badge = document.createElement("em");
     badge.className = "nullified-badge";
-    badge.textContent = "已零化";
+    badge.textContent = t("game.nullified");
     node.appendChild(badge);
   }
   if (settings.reveal) node.classList.add("flip-reveal");
@@ -1158,6 +1391,7 @@ function renderCardRow(container, cards, options) {
     settings.targetZone || "",
     isNullifyTargeting() ? (currentSkillEnergy() >= 7 ? "nullify-hole" : "nullify") : "",
     (settings.nullifiedCodes || []).join(","),
+    currentLocale(),
   ].join("|");
   if (container.dataset.rowSignature === signature) return;
   container.dataset.rowSignature = signature;
@@ -1177,11 +1411,11 @@ function renderCardRow(container, cards, options) {
         node.setAttribute(
           "aria-label",
           existing && !node.classList.contains("card-slot")
-            ? "零化 " + existing
-            : "零化公共牌第 " + (index + 1) + " 张"
+            ? t("a11y.nullifyNamed", { label: existing })
+            : t("a11y.nullifyBoardSeat", { n: index + 1 })
         );
       } else {
-        node.setAttribute("aria-label", "零化对手一张随机底牌");
+        node.setAttribute("aria-label", t("a11y.nullifyRandomHole"));
       }
     }
     return node;
@@ -1212,19 +1446,19 @@ function renderCardRow(container, cards, options) {
 }
 
 function playerStateLabel(player) {
-  if (!player) return "待机";
-  if (player.status === "folded") return "已弃";
-  if (player.status === "disconnected") return "断线";
-  if (player.status === "out") return "出局";
-  if (player.isAllIn) return "全押";
-  if (state.currentTurnPlayerId === player.playerId) return "行动中";
-  return "就绪";
+  if (!player) return t("player.standby");
+  if (player.status === "folded") return t("player.folded");
+  if (player.status === "disconnected") return t("player.disconnected");
+  if (player.status === "out") return t("player.out");
+  if (player.isAllIn) return t("player.allIn");
+  if (state.currentTurnPlayerId === player.playerId) return t("player.acting");
+  return t("player.ready");
 }
 
 function renderPlayers() {
   const me = getMe();
   const opponent = getOpponent();
-  el.selfName.textContent = me?.name || state.myName || "你";
+  el.selfName.textContent = me?.name || state.myName || t("game.you");
   el.selfChips.textContent = state.chipViewHidden ? "—" : String(me?.chips ?? "—");
   el.selfBet.textContent = state.chipViewHidden ? "—" : String(me?.streetBet ?? 0);
   el.selfState.textContent = playerStateLabel(me);
@@ -1234,10 +1468,10 @@ function renderPlayers() {
   selfDot.className = "status-dot " + (me?.isConnected ? "online" : "");
   const selfConnectionLabel = document.createElement("span");
   selfConnectionLabel.className = "mini-status-label";
-  selfConnectionLabel.textContent = me?.isConnected ? "在线" : "离线";
+  selfConnectionLabel.textContent = me?.isConnected ? t("game.online") : t("game.offline");
   el.selfConnection.append(selfDot, selfConnectionLabel);
 
-  el.opponentName.textContent = opponent?.name || "等待对手";
+  el.opponentName.textContent = displayPlayerName(opponent, t("game.waitingOpponent"));
   el.opponentChips.textContent = state.chipViewHidden ? "—" : String(opponent?.chips ?? "—");
   el.opponentBet.textContent = state.chipViewHidden ? "—" : String(opponent?.streetBet ?? 0);
   el.opponentState.textContent = playerStateLabel(opponent);
@@ -1247,7 +1481,7 @@ function renderPlayers() {
   el.opponentConnection.innerHTML = "";
   const opponentDot = document.createElement("i");
   opponentDot.className = "status-dot " + (opponent?.isConnected || opponent?.isBot ? "online" : "");
-  const connectionText = opponent?.isBot ? "人机" : opponent?.isConnected ? "在线" : "连接中断";
+  const connectionText = opponent?.isBot ? t("game.bot") : opponent?.isConnected ? t("game.online") : t("game.disconnected");
   const opponentConnectionLabel = document.createElement("span");
   opponentConnectionLabel.className = "mini-status-label";
   opponentConnectionLabel.textContent = connectionText;
@@ -1318,10 +1552,10 @@ function setRaiseExpanded(expanded) {
   if (!el.raiseConsole) return;
   el.raiseConsole.classList.toggle("collapsed", !expanded);
   el.raiseConsole.classList.toggle("expanded", expanded);
-  if (el.raiseLabel) el.raiseLabel.textContent = "加注";
+  if (el.raiseLabel) el.raiseLabel.textContent = t("action.raise");
   if (el.btnRaiseOptions) {
     el.btnRaiseOptions.setAttribute("aria-expanded", expanded ? "true" : "false");
-    el.btnRaiseOptions.title = expanded ? "收起加注额度" : "调整加注额度";
+    el.btnRaiseOptions.title = expanded ? t("action.collapseRaise") : t("action.adjustRaise");
   }
 }
 
@@ -1345,8 +1579,8 @@ function renderActions() {
       button.disabled = true;
     });
     if (el.raiseConsole) el.raiseConsole.classList.add("hidden");
-    el.turnKicker.textContent = state.settings.proPlayerMode ? "ENDGAME" : "终局窗口";
-    el.turnMessage.textContent = state.settings.proPlayerMode ? "FIRE OR SKIP" : "发动终局或放弃";
+    el.turnKicker.textContent = state.settings.proPlayerMode ? "ENDGAME" : t("game.endgameWindow");
+    el.turnMessage.textContent = state.settings.proPlayerMode ? "FIRE OR SKIP" : t("game.endgameChoice");
     return;
   }
   if (el.raiseConsole) el.raiseConsole.classList.remove("hidden");
@@ -1366,7 +1600,7 @@ function renderActions() {
   const canCheck = isMyTurn && state.validActions.includes("check");
   const canCall = isMyTurn && state.validActions.includes("call");
 
-  el.callLabel.textContent = "跟注";
+  el.callLabel.textContent = t("action.call");
   el.callAmount.textContent = state.chipViewHidden || !(toCall > 0) ? "—" : String(toCall);
   el.actionButtons.forEach((button) => {
     const action = button.dataset.action;
@@ -1399,18 +1633,18 @@ function renderActions() {
   if (canRaise && !state.chipViewHidden) {
     el.raiseInput.min = String(state.minRaise);
     el.raiseInput.max = String(state.maxBet);
-    el.raiseMinLabel.textContent = (pro ? "MIN " : "最小 ") + state.minRaise;
-    el.raiseMaxLabel.textContent = (pro ? "MAX " : "最大 ") + state.maxBet;
+    el.raiseMinLabel.textContent = (pro ? "MIN " : t("action.min") + " ") + state.minRaise;
+    el.raiseMaxLabel.textContent = (pro ? "MAX " : t("action.max") + " ") + state.maxBet;
   } else if (canRaise && state.chipViewHidden) {
     el.raiseInput.min = "0";
     el.raiseInput.max = "999999";
-    el.raiseMinLabel.textContent = pro ? "MIN —" : "最小 —";
-    el.raiseMaxLabel.textContent = pro ? "MAX —" : "最大 —";
+    el.raiseMinLabel.textContent = pro ? "MIN —" : t("action.min") + " —";
+    el.raiseMaxLabel.textContent = pro ? "MAX —" : t("action.max") + " —";
   } else {
     el.raiseInput.min = "0";
     el.raiseInput.max = "0";
-    el.raiseMinLabel.textContent = pro ? "MIN —" : "最小 —";
-    el.raiseMaxLabel.textContent = pro ? "MAX —" : "最大 —";
+    el.raiseMinLabel.textContent = pro ? "MIN —" : t("action.min") + " —";
+    el.raiseMaxLabel.textContent = pro ? "MAX —" : t("action.max") + " —";
     setRaiseExpanded(false);
   }
   el.raisePresets.forEach((button) => {
@@ -1428,27 +1662,27 @@ function renderActions() {
   }
 
   if (isMyTurn) {
-    el.turnKicker.textContent = pro ? "YOUR TURN" : "你的回合";
-    el.turnMessage.textContent = pro ? "SELECT AN ACTION" : "选择一项行动";
+    el.turnKicker.textContent = pro ? "YOUR TURN" : t("game.yourTurn");
+    el.turnMessage.textContent = pro ? "SELECT AN ACTION" : t("game.chooseAction");
   } else if (state.currentTurnPlayerId) {
-    el.turnKicker.textContent = pro ? "OPPONENT" : "对手回合";
+    el.turnKicker.textContent = pro ? "OPPONENT" : t("game.oppTurn");
     el.turnMessage.textContent =
       getOpponent()?.status === "disconnected"
         ? pro
           ? "WAITING FOR RECONNECT"
-          : "等待对手恢复连接"
+          : t("game.oppReconnect")
         : pro
           ? "THINKING..."
-          : "对手正在行动";
+          : t("game.oppActing");
   } else {
-    el.turnKicker.textContent = pro ? "HOLD" : "等待";
+    el.turnKicker.textContent = pro ? "HOLD" : t("game.hold");
     el.turnMessage.textContent = state.handSettling
       ? pro
         ? "SHOWDOWN"
-        : "正在结算"
+        : t("game.settling")
       : pro
         ? "AWAITING ACTION"
-        : "等待行动指令";
+        : t("game.waitCommand");
   }
 }
 
@@ -1477,14 +1711,14 @@ function updateActionCountdown() {
 function animatePot(value) {
   if (state.chipViewHidden) {
     el.pot.textContent = "—";
-    el.potCore.setAttribute("aria-label", "当前底池已隐藏");
+    el.potCore.setAttribute("aria-label", t("a11y.potHidden"));
     return;
   }
   const next = Math.max(0, Number(value || 0));
   el.pot.textContent = String(next);
   const energy = Math.min(1, next / 2000);
   el.potCore.style.setProperty("--pot-energy", String(energy));
-  el.potCore.setAttribute("aria-label", "当前底池 " + next);
+  el.potCore.setAttribute("aria-label", t("a11y.potValue", { amount: next }));
 }
 
 function renderMode() {
@@ -1504,8 +1738,9 @@ function renderMode() {
   if (briefTitle) briefTitle.textContent = info.name + " · " + info.code;
   if (briefCopy) briefCopy.textContent = info.brief;
   el.overdriveProfile.classList.toggle("hidden", state.gameMode !== GAME_MODE.OVERDRIVE);
-  if (state.gameMode === GAME_MODE.OVERDRIVE && !el.overdriveProfileLabel.textContent) {
-    el.overdriveProfileLabel.textContent = "高爆协议已启用";
+  if (state.gameMode === GAME_MODE.OVERDRIVE && el.overdriveProfileLabel) {
+    const raw = el.overdriveProfileLabel.dataset.raw || "";
+    el.overdriveProfileLabel.textContent = localizeIncoming(raw) || t("game.overdriveHot");
   }
   document.body.classList.toggle("overdrive", state.gameMode === GAME_MODE.OVERDRIVE);
   el.board.classList.toggle("overdrive", state.gameMode === GAME_MODE.OVERDRIVE);
@@ -1515,23 +1750,23 @@ function renderWaitingRoom() {
   const host = state.players[0];
   const guest = state.players[1];
   el.waitRoomId.textContent = state.roomId || "——";
-  el.waitHostName.textContent = host?.name || "等待同步";
-  el.waitHostState.textContent = host?.isReady ? "已准备" : host ? "未准备" : "校验中";
+  el.waitHostName.textContent = displayPlayerName(host, t("wait.waitingSync"));
+  el.waitHostState.textContent = host?.isReady ? t("wait.ready") : host ? t("wait.notReady") : t("wait.checking");
   el.waitHostState.classList.toggle("muted", !host?.isReady);
-  el.waitGuestName.textContent = guest?.name || "等待接入";
-  el.waitGuestState.textContent = guest?.isReady ? "已准备" : guest ? "未准备" : "空闲";
+  el.waitGuestName.textContent = displayPlayerName(guest, t("wait.waitingJoin"));
+  el.waitGuestState.textContent = guest?.isReady ? t("wait.ready") : guest ? t("wait.notReady") : t("wait.idle");
   el.waitGuestState.classList.toggle("muted", !guest?.isReady);
   el.waitInitialChips.textContent = "1000";
   el.waitRoomStatus.textContent =
     state.phase === "drafting"
-      ? "技能构筑中"
+      ? t("wait.drafting")
       : state.phase === "waiting"
-        ? "等待中"
-        : PHASE_LABELS[state.phase] || state.phase;
-  if (el.waitSkillMode) el.waitSkillMode.textContent = state.skillMode === "abyss" ? "超限技能" : "关闭";
+        ? t("wait.waiting")
+        : phaseLabel(state.phase) || state.phase;
+  if (el.waitSkillMode) el.waitSkillMode.textContent = state.skillMode === "abyss" ? t("lobby.overlimitSkills") : t("wait.skillsOff");
   if (el.waitInitialEnergy) el.waitInitialEnergy.textContent = state.skillMode === "abyss" ? "4" : "—";
   if (el.waitPasswordStatus) {
-    el.waitPasswordStatus.textContent = state.hasPassword ? "已设置" : "未设置";
+    el.waitPasswordStatus.textContent = state.hasPassword ? t("wait.pwdOn") : t("wait.pwdOff");
   }
   const isHost = Boolean(host && host.playerId === state.playerId);
   state.isHost = isHost;
@@ -1552,23 +1787,23 @@ function renderFairness() {
   const totalCount = state.commitments.size;
   el.commitmentShort.textContent = commitment?.commitment
     ? commitment.commitment.slice(0, 8).toUpperCase()
-    : "待定";
+    : t("fairness.pendingShort");
   el.fairnessHandId.textContent = commitment?.handId ? "HAND " + commitment.handId.slice(0, 12) : "HAND —";
   const labels = {
-    pending: "牌局开始前将锁定牌堆承诺",
-    locked: "牌堆已锁定：摊牌即时验证，弃牌手在整场结束后验证",
-    verified: `SHA-256 验证通过（${verifiedCount}/${totalCount} 手），牌堆未被中途修改`,
-    failed: `本场存在承诺验证失败（已验证 ${verifiedCount}/${totalCount} 手），请检查服务器日志`,
+    pending: t("fairness.pending"),
+    locked: t("fairness.locked"),
+    verified: t("fairness.passCount", { verified: verifiedCount, total: totalCount }),
+    failed: t("fairness.failCount", { verified: verifiedCount, total: totalCount }),
   };
   el.fairnessResult.textContent = labels[state.fairnessStatus] || labels.pending;
   const summary =
     state.fairnessStatus === "verified"
-      ? "通过"
+      ? t("fairness.pass")
       : state.fairnessStatus === "failed"
-        ? "异常"
+        ? t("fairness.failShort")
         : commitment
-          ? "已锁"
-          : "待锁";
+          ? t("fairness.lockedShort")
+          : t("fairness.waitLock");
   el.fairnessSummary.textContent = summary;
   el.fairnessSummary.title = labels[state.fairnessStatus] || labels.pending;
   el.fairnessSummary.dataset.status = state.fairnessStatus;
@@ -1602,22 +1837,45 @@ function renderState() {
   renderCards();
   renderActions();
   renderFairness();
-  el.phaseText.textContent = PHASE_LABELS[state.phase] || String(state.phase || "").toUpperCase();
+  el.phaseText.textContent = phaseLabel(state.phase) || String(state.phase || "").toUpperCase();
   el.board.classList.toggle("river", state.phase === "river");
   document.body.classList.toggle("river-phase", state.phase === "river");
   el.currentBet.textContent = String(state.currentBet || 0);
   el.gameRoomId.textContent = state.roomId || "——";
-  el.selfHandType.textContent = state.handHint || "等待发牌";
+  el.selfHandType.textContent = displayHandHint(state.handHint);
   animatePot(state.pot);
   updateActionCountdown();
   syncSkillFxStates();
 }
 
-function setConnectionUI(connected, message) {
-  if (connectionBannerTimer) clearTimeout(connectionBannerTimer);
-  connectionBannerTimer = 0;
-  const text = connected ? "连接正常" : message || "连接中断";
+function connectionStatusCopy(connected) {
+  if (connected) return t("connection.ok");
+  const key = connectionStatusKey && connectionStatusKey !== "connection.ok"
+    ? connectionStatusKey
+    : "connection.cut";
+  return t(key);
+}
+
+function connectionBannerCopy(connected) {
+  if (connected) return t("connection.restored");
+  const key = connectionStatusKey && connectionStatusKey !== "connection.ok"
+    ? connectionStatusKey
+    : "connection.lost";
+  return t(key);
+}
+
+function setConnectionUI(connected, _message, options = {}) {
+  const relocalize = Boolean(options.relocalize);
+  if (!relocalize) {
+    if (connectionBannerTimer) clearTimeout(connectionBannerTimer);
+    connectionBannerTimer = 0;
+    if (options.messageKey) connectionStatusKey = options.messageKey;
+    else if (connected) connectionStatusKey = "connection.ok";
+    else connectionStatusKey = "connection.lost";
+  }
+  const text = connectionStatusCopy(connected);
   [el.lobbyConnection, el.waitConnection, el.gameConnection].forEach((node) => {
+    if (!node) return;
     node.innerHTML = "";
     const dot = document.createElement("i");
     dot.className = "status-dot " + (connected ? "online" : "");
@@ -1630,8 +1888,9 @@ function setConnectionUI(connected, message) {
     }
     node.classList.toggle("offline", !connected);
   });
+  if (el.connectionBannerText) el.connectionBannerText.textContent = connectionBannerCopy(connected);
+  if (relocalize) return;
   if (connected) {
-    el.connectionBannerText.textContent = "连接已恢复，正在同步服务器状态";
     el.connectionBanner.classList.remove("offline");
     el.connectionBanner.classList.remove("hidden");
     connectionBannerTimer = setTimeout(() => {
@@ -1639,7 +1898,6 @@ function setConnectionUI(connected, message) {
       connectionBannerTimer = 0;
     }, 1100);
   } else {
-    el.connectionBannerText.textContent = message || "网络连接已中断，正在尝试恢复牌局…";
     el.connectionBanner.classList.add("offline");
     el.connectionBanner.classList.remove("hidden");
   }
@@ -1835,8 +2093,8 @@ function isPublicSkillAnnounce(payload) {
 }
 
 function skillFxCasterLabel(casterId) {
-  if (casterId === state.playerId) return "你";
-  return getOpponent()?.name || "对手";
+  if (casterId === state.playerId) return t("fx.you");
+  return displayPlayerName(getOpponent(), t("fx.opponent"));
 }
 
 function skillFxTierForPayload(payload, { publicEvent = false, resultOnly = false } = {}) {
@@ -2049,8 +2307,8 @@ function announceSkillResolved(payload) {
     safeMessage: publicEvent
       ? ""
       : String(payload.status || "SUCCESS").toUpperCase() === "FAILED"
-        ? `「${skillDefinition(payload.skillId).name}」结算失败`
-        : `你发动了「${skillDefinition(payload.skillId).name}」`,
+        ? t("skill.failed", { name: skillCopy(payload.skillId, "name") })
+        : t("skill.used", { name: skillCopy(payload.skillId, "name") }),
     effectLabel: skillFxEffectLabel(payload, meta),
     at: payload.at,
     ...elements,
@@ -2073,7 +2331,7 @@ function announcePrivateSkillResult(payload) {
     skillId: payload.skillId,
     casterId: state.playerId,
     viewerId: state.playerId,
-    casterLabel: "你",
+    casterLabel: t("fx.you"),
     audience: "self",
     disclosure: "self",
     status: payload.status || "SUCCESS",
@@ -2083,7 +2341,7 @@ function announcePrivateSkillResult(payload) {
     glyph: deepBreathRefund && Number(payload.amount) > 0
       ? `+${Number(payload.amount)}`
       : undefined,
-    safeMessage: message || "仅你可见，技能已结算",
+    safeMessage: localizeIncoming(message) || t("skill.selfOnly"),
     effectLabel: skillFxEffectLabel(payload, meta, message),
     ...elements,
     variant: deepBreathRefund ? "refund" : elements.variant,
@@ -2251,7 +2509,7 @@ function resetLocalRoom() {
   state.endgameWindow = false;
   state.actionDeadline = null;
   state.turnId = null;
-  state.handHint = "等待发牌";
+  state.handHint = "waitingDeal";
   state.handCategory = 0;
   el.selfHandType.dataset.category = "0";
   state.gameOver = false;
@@ -2404,34 +2662,34 @@ function clearHandSettlement() {
 }
 
 function formatChipAmount(value) {
-  if (value == null || !Number.isFinite(Number(value))) return "隐藏";
+  if (value == null || !Number.isFinite(Number(value))) return t("settle.hiddenAmount");
   return String(Math.trunc(Number(value)));
 }
 
 function settleActorLabel(source, viewerWon) {
-  if (source === "self") return viewerWon ? "你" : "对手";
-  if (source === "opponent") return viewerWon ? "对手" : "你";
-  return "技能";
+  if (source === "self") return viewerWon ? t("fx.you") : t("fx.opponent");
+  if (source === "opponent") return viewerWon ? t("fx.opponent") : t("fx.you");
+  return t("settle.actorSkill");
 }
 
 function describeSettleEffect(effect, viewerWon, hideAmounts) {
-  const skillName = skillDefinition(effect.skillId).name || effect.skillId;
+  const skillName = skillCopy(effect.skillId, "name") || effect.skillId;
   const actor = settleActorLabel(effect.source, viewerWon);
   if (effect.skillId === "DEFENSE") {
-    return actor + "的「" + skillName + "」将本手损失减半，只结算 50% 筹码";
+    return t("settle.defenseHalf", { actor, skill: skillName });
   }
   if (effect.skillId === "PROBE") {
     return hideAmounts
-      ? actor + "的「" + skillName + "」在对手弃牌后额外加入试探奖金"
-      : actor + "的「" + skillName + "」在对手弃牌后先 +" + formatChipAmount(effect.amount) + "，再进入倍率";
+      ? t("settle.probeHidden", { actor, skill: skillName })
+      : t("settle.probeAmount", { actor, skill: skillName, amount: formatChipAmount(effect.amount) });
   }
   if (Number(effect.factor) > 1) {
-    return actor + "的「" + skillName + "」将标准净收益 ×" + Number(effect.factor);
+    return t("settle.multiply", { actor, skill: skillName, factor: Number(effect.factor) });
   }
   if (Number(effect.factor) > 0 && Number(effect.factor) < 1) {
-    return actor + "的「" + skillName + "」将筹码结算 ×" + Number(effect.factor);
+    return t("settle.factor", { actor, skill: skillName, factor: Number(effect.factor) });
   }
-  return actor + "的「" + skillName + "」参与了本手筹码结算";
+  return t("settle.involved", { actor, skill: skillName });
 }
 
 function renderSettleChipLedger(payload, { hideAmounts = false, viewerWon = false } = {}) {
@@ -2439,40 +2697,42 @@ function renderSettleChipLedger(payload, { hideAmounts = false, viewerWon = fals
   const settlement = payload?.skillSettlement;
   const steps = [];
   if (payload?.pot != null || hideAmounts) {
-    steps.push(hideAmounts ? "底池金额当前被伪装隐藏" : "底池 " + formatChipAmount(payload.pot));
+    steps.push(hideAmounts ? t("settle.potHidden") : t("settle.pot", { amount: formatChipAmount(payload.pot) }));
   }
   if (settlement && (settlement.baseTransfer != null || (settlement.effects || []).length || settlement.handRankBonusApplied)) {
     if (!hideAmounts && settlement.standardPokerNet != null) {
-      steps.push("标准收益 +" + formatChipAmount(settlement.standardPokerNet));
+      steps.push(t("settle.standardNet", { amount: formatChipAmount(settlement.standardPokerNet) }));
     }
     if (!hideAmounts && Number(settlement.handRankBonusValue) > 0) {
-      const rankName = settlement.winningHandName || "牌型";
-      steps.push(rankName + " 牌型奖励 +" + formatChipAmount(settlement.handRankBonusValue));
+      const rankName = localizeIncoming(settlement.winningHandName) || t("hand.ranking");
+      steps.push(t("settle.rankBonus", { rank: rankName, amount: formatChipAmount(settlement.handRankBonusValue) }));
     }
     if (!hideAmounts && settlement.baseTransfer != null) {
       const bonus = Number(settlement.handRankBonusValue) || 0;
       const other = Number(settlement.otherBaseAdditive) || 0;
       if (bonus > 0 || other > 0) {
-        steps.push("基础结算 " + formatChipAmount(settlement.baseTransfer) + "（进入技能倍率前）");
+        steps.push(t("settle.baseBefore", { amount: formatChipAmount(settlement.baseTransfer) }));
       } else {
-        steps.push("标准筹码转移 " + formatChipAmount(settlement.baseTransfer) + "（尚未叠加技能倍率）");
+        steps.push(t("settle.standardTransfer", { amount: formatChipAmount(settlement.baseTransfer) }));
       }
     }
     (settlement.effects || []).forEach((effect) => {
       steps.push(describeSettleEffect(effect, viewerWon, hideAmounts));
     });
     if (!hideAmounts && settlement.lossBeforeDefense != null && (settlement.effects || []).some((entry) => entry.skillId === "DEFENSE")) {
-      steps.push("防守前损失 " + formatChipAmount(settlement.lossBeforeDefense)
-        + " → 防守后 " + formatChipAmount(settlement.desiredTransfer));
+      steps.push(t("settle.defensePath", {
+        before: formatChipAmount(settlement.lossBeforeDefense),
+        after: formatChipAmount(settlement.desiredTransfer),
+      }));
     }
     if (!hideAmounts && settlement.lossCapApplied && settlement.preCapStandardTransfer != null) {
-      steps.push("筹码上限截断理论结算 " + formatChipAmount(settlement.preCapStandardTransfer));
+      steps.push(t("settle.cap", { amount: formatChipAmount(settlement.preCapStandardTransfer) }));
     }
     if (!hideAmounts && Number(settlement.directGain) > 0) {
-      steps.push("终局等直接筹码 " + formatChipAmount(settlement.directGain) + " 不进入防守减半");
+      steps.push(t("settle.direct", { amount: formatChipAmount(settlement.directGain) }));
     }
   } else if (state.skillMode === "abyss") {
-    steps.push("本手没有技能筹码修正，按标准底池结算");
+    steps.push(t("settle.noSkillFix"));
   }
   el.settleChipSteps.textContent = "";
   steps.forEach((text) => {
@@ -2482,17 +2742,17 @@ function renderSettleChipLedger(payload, { hideAmounts = false, viewerWon = fals
   });
   const net = settlement?.finalTransfer;
   if (payload?.tie) {
-    el.settleChipTotal.textContent = hideAmounts ? "平局，双方取回已投入筹码" : "平局，不发生技能倍率转移";
+    el.settleChipTotal.textContent = hideAmounts ? t("settle.splitReturn") : t("settle.splitNoMult");
   } else if (hideAmounts) {
-    el.settleChipTotal.textContent = viewerWon ? "你赢得本手，具体筹码数字被伪装隐藏" : "对手赢得本手，具体筹码数字被伪装隐藏";
+    el.settleChipTotal.textContent = viewerWon ? t("settle.youWinHidden") : t("settle.oppWinHidden");
   } else if (net != null && Number.isFinite(Number(net))) {
     el.settleChipTotal.textContent = viewerWon
-      ? "你本手实际获得 " + formatChipAmount(net)
-      : "你本手实际失去 " + formatChipAmount(net);
+      ? t("settle.netWon", { amount: formatChipAmount(net) })
+      : t("settle.netLost", { amount: formatChipAmount(net) });
   } else if (!payload?.tie && payload?.pot != null && !hideAmounts) {
     el.settleChipTotal.textContent = viewerWon
-      ? "你赢得底池 " + formatChipAmount(payload.pot)
-      : "对手赢得底池 " + formatChipAmount(payload.pot);
+      ? t("settle.youWonPot", { amount: formatChipAmount(payload.pot) })
+      : t("settle.oppWonPot", { amount: formatChipAmount(payload.pot) });
   } else {
     el.settleChipTotal.textContent = "";
   }
@@ -2521,7 +2781,7 @@ function syncHandHistoryButton() {
   el.btnHandHistory.disabled = liveSettle;
   el.btnHandHistory.setAttribute(
     "aria-label",
-    liveSettle ? "本手结算播放中" : count ? "本局历史结算 " + count + " 手" : "本局历史结算"
+    liveSettle ? t("settle.playingShort") : count ? t("settle.historyCount", { count }) : t("settle.historyEmpty")
   );
 }
 
@@ -2540,12 +2800,21 @@ function renderHandHistoryList() {
     button.type = "button";
     button.className = "history-item";
     const title = document.createElement("strong");
-    title.textContent = "第 " + (entry.handNo || "?") + " 手 · " + (entry.tie ? "平局" : won ? "胜利" : "败北");
+    title.textContent = t("settle.handN", {
+      n: entry.handNo || "?",
+      result: entry.tie ? t("settle.split") : won ? t("settle.win") : t("settle.lose"),
+    });
     const detail = document.createElement("small");
-    const reason = entry.reason === "fold" ? "弃牌" : entry.reason === "showdown" ? "摊牌" : entry.reason === "retreat" ? "撤退" : "结算";
-    const potText = entry.pot == null ? "底池已隐藏" : "底池 " + entry.pot;
-    const effects = (entry.skillSettlement?.effects || []).map((item) => skillDefinition(item.skillId).name).filter(Boolean);
-    detail.textContent = [reason, potText].concat(effects.length ? ["技能 " + effects.join(" / ")] : []).join(" · ");
+    const reason = entry.reason === "fold"
+      ? t("settle.reasonFold")
+      : entry.reason === "showdown"
+        ? t("settle.reasonShowdown")
+        : entry.reason === "retreat"
+          ? t("settle.reasonRetreat")
+          : t("settle.reasonSettle");
+    const potText = entry.pot == null ? t("settle.potHiddenShort") : t("settle.pot", { amount: entry.pot });
+    const effects = (entry.skillSettlement?.effects || []).map((item) => skillCopy(item.skillId, "name")).filter(Boolean);
+    detail.textContent = [reason, potText].concat(effects.length ? [t("settle.skillsLine", { names: effects.join(" / ") })] : []).join(" · ");
     button.append(title, detail);
     button.addEventListener("click", () => {
       closeHandHistoryModal();
@@ -2557,7 +2826,7 @@ function renderHandHistoryList() {
 
 function openHandHistoryModal() {
   if (state.handSettling && !state.settleReviewFromHistory) {
-    showToast("本手结算播放中，结束后可回看", "info");
+    showToast(t("settle.playing"), "info");
     return;
   }
   renderHandHistoryList();
@@ -2622,7 +2891,7 @@ function playSettlementSkillFx(payload) {
       skillId: primaryId,
       casterId: sourceId || "PUBLIC_RESULT",
       viewerId: state.playerId,
-      casterLabel: sourceId ? skillFxCasterLabel(sourceId) : "结算",
+      casterLabel: sourceId ? skillFxCasterLabel(sourceId) : t("settle.fxCaster"),
       audience: "public",
       disclosure: "result",
       status: "REVEALED",
@@ -2722,7 +2991,7 @@ function startHandSettlement(payload, { review = false } = {}) {
   }
   updateHandSettleCountdown();
   renderState();
-  setBanner(payload.tie ? "平局" : won ? "胜利" : "败北", payload.tie || won);
+  setBanner(payload.tie ? t("settle.split") : won ? t("settle.win") : t("settle.lose"), payload.tie || won);
   playTone(payload.tie || won ? "win" : "lose");
   state.handSettleTimer = setTimeout(clearHandSettlement, Number(payload.settleMs || HAND_SETTLE_MS) + 700);
 }
@@ -2740,44 +3009,53 @@ function showHandSettlementReview(payload) {
 }
 
 function fillHandSettleModal(payload, { review = false } = {}) {
+  lastHandSettlePayload = payload;
   const me = getMe();
   const opponent = getOpponent();
   const meDetail = (payload.players || []).find((player) => player.playerId === state.playerId);
   const opponentDetail = (payload.players || []).find((player) => player.playerId !== state.playerId);
   const won = !payload.tie && payload.winner === state.playerId;
-  el.settleVerdict.textContent = payload.tie ? "平局" : won ? "胜利" : "败北";
+  el.settleVerdict.textContent = payload.tie ? t("settle.split") : won ? t("settle.win") : t("settle.lose");
   el.settleVerdict.className = payload.tie ? "tie-text" : won ? "win-text" : "lose-text";
+  const oppName = displayPlayerName(opponent, t("fx.opponent"));
   if (payload.reason === "fold") {
     el.settleDetail.textContent = won
-      ? (opponent?.name || "对手") + " 弃牌" + (payload.pot == null ? "，你赢得底池" : "，你赢得底池 " + payload.pot)
-      : "你已弃牌，" + (payload.winnerName || opponent?.name || "对手") + (payload.pot == null ? " 赢得底池" : " 赢得底池 " + payload.pot);
+      ? (payload.pot == null
+        ? t("settle.foldYouWin", { name: oppName })
+        : t("settle.foldYouWinAmount", { name: oppName, amount: payload.pot }))
+      : (payload.pot == null
+        ? t("settle.youFolded", { name: displayPlayerName(payload.winnerName, oppName) })
+        : t("settle.youFoldedAmount", { name: displayPlayerName(payload.winnerName, oppName), amount: payload.pot }));
   } else if (payload.tie) {
-    el.settleDetail.textContent = payload.pot == null ? "平分底池" : "底池 " + payload.pot + " 平分";
+    el.settleDetail.textContent = payload.pot == null ? t("settle.splitPot") : t("settle.potSplitAmount", { amount: payload.pot });
   } else {
-    el.settleDetail.textContent = (payload.winnerName || "胜方") + (payload.pot == null ? " 赢得底池" : " 赢得底池 " + payload.pot);
+    el.settleDetail.textContent = payload.pot == null
+      ? t("settle.winnerWon", { name: displayPlayerName(payload.winnerName, t("settle.winner")) })
+      : t("settle.winnerWonAmount", { name: displayPlayerName(payload.winnerName, t("settle.winner")), amount: payload.pot });
   }
-  el.settleSelfLabel.textContent = me?.name || "你";
-  el.settleOppLabel.textContent = opponent?.name || "对手";
+  el.settleSelfLabel.textContent = me?.name || t("game.you");
+  el.settleOppLabel.textContent = displayPlayerName(opponent, t("fx.opponent"));
   if (el.settleCommunity) delete el.settleCommunity.dataset.rowSignature;
   if (el.settleSelfCards) delete el.settleSelfCards.dataset.rowSignature;
   if (el.settleOppCards) delete el.settleOppCards.dataset.rowSignature;
   renderCardRow(el.settleCommunity, payload.communityCards || [], { padTo: 5, slot: true, reveal: true });
   renderCardRow(el.settleSelfCards, meDetail?.cards || (review ? [] : state.myCards), { reveal: true });
   renderCardRow(el.settleOppCards, opponentDetail?.cards || [], { reveal: true });
-  el.settleSelfHand.textContent = meDetail?.handName || "—";
-  el.settleOppHand.textContent = opponentDetail?.handName || (opponentDetail?.folded ? "已弃牌" : "未公开");
+  el.settleSelfHand.textContent = localizeIncoming(meDetail?.handName) || "—";
+  el.settleOppHand.textContent = localizeIncoming(opponentDetail?.handName) || (opponentDetail?.folded ? t("hand.folded") : t("hand.hidden"));
   const types = [];
-  if (meDetail?.handName) types.push("你：" + meDetail.handName);
-  if (opponentDetail?.handName) types.push((opponent?.name || "对手") + "：" + opponentDetail.handName);
-  el.settleHandName.textContent = types.join(" ｜ ");
+  if (meDetail?.handName) types.push(t("settle.youPrefix", { hand: localizeIncoming(meDetail.handName) }));
+  if (opponentDetail?.handName) types.push(t("settle.oppPrefix", { name: displayPlayerName(opponent, t("fx.opponent")), hand: localizeIncoming(opponentDetail.handName) }));
+  el.settleHandName.textContent = types.join(currentLocale() === "en-US" ? " | " : " ｜ ");
   if (
     payload.reason === "showdown"
     && !payload.tie
     && Number(payload.skillSettlement?.handRankBonusValue) > 0
   ) {
-    const bonusLine = (payload.skillSettlement.winningHandName || "牌型")
-      + " 牌型奖励 +"
-      + formatChipAmount(payload.skillSettlement.handRankBonusValue);
+    const bonusLine = t("settle.rankBonus", {
+      rank: localizeIncoming(payload.skillSettlement.winningHandName) || t("hand.ranking"),
+      amount: formatChipAmount(payload.skillSettlement.handRankBonusValue),
+    });
     el.settleHandName.textContent = el.settleHandName.textContent
       ? el.settleHandName.textContent + " ｜ " + bonusLine
       : bonusLine;
@@ -2787,16 +3065,16 @@ function fillHandSettleModal(payload, { review = false } = {}) {
     const showEnergy = state.skillMode === "abyss" && settleEnergy != null && Number.isFinite(Number(settleEnergy));
     el.settleOppEnergy.classList.toggle("hidden", !showEnergy);
     el.settleOppEnergy.textContent = showEnergy
-      ? "对方剩余能量 " + Number(settleEnergy)
-      : "对方剩余能量 —";
+      ? t("settle.oppEnergy", { value: Number(settleEnergy) })
+      : t("settle.oppEnergyHidden");
   }
   renderSettleChipLedger(payload, {
     hideAmounts: Boolean(state.chipViewHidden) || (payload.pot == null && payload.reason !== "retreat"),
     viewerWon: won,
   });
   el.settleNext.textContent = review
-    ? "历史回顾"
-    : payload.isFinalHand ? "整场对局即将结束" : "下一手即将开始";
+    ? t("history.archive")
+    : payload.isFinalHand ? t("settle.matchEnding") : t("game.nextHand");
   el.settleCountdown?.classList.toggle("hidden", review);
   el.btnSettleClose?.classList.toggle("hidden", !review);
   el.handSettleModal.classList.toggle("is-history-review", review);
@@ -2807,6 +3085,7 @@ function clearRematch() {
   if (state.rematchRaf) cancelAnimationFrame(state.rematchRaf);
   state.rematchRaf = 0;
   state.rematchDeadlineAt = 0;
+  state.rematchHumanCount = 0;
   state.rematchAcceptedIds = new Set();
   el.rematchBox.classList.add("hidden");
   el.btnRematchYes.disabled = false;
@@ -2827,15 +3106,51 @@ function updateRematch(payload) {
   state.rematchAcceptedIds = new Set((rematch.accepted || []).map((entry) => entry.playerId));
   state.rematchDeadlineAt = rematch.deadlineAt || Date.now() + (rematch.timeoutMs || REMATCH_TIMEOUT_MS);
   const humans = (rematch.players || state.players).filter((player) => !player.isBot);
-  const accepted = state.rematchAcceptedIds.size;
+  state.rematchHumanCount = humans.length;
   const mine = state.rematchAcceptedIds.has(state.playerId);
-  el.rematchStatus.textContent = mine
-    ? "已确认继续，等待对手（" + accepted + "/" + humans.length + "）"
-    : "是否再来一局？双方确认后重置筹码（" + accepted + "/" + humans.length + "）";
   el.btnRematchYes.disabled = mine;
   el.rematchBox.classList.remove("hidden");
   el.btnBackLobby.classList.add("hidden");
+  fillRematchStatus();
   updateRematchCountdown();
+}
+
+function fillRematchStatus() {
+  if (!el.rematchStatus || !state.rematchDeadlineAt) return;
+  if (el.rematchBox?.classList.contains("hidden")) return;
+  const total = state.rematchHumanCount || state.players.filter((player) => !player.isBot).length;
+  const accepted = state.rematchAcceptedIds.size;
+  const mine = state.rematchAcceptedIds.has(state.playerId);
+  el.rematchStatus.textContent = mine
+    ? t("modal.rematchWaiting", { accepted, total })
+    : t("modal.rematchPrompt", { accepted, total });
+}
+
+function fillGameOverCopy(payload) {
+  if (!payload || !el.gameOverTitle) return;
+  const won = payload.winner === state.playerId;
+  el.gameOverTitle.textContent = won ? t("modal.matchWin") : t("modal.matchEnd");
+  el.gameOverTitle.className = won ? "win-text" : "lose-text";
+  const opponent = getOpponent();
+  el.gameOverMsg.textContent =
+    payload.reason === "disconnect_timeout_forfeit"
+      ? won
+        ? t("connection.opponentTimeoutWin")
+        : t("connection.timeoutLoss")
+      : won
+        ? t("modal.chipsGone", { name: displayPlayerName(payload.loserName || opponent, t("fx.opponent")) })
+        : t("modal.wonMatch", { name: displayPlayerName(payload.winnerName || opponent, t("fx.opponent")) });
+  if (Array.isArray(payload.loadouts) && payload.loadouts.length) {
+    const lines = payload.loadouts.map((entry) => {
+      const owner = state.players.find((player) => player.playerId === entry.playerId);
+      const names = (entry.skillIds || []).map((skillId) => skillCopy(skillId, "name") || skillId);
+      return t("modal.loadoutLine", {
+        name: displayPlayerName(owner || entry.name, entry.playerId),
+        skills: names.join(" / ") || t("modal.noneSkill"),
+      });
+    });
+    el.gameOverMsg.textContent += t("modal.fullLoadouts", { lines: listJoin(lines, "semicolon") });
+  }
 }
 
 function showGameOver(payload) {
@@ -2850,36 +3165,18 @@ function showGameOver(payload) {
   state.actionDeadline = null;
   state.turnId = null;
   if (Array.isArray(payload.players)) state.players = payload.players;
-  const won = payload.winner === state.playerId;
-  el.gameOverTitle.textContent = won ? "整场胜利" : "整场结束";
-  el.gameOverTitle.className = won ? "win-text" : "lose-text";
-  const opponent = getOpponent();
-  el.gameOverMsg.textContent =
-    payload.reason === "disconnect_timeout_forfeit"
-      ? won
-        ? "对手断线超时，你获得胜利"
-        : "你的连接超时，本局判负"
-      : won
-        ? (payload.loserName || opponent?.name || "对手") + " 筹码耗尽"
-        : (payload.winnerName || opponent?.name || "对手") + " 赢得整场对局";
+  lastGameOverPayload = payload;
   if (Array.isArray(payload.loadouts) && payload.loadouts.length) {
     payload.loadouts.forEach((entry) => {
       state.revealedSkillIdsByPlayer[entry.playerId] = uniqueSkillIds(entry.skillIds).slice(0, 4);
     });
-    const lines = payload.loadouts.map((entry) => {
-      const owner = state.players.find((player) => player.playerId === entry.playerId);
-      const names = (entry.skillIds || []).map((skillId) =>
-        state.skillCatalog.find((skill) => skill.id === skillId)?.name || skillId
-      );
-      return (owner?.name || entry.name || entry.playerId) + "：" + (names.join(" / ") || "无");
-    });
-    el.gameOverMsg.textContent += "。完整构筑：" + lines.join("；");
   }
+  fillGameOverCopy(payload);
   el.gameOverModal.classList.remove("hidden");
   if (payload.rematch) updateRematch({ rematch: payload.rematch });
   else clearRematch();
   renderState();
-  playTone(won ? "win" : "lose");
+  playTone(payload.winner === state.playerId ? "win" : "lose");
 }
 
 async function sha256Hex(text) {
@@ -2907,7 +3204,7 @@ async function verifyHandReveal(payload) {
     typeof payload.nonce === "string";
   if (!window.crypto?.subtle || !validShape || !metadataMatches) {
     recordFairnessCheck(payload.handId, "failed");
-    showToast("牌堆承诺验证失败", "error");
+    showToast(t("toast.deckFail"), "error");
     return;
   }
   const serialized = codes.join(",");
@@ -2937,26 +3234,28 @@ async function verifyHandReveal(payload) {
   recordFairnessCheck(payload.handId, result);
   showToast(
     result === "verified" && state.fairnessStatus !== "failed"
-      ? "牌堆承诺验证通过"
+      ? t("fairness.ok")
       : result === "verified"
-        ? "本手验证通过，但本场已有异常"
-        : zonesValid ? "牌堆承诺不一致" : "技能审计发现牌张守恒异常",
+        ? t("fairness.mixed")
+        : zonesValid ? t("fairness.fail") : t("fairness.auditFail"),
     result === "verified" && state.fairnessStatus !== "failed" ? "success" : "error"
   );
   if (payload.profile && state.gameMode === GAME_MODE.OVERDRIVE) {
-    el.overdriveProfileLabel.textContent = payload.profile.label || payload.profile.type || "高爆牌局";
+    const raw = payload.profile.label || payload.profile.type || "";
+    if (el.overdriveProfileLabel) {
+      el.overdriveProfileLabel.dataset.raw = raw;
+      el.overdriveProfileLabel.textContent = localizeIncoming(raw) || t("game.overdriveHot");
+    }
   }
   (payload.skillActions || []).forEach((entry) => {
-    const name = state.skillCatalog.find((skill) => skill.id === entry.skillId)?.name || entry.skillId;
-    logAction(`技能审计 · ${name} · ${entry.status || "SUCCESS"}`);
+    const name = skillCopy(entry.skillId, "name") || entry.skillId;
+    logAction(t("feed.audit", { name, status: entry.status || "SUCCESS" }));
   });
   (payload.equippedSkills || []).forEach((entry) => {
     state.revealedSkillIdsByPlayer[entry.playerId] = uniqueSkillIds(entry.skillIds).slice(0, 4);
     const owner = state.players.find((player) => player.playerId === entry.playerId);
-    const names = (entry.skillIds || []).map((skillId) =>
-      state.skillCatalog.find((skill) => skill.id === skillId)?.name || skillId
-    );
-    if (names.length) logAction(`构筑审计 · ${owner?.name || entry.playerId} · ${names.join(" / ")}`);
+    const names = (entry.skillIds || []).map((skillId) => skillCopy(skillId, "name") || skillId);
+    if (names.length) logAction(t("feed.buildAudit", { name: displayPlayerName(owner || entry.playerId, entry.playerId), skills: names.join(" / ") }));
   });
   renderSkillHud();
 }
@@ -2980,8 +3279,8 @@ function protocolValue(gameMode, skillMode) {
 }
 
 function protocolSummaryText(gameMode, skillMode) {
-  const deal = gameMode === GAME_MODE.OVERDRIVE ? "高爆局" : "标准局";
-  const skill = skillMode === "abyss" ? "超限技能" : "无技能";
+  const deal = gameMode === GAME_MODE.OVERDRIVE ? t("lobby.overdrive") : t("lobby.standard");
+  const skill = skillMode === "abyss" ? t("lobby.overlimitSkills") : t("lobby.noSkills");
   return deal + " · " + skill;
 }
 
@@ -3063,8 +3362,10 @@ function saveCurrentInferredEnergy(raw) {
 }
 
 function skillDescriptionText(skill) {
-  if (state.settings.skillExpertText) return skill?.expertDescription || skill?.description || "暂无技能说明。";
-  return skill?.shortDescription || skill?.description || "暂无技能说明。";
+  if (state.settings.skillExpertText) {
+    return skillCopy(skill, "expertDescription") || t("skill.noDesc");
+  }
+  return skillCopy(skill, "shortDescription") || t("skill.noDesc");
 }
 
 function loadSavedLoadout() {
@@ -3087,8 +3388,8 @@ function currentSkillBuildLimits() {
 function skillBuildRuleText({ compact = false } = {}) {
   const { minEquipped, maxEquipped, maxLoad } = currentSkillBuildLimits();
   return compact
-    ? `${minEquipped}–${maxEquipped} 个 · 负载 ≤ ${maxLoad}`
-    : `选择 ${minEquipped}–${maxEquipped} 个技能，总负载不超过 ${maxLoad}。`;
+    ? t("lab.hint", { min: minEquipped, max: maxEquipped, maxLoad })
+    : t("lab.rule", { min: minEquipped, max: maxEquipped, maxLoad });
 }
 
 function validateLoadoutIds(ids, catalog = state.skillCatalog) {
@@ -3098,21 +3399,21 @@ function validateLoadoutIds(ids, catalog = state.skillCatalog) {
     maxLoad,
   } = currentSkillBuildLimits();
   if (!Array.isArray(ids) || ids.length < min || ids.length > max) {
-    return { ok: false, load: 0, error: `请选择 ${min}–${max} 个技能` };
+    return { ok: false, load: 0, error: t("lab.countRange", { min, max }) };
   }
   const unique = [...new Set(ids)];
-  if (unique.length !== ids.length) return { ok: false, load: 0, error: "技能不能重复" };
+  if (unique.length !== ids.length) return { ok: false, load: 0, error: t("server.duplicateSkill") };
   if (!catalog.length) {
-    const error = state.skillCatalogStatus === "error" ? "技能目录加载失败，请重试" : "技能目录加载中";
+    const error = state.skillCatalogStatus === "error" ? t("lab.catalogFail") : t("lobby.prepLoading");
     return { ok: false, load: 0, error, pendingCatalog: state.skillCatalogStatus !== "error" };
   }
   let load = 0;
   for (const id of unique) {
     const def = catalog.find((skill) => skill.id === id);
-    if (!def) return { ok: false, load: 0, error: "存在未知技能" };
+    if (!def) return { ok: false, load: 0, error: t("server.unknownSkill") };
     load += def.load || 0;
   }
-  if (load > maxLoad) return { ok: false, load, error: `负载不能超过 ${maxLoad}` };
+  if (load > maxLoad) return { ok: false, load, error: t("lab.loadCap", { maxLoad }) };
   return { ok: true, load, skillIds: unique };
 }
 
@@ -3145,14 +3446,14 @@ function updateSkillPrepUi() {
   if (el.skillPrepStatus) {
     el.skillPrepStatus.classList.toggle("ready", ready);
     el.skillPrepStatus.textContent = ready
-      ? `已配置 ${state.savedLoadout.length} 技能 · 负载 ${load}/${maxLoad}`
+      ? t("lobby.prepReady", { count: state.savedLoadout.length, load, maxLoad })
       : invalidSavedBuild
-        ? "构筑失效 · 请重新配置"
+        ? t("lobby.prepInvalid")
       : state.skillCatalogStatus === "error"
-        ? "目录加载失败 · 请进入构筑重试"
+        ? t("lobby.prepError")
         : state.skillCatalogStatus !== "ready"
-          ? "技能目录加载中…"
-          : "未配置 · 技能协议不可进入";
+          ? t("lobby.prepLoading")
+          : t("lobby.prepEmpty");
   }
   el.protocolCards?.forEach((card) => {
     const needsSkill = card.dataset.skillMode === "abyss";
@@ -3160,13 +3461,11 @@ function updateSkillPrepUi() {
     if (!needsSkill) return;
     const description = card.querySelector(".protocol-desc");
     if (!description) return;
-    const copyKey = ready ? "readyCopy" : "lockedCopy";
-    const englishKey = ready ? "readyEn" : "lockedEn";
-    const copy = description.dataset[copyKey];
-    const english = description.dataset[englishKey];
-    if (copy) description.textContent = copy;
-    if (english) description.dataset.currentEn = english;
-    if (copy && english) card.setAttribute("aria-description", `${copy} / ${english}`);
+    const overdrive = card.dataset.gameMode === GAME_MODE.OVERDRIVE;
+    description.textContent = ready
+      ? (overdrive ? t("lobby.overdriveSkillReady") : t("lobby.skillReady"))
+      : t("lobby.skillLocked");
+    card.setAttribute("aria-description", description.textContent);
   });
 }
 
@@ -3180,7 +3479,7 @@ function openSkillLab(pendingAction = null) {
   const validation = validateLoadoutIds(state.savedLoadout);
   state.selectedLoadout = validation.ok ? [...state.savedLoadout] : [];
   if (state.savedLoadout.length && !validation.ok && state.skillCatalogStatus === "ready") {
-    showToast("当前技能构筑包含重复或无效技能，请重新配置。", "error");
+    showToast(t("lab.duplicate"), "error");
   }
   showScreen("skillLab");
   renderSkillLab();
@@ -3220,7 +3519,7 @@ async function ensureSkillCatalog() {
       return state.skillCatalog;
     } catch (_error) {
       state.skillCatalogStatus = "error";
-      showToast("技能目录加载失败，请检查网络后重试", "error");
+      showToast(t("lab.catalogFail"), "error");
       return [];
     } finally {
       skillCatalogPromise = null;
@@ -3278,8 +3577,8 @@ const SKILL_PHASE_LABELS = Object.freeze({
 
 function skillTypeLabel(skill) {
   const tags = new Set(skill?.tags || []);
-  if (tags.has("PASSIVE")) return "被动技能";
-  return "主动技能";
+  if (tags.has("PASSIVE")) return t("skill.passive");
+  return t("skill.active");
 }
 
 function syncSkillPreviewModeButtons() {
@@ -3300,17 +3599,17 @@ function showSkillPreview(skill, trigger) {
   if (!skill || !el.skillPreviewModal) return;
   previewingSkill = skill;
   skillPreviewReturnFocus = trigger || document.activeElement;
-  el.skillPreviewTitle.textContent = skill.name || skill.id || "技能档案";
+  el.skillPreviewTitle.textContent = skillCopy(skill, "name") || skill.id || t("skill.preview");
   el.skillPreviewDescription.textContent = skillDescriptionText(skill);
   el.skillPreviewDescription.classList.toggle("is-expert", Boolean(state.settings.skillExpertText));
   el.skillPreviewMeta.textContent = "";
   syncSkillPreviewModeButtons();
 
-  const meta = [skillTypeLabel(skill), "负载 " + Number(skill.load || 0)];
-  if (!(skill.tags || []).includes("PASSIVE")) meta.push("能量 " + Number(skill.energyCost || 0));
+  const meta = [skillTypeLabel(skill), t("skill.load", { load: Number(skill.load || 0) })];
+  if (!(skill.tags || []).includes("PASSIVE")) meta.push(t("skill.energy", { cost: Number(skill.energyCost || 0) }));
   (skill.tags || []).forEach((tag) => {
-    const label = SKILL_TAG_LABELS[tag];
-    if (label && !meta.includes(label) && !["主动", "被动"].includes(label)) meta.push(label);
+    const label = skillTagLabel(tag);
+    if (label && !meta.includes(label) && ![t("skill.tagActive"), t("skill.tagPassive")].includes(label)) meta.push(label);
   });
   meta.forEach((label) => {
     const chip = document.createElement("span");
@@ -3318,20 +3617,20 @@ function showSkillPreview(skill, trigger) {
     el.skillPreviewMeta.appendChild(chip);
   });
 
-  const phases = (skill.allowedPhases || []).map((phase) => SKILL_PHASE_LABELS[phase] || phase);
+  const phases = (skill.allowedPhases || []).map((phase) => skillPhaseLabel(phase) || phase);
   const limits = [];
-  if (skill.maxUsesPerHand != null) limits.push("每手最多 " + skill.maxUsesPerHand + " 次");
-  if (skill.maxUsesPerGame != null) limits.push("每局最多 " + skill.maxUsesPerGame + " 次");
+  if (skill.maxUsesPerHand != null) limits.push(t("skill.perHand", { count: skill.maxUsesPerHand }));
+  if (skill.maxUsesPerGame != null) limits.push(t("skill.perGame", { count: skill.maxUsesPerGame }));
   const conditions = [];
-  if (skill.requiresActionTurn) conditions.push("仅在你的行动回合");
-  if (skill.requiresFirstSkillEvent) conditions.push("必须是本手第一个技能事件");
-  if (skill.canBeCountered === false) conditions.push("不能被反制");
+  if (skill.requiresActionTurn) conditions.push(t("skill.yourTurnOnly"));
+  if (skill.requiresFirstSkillEvent) conditions.push(t("skill.firstEvent"));
+  if (skill.canBeCountered === false) conditions.push(t("skill.uncounterable"));
 
   const rows = [
-    ["发动时机", phases.length ? phases.join(" / ") : skillTypeLabel(skill) === "被动技能" ? "满足条件时自动触发" : "专属窗口"],
-    ["使用限制", limits.length ? limits.join("；") : "仅受自身触发条件与能量限制"],
-    ["前置条件", conditions.length ? conditions.join("；") : "无额外行动条件"],
-    ["信息公开", skill.visibility === "SECRET" ? "发动与结果默认私有，仅在出现可观察结果、被侦查或规则要求时确认" : skill.visibility === "MIXED" ? "按目标所在区域决定公开范围" : "发动状态公开"],
+    [t("skill.timing"), phases.length ? phases.join(" / ") : skillTypeLabel(skill) === t("skill.passive") ? t("skill.autoWhen") : t("skill.specialWindow")],
+    [t("skill.limits"), limits.length ? listJoin(limits, "semicolon") : t("skill.onlyLimits")],
+    [t("skill.reqs"), conditions.length ? listJoin(conditions, "semicolon") : t("skill.noExtra")],
+    [t("skill.visibility"), skill.visibility === "SECRET" ? t("skill.secretVis") : skill.visibility === "MIXED" ? t("skill.mixedVis") : t("skill.publicVis")],
   ];
   el.skillPreviewRules.textContent = "";
   rows.forEach(([term, value]) => {
@@ -3350,8 +3649,8 @@ function createSkillZoomButton(skill) {
   const zoom = document.createElement("button");
   zoom.type = "button";
   zoom.className = "skill-zoom-button";
-  zoom.title = "放大查看「" + skill.name + "」";
-  zoom.setAttribute("aria-label", "放大查看技能：" + skill.name);
+  zoom.title = t("skill.zoomNamed", { name: skillCopy(skill, "name") });
+  zoom.setAttribute("aria-label", t("skill.zoom", { name: skillCopy(skill, "name") }));
   zoom.innerHTML =
     '<svg class="skill-zoom-glyph" aria-hidden="true" viewBox="0 0 24 24" focusable="false">' +
     '<circle cx="10.5" cy="10.5" r="6.5"></circle><path d="M15.5 15.5 21 21"></path></svg>';
@@ -3368,7 +3667,8 @@ function createSkillCatalogCard(skill, { selected = false, disabled = false, onS
   card.className = "skill-card load-" + skill.load;
   card.dataset.skillId = skill.id;
   card.setAttribute("role", "group");
-  card.setAttribute("aria-label", skill.name + "技能卡");
+  const displayName = skillCopy(skill, "name");
+  card.setAttribute("aria-label", t("lab.cardAria", { name: displayName }));
   card.classList.toggle("selected", selected);
 
   const select = document.createElement("button");
@@ -3376,49 +3676,49 @@ function createSkillCatalogCard(skill, { selected = false, disabled = false, onS
   select.className = "skill-card-select";
   select.disabled = disabled;
   select.setAttribute("aria-pressed", selected ? "true" : "false");
-  select.setAttribute("aria-label", (selected ? "卸下" : "装备") + "技能：" + skill.name);
+  select.setAttribute("aria-label", selected ? t("lab.unequip", { name: displayName }) : t("lab.equip", { name: displayName }));
   const name = document.createElement("strong");
   const cost = document.createElement("small");
   const description = document.createElement("span");
   description.className = "skill-card-copy skill-card-catalog-summary";
-  name.textContent = skill.name;
+  name.textContent = displayName;
   const passive = (skill.tags || []).includes("PASSIVE");
   const energyHint = skill.energyCosts
-    ? " · 能量 " + Object.values(skill.energyCosts).join("/")
+    ? t("lab.energySplit", { costs: Object.values(skill.energyCosts).join("/") })
     : Number(skill.energyCost || 0) > 0
-      ? passive ? " · 触发消耗 " + skill.energyCost : " · 能量 " + skill.energyCost
-      : passive ? " · 自动触发" : " · 能量 0";
-  cost.textContent = "负载 " + skill.load + energyHint;
-  description.textContent = skill.catalogSummary || skill.shortDescription || skill.description || "";
+      ? passive ? t("lab.triggerCost", { cost: skill.energyCost }) : t("lab.energyHint", { cost: skill.energyCost })
+      : passive ? t("lab.autoTrigger") : t("lab.energyZero");
+  cost.textContent = t("skill.load", { load: skill.load }) + energyHint;
+  description.textContent = skillCopy(skill, "catalogSummary");
   select.append(name, cost, description);
   if (typeof onSelect === "function") select.addEventListener("click", onSelect);
 
   const selectedMark = document.createElement("span");
   selectedMark.className = "skill-selection-mark";
   selectedMark.setAttribute("aria-hidden", "true");
-  selectedMark.textContent = "✓ 已选择";
+  selectedMark.textContent = t("lab.selectedMark");
 
   card.append(select, selectedMark, createSkillZoomButton(skill));
   return card;
 }
 
 const SKILL_LAB_FILTERS = Object.freeze([
-  { id: "all", label: "全部" },
-  { id: "intel", label: "情报", tags: ["INFORMATION"] },
+  { id: "all", labelKey: "lab.filterAll" },
+  { id: "intel", label: "情报", labelKey: "lab.filterIntel", tags: ["INFORMATION"] },
   {
     id: "attack",
-    label: "攻击",
+    labelKey: "lab.filterOffense",
     ids: ["BLOOD_BATTLE", "DESPERATION", "DEAD_END", "ENDGAME", "PROBE", "INTIMIDATION"],
   },
   {
     id: "defense",
-    label: "防御",
+    labelKey: "lab.filterDefense",
     tags: ["DEFENSE"],
     ids: ["COUNTER", "FAIRNESS", "DISGUISE"],
   },
-  { id: "resource", label: "资源", tags: ["RESOURCE"] },
-  { id: "edit", label: "改牌", tags: ["HOLE_EDIT", "DECK_EDIT", "BOARD_EDIT"] },
-  { id: "protocol", label: "协议", tags: ["PROTOCOL"] },
+  { id: "resource", labelKey: "lab.filterResource", tags: ["RESOURCE"] },
+  { id: "edit", labelKey: "lab.filterEdit", tags: ["HOLE_EDIT", "DECK_EDIT", "BOARD_EDIT"] },
+  { id: "protocol", label: "协议", labelKey: "lab.filterProtocol", tags: ["PROTOCOL"] },
 ]);
 
 function isProtocolCatalogSkill(skill) {
@@ -3432,7 +3732,8 @@ function compareSkillLabOrder(a, b) {
   if (protocolDelta) return protocolDelta;
   const loadDelta = Number(a?.load || 0) - Number(b?.load || 0);
   if (loadDelta) return loadDelta;
-  return String(a?.name || a?.id || "").localeCompare(String(b?.name || b?.id || ""), "zh-CN");
+  const locale = currentLocale() === "en-US" ? "en" : "zh-CN";
+  return String(skillCopy(a, "name") || a?.id || "").localeCompare(String(skillCopy(b, "name") || b?.id || ""), locale);
 }
 
 function skillMatchesLabFilter(skill, filterId) {
@@ -3459,8 +3760,8 @@ function renderSkillLabFilters() {
       button.type = "button";
       button.className = "skill-lab-filter";
       button.dataset.skillFilter = filter.id;
-      button.textContent = filter.label;
-      button.setAttribute("aria-label", "筛选" + filter.label + "技能");
+      button.textContent = t(filter.labelKey);
+      button.setAttribute("aria-label", t("lab.filterAria", { label: t(filter.labelKey) }));
       button.addEventListener("click", () => {
         if (state.skillLabFilter === filter.id) return;
         state.skillLabFilter = filter.id;
@@ -3472,6 +3773,11 @@ function renderSkillLabFilters() {
     el.skillLabFilters.dataset.ready = "1";
   }
   el.skillLabFilters.querySelectorAll("[data-skill-filter]").forEach((button) => {
+    const filter = SKILL_LAB_FILTERS.find((entry) => entry.id === button.dataset.skillFilter);
+    if (filter) {
+      button.textContent = t(filter.labelKey);
+      button.setAttribute("aria-label", t("lab.filterAria", { label: t(filter.labelKey) }));
+    }
     const on = button.dataset.skillFilter === active;
     button.classList.toggle("is-active", on);
     button.setAttribute("aria-pressed", on ? "true" : "false");
@@ -3488,20 +3794,23 @@ function renderSkillLab() {
     return sum + (def?.load || 0);
   }, 0);
   const selectedNames = state.selectedLoadout
-    .map((id) => state.skillCatalog.find((skill) => skill.id === id)?.name)
+    .map((id) => skillCopy(id, "name"))
     .filter(Boolean);
   if (el.skillLabHint) el.skillLabHint.textContent = skillBuildRuleText({ compact: true });
   if (el.labLoadMeter) {
-    el.labLoadMeter.textContent =
-      state.selectedLoadout.length + " 项 · " + load + " / " + maxLoad;
+    el.labLoadMeter.textContent = t("lab.meter", {
+      count: state.selectedLoadout.length,
+      load,
+      maxLoad,
+    });
   }
   if (el.skillLabStatus) {
     const selectionSummary = selectedNames.length
-      ? "已选择：" + selectedNames.join("、")
-      : "尚未选择技能";
+      ? t("lab.selectedList", { names: listJoin(selectedNames) })
+      : t("lab.noneSelected");
     el.skillLabStatus.textContent = validation.ok
-      ? selectionSummary + "。构筑有效，可保存。"
-      : selectionSummary + " · " + (validation.error || skillBuildRuleText());
+      ? t("lab.selectedValid", { summary: selectionSummary })
+      : t("lab.selectedInvalid", { summary: selectionSummary, error: validation.error || skillBuildRuleText() });
   }
   if (el.btnSaveLoadout) el.btnSaveLoadout.disabled = !validation.ok;
   el.skillLabCatalog.textContent = "";
@@ -3510,7 +3819,7 @@ function renderSkillLab() {
     if (state.skillCatalog.length) {
       const empty = document.createElement("p");
       empty.className = "skill-lab-filter-empty";
-      empty.textContent = "该标签下没有技能";
+      empty.textContent = t("lab.emptyFilter");
       el.skillLabCatalog.appendChild(empty);
     }
     return;
@@ -3522,10 +3831,10 @@ function renderSkillLab() {
       const idx = state.selectedLoadout.indexOf(skill.id);
       if (idx >= 0) state.selectedLoadout.splice(idx, 1);
       else if (state.selectedLoadout.length >= maxEquipped) {
-        showToast("最多装备 " + maxEquipped + " 个技能", "error");
+        showToast(t("lab.maxCount", { max: maxEquipped }), "error");
         return;
       } else if (loadoutLoad([...state.selectedLoadout, skill.id]) > maxLoad) {
-        showToast("负载已达上限", "error");
+        showToast(t("lab.maxLoad"), "error");
         return;
       } else {
         state.selectedLoadout.push(skill.id);
@@ -3539,11 +3848,11 @@ function renderSkillLab() {
 
 function saveLoadoutFromLab() {
   const validation = validateLoadoutIds(state.selectedLoadout);
-  if (!validation.ok) return showToast(validation.error || "构筑无效", "error");
+  if (!validation.ok) return showToast(validation.error || t("lab.invalid"), "error");
   state.savedLoadout = [...validation.skillIds];
   safeStorageSet("localStorage", STORAGE.skillLoadout, JSON.stringify(state.savedLoadout));
   updateSkillPrepUi();
-  showToast("技能构筑已保存", "success");
+  showToast(t("lab.saved"), "success");
   const pending = state.pendingRoomAction;
   state.pendingRoomAction = null;
   closeSkillLab();
@@ -3558,7 +3867,7 @@ function requireLoadoutForSkillMode(skillMode, pendingAction) {
   if (isLoadoutConfigured()) return true;
   if (!beginUiRequest("room", 5000)) return false;
   state.pendingRoomAction = pendingAction;
-  showToast("请先完成技能自定义配置", "error");
+  showToast(t("lab.needCustom"), "error");
   ensureSkillCatalog()
     .then((catalog) => {
       if (catalog.length) openSkillLab(state.pendingRoomAction || pendingAction);
@@ -3568,9 +3877,7 @@ function requireLoadoutForSkillMode(skillMode, pendingAction) {
 }
 
 function laneLabel(gameMode, skillMode) {
-  const mode = gameMode === GAME_MODE.OVERDRIVE ? "高爆局" : "标准局";
-  const skill = skillMode === "abyss" ? " · 超限技能" : " · 无技能";
-  return mode + skill;
+  return protocolSummaryText(gameMode, skillMode);
 }
 
 function stopMatchWaitTimer() {
@@ -3587,7 +3894,9 @@ function updateMatchWaitTimer() {
 
 function openMatchQueueUi(gameMode, skillMode) {
   state.matching = true;
-  if (el.matchQueueLane) el.matchQueueLane.textContent = laneLabel(gameMode, skillMode);
+  state.matchQueueGameMode = gameMode || state.gameMode;
+  state.matchQueueSkillMode = skillMode || state.skillMode;
+  if (el.matchQueueLane) el.matchQueueLane.textContent = laneLabel(state.matchQueueGameMode, state.matchQueueSkillMode);
   el.matchQueueModal?.classList.remove("hidden");
   el.matchContinueModal?.classList.add("hidden");
   syncModalIsolation();
@@ -3630,18 +3939,24 @@ function updateMatchInviteCountdown() {
   state.matchInviteRaf = requestAnimationFrame(updateMatchInviteCountdown);
 }
 
+function fillMatchInviteText() {
+  const invite = state.pendingMatchInvite;
+  if (!invite || !el.matchInviteText) return;
+  el.matchInviteText.textContent = t("modal.inviteSwitch", {
+    lane: laneLabel(invite.targetGameMode, invite.targetSkillMode),
+    opponent: invite.opponentName ? t("modal.inviteOpponent", { name: invite.opponentName }) : "",
+  });
+}
+
 function openMatchInviteModal(payload) {
   state.pendingMatchInvite = {
     inviteId: payload.inviteId,
     targetGameMode: payload.targetGameMode,
     targetSkillMode: payload.targetSkillMode,
+    opponentName: payload.opponentName || "",
     expiresAt: Number(payload.expiresAt || Date.now() + 6000),
   };
-  if (el.matchInviteText) {
-    const lane = laneLabel(payload.targetGameMode, payload.targetSkillMode);
-    const opponent = payload.opponentName ? `（${payload.opponentName}）` : "";
-    el.matchInviteText.textContent = `邀请你切换到 ${lane} 立即开局${opponent}。`;
-  }
+  fillMatchInviteText();
   el.matchInviteModal?.classList.remove("hidden");
   syncModalIsolation();
   stopMatchInviteTimer();
@@ -3656,7 +3971,7 @@ function cancelMatchmaking({ silent = false } = {}) {
   closeMatchQueueUi();
   closeMatchInviteModal();
   endUiRequest("match");
-  if (!silent) showToast("已取消匹配", "success");
+    if (!silent) showToast(t("toast.matchCancel"), "success");
 }
 
 function startMatchAction(gameMode, skillMode) {
@@ -3727,8 +4042,8 @@ function closeJoinPasswordModal() {
 function confirmJoinWithPassword() {
   const roomId = state.pendingJoinRoomId || (el.inputRoom.value || "").trim().toUpperCase();
   const password = (el.modalJoinPassword?.value || "").trim();
-  if (!roomId) return showToast("请输入房间号", "error");
-  if (!password) return showToast("请输入房间密码", "error");
+    if (!roomId) return showToast(t("toast.needRoom"), "error");
+    if (!password) return showToast(t("toast.needPassword"), "error");
   if (!beginRealtimeRequest("room", 7000)) return;
   el.joinPasswordModal?.classList.add("hidden");
   prepareManualRoomRequest();
@@ -3814,7 +4129,7 @@ el.btnMatchDecline?.addEventListener("click", () => {
 el.btnJoin.addEventListener("click", () => {
   if (state.matching) cancelMatchmaking({ silent: true });
   const roomId = (el.inputRoom.value || "").trim().toUpperCase();
-  if (!roomId) return showToast("请输入房间号", "error");
+  if (!roomId) return showToast(t("toast.needRoom"), "error");
   if (!beginRealtimeRequest("room", 7000)) return;
   prepareManualRoomRequest();
   state.autoLoadoutSubmitted = false;
@@ -3872,9 +4187,9 @@ el.btnCopyRoom.addEventListener("click", async () => {
   el.btnCopyRoom.disabled = true;
   try {
     await navigator.clipboard.writeText(state.roomId);
-    showToast("房间号已复制", "success");
+    showToast(t("wait.copied"), "success");
   } catch (_error) {
-    showToast("复制失败，请手动记录 " + state.roomId, "error");
+    showToast(t("wait.copyFail", { roomId: state.roomId }), "error");
   } finally {
     el.btnCopyRoom.disabled = false;
   }
@@ -3996,7 +4311,7 @@ function applyQuickStartImageView() {
   const percentage = `${Math.round(scale * 100)}%`;
   if (el.quickStartImageScale) el.quickStartImageScale.textContent = percentage;
   if (el.btnQuickStartImageReset) {
-    el.btnQuickStartImageReset.setAttribute("aria-label", `重置图片缩放，当前 ${percentage}`);
+    el.btnQuickStartImageReset.setAttribute("aria-label", t("quickstart.reset", { percent: percentage }));
   }
   if (el.btnQuickStartImageZoomOut) {
     el.btnQuickStartImageZoomOut.disabled = scale <= QUICKSTART_IMAGE_MIN_SCALE + 0.001;
@@ -4160,7 +4475,8 @@ function openQuickStartImage(shot, returnFocus = shot) {
   if (!isQuickStartOpen() || isQuickStartImageOpen() || !shot) return false;
   const source = shot.querySelector("img");
   if (!source || !el.quickStartImageExpanded) return false;
-  const title = shot.dataset.quickstartZoomTitle || source.alt || "教程图片";
+  const titleKey = shot.getAttribute("data-i18n-zoom-title");
+  const title = titleKey ? t(titleKey) : (shot.dataset.quickstartZoomTitle || source.alt || t("quickstart.imageTitle"));
   quickStartImageReturnFocus = returnFocus && document.contains(returnFocus) ? returnFocus : shot;
   resetQuickStartImageView();
   el.quickStartImageExpanded.src = source.currentSrc || source.src;
@@ -4192,10 +4508,10 @@ function updateQuickStartEntryState() {
   if (!el.quickStartEntry) return;
   el.quickStartEntry.classList.toggle("is-read", state.quickStartSeen);
   if (el.quickStartEntryState) {
-    el.quickStartEntryState.textContent = state.quickStartSeen ? "可随时重看" : "约 45 秒";
+    el.quickStartEntryState.textContent = state.quickStartSeen ? t("history.replay") : t("lobby.quickstartEta");
   }
   if (el.quickStartEntryAction) {
-    el.quickStartEntryAction.textContent = state.quickStartSeen ? "重新查看" : "开始阅读";
+    el.quickStartEntryAction.textContent = state.quickStartSeen ? t("lobby.reread") : t("lobby.startReading");
   }
 }
 
@@ -4230,14 +4546,16 @@ function renderQuickStartPage(pageNumber) {
     el.btnQuickStartCornerNext.setAttribute("aria-hidden", lastPage ? "true" : "false");
   }
   if (el.btnQuickStartNext) {
-    el.btnQuickStartNext.textContent = lastPage ? "开始游戏" : "下一页";
+    el.btnQuickStartNext.textContent = lastPage ? t("quickstart.finish") : t("quickstart.next");
     el.btnQuickStartNext.classList.toggle("is-finish", lastPage);
   }
   if (el.quickStartPageStatus) {
     el.quickStartPageStatus.textContent = String(nextPage).padStart(2, "0") + " / 04";
   }
   el.quickStartDots?.querySelectorAll("[data-quickstart-target]").forEach((dot) => {
-    const active = Number(dot.dataset.quickstartTarget) === nextPage;
+    const page = Number(dot.dataset.quickstartTarget);
+    const active = page === nextPage;
+    dot.setAttribute("aria-label", t("quickstart.pageN", { page }));
     if (active) dot.setAttribute("aria-current", "page");
     else dot.removeAttribute("aria-current");
   });
@@ -4513,32 +4831,32 @@ function rulebookSectionMarkup(section) {
   let content = section.content || "";
   if (section.kind === "skills") {
     content = `
-      <p>以下为首发 24 个主体技能的正式规则。使用索引可直接定位；负载、能量、类型、可见性、次数与阶段均按现行实现列出。</p>
-      <nav class="rules-subnav rules-skill-index" aria-label="主体技能索引">
-        ${RULEBOOK_DATA.skills.map((skill) => `
+      <p>${t("rules.skillsIntro")}</p>
+      <nav class="rules-subnav rules-skill-index" aria-label="${t("rules.skillIndex")}">
+        ${getRulebook().skills.map((skill) => `
           <button type="button" data-rule-anchor-target="${escapeRulesText(skill.id)}">
             <span>${escapeRulesText(skill.number)}</span>${escapeRulesText(skill.name)}
           </button>
         `).join("")}
       </nav>
       <div class="rules-skill-list">
-        ${RULEBOOK_DATA.skills.map(rulebookSkillMarkup).join("")}
+        ${getRulebook().skills.map(rulebookSkillMarkup).join("")}
       </div>
     `;
   } else if (section.kind === "protocols") {
     content = `
-      <p>首发共有 9 个协议。所有协议均为<strong>负载 1、能量 0、被动、秘密、摊牌结算</strong>。</p>
+      <p>${t("rules.protocolsIntro")}</p>
       <ol class="rules-steps rules-numbered-steps">
-        <li>必须进入摊牌并赢得该手；弃牌获胜不触发。</li>
-        <li>最终最佳 5 张须恰好属于协议指定牌型。</li>
-        <li>若本手已有本人其他技能产生的筹码倍率，本人的协议不触发。</li>
-        <li>对手技能产生的倍率不阻止本人的协议。</li>
-        <li>触发后，标准净收益 ×2。</li>
+        <li>${t("rules.proto1")}</li>
+        <li>${t("rules.proto2")}</li>
+        <li>${t("rules.proto3")}</li>
+        <li>${t("rules.proto4")}</li>
+        <li>${t("rules.proto5")}</li>
       </ol>
       <div class="rules-protocol-grid">
-        ${RULEBOOK_DATA.protocols.map(rulebookProtocolMarkup).join("")}
+        ${getRulebook().protocols.map(rulebookProtocolMarkup).join("")}
       </div>
-      <aside class="rules-note">皇家同花顺在牌型比较与终局处决中仍是高于普通同花顺的独立等级；仅在协议归属上与同花顺共用「协议--同花顺」。</aside>
+      <aside class="rules-note">${t("rules.royalNote")}</aside>
     `;
   }
   return `
@@ -4562,7 +4880,7 @@ function rulebookSectionMarkup(section) {
 function rebuildRulesSearchIndex() {
   rulesSearchIndex = [];
   rulesSections().forEach((section) => {
-    const data = RULEBOOK_DATA.sections.find((item) => item.id === section.id);
+    const data = getRulebook().sections.find((item) => item.id === section.id);
     const nestedEntries = [...section.querySelectorAll("[data-rule-entry]")].filter((entry) => entry !== section);
     const chapterTitle = data?.title || section.dataset.ruleEntryTitle || "";
     const addEntry = (entry, title, text, keywords = "") => {
@@ -4602,11 +4920,11 @@ function rebuildRulesSearchIndex() {
 
 function renderRulesHandbook() {
   if (rulesHandbookRendered || !el.rulesToc || !el.rulesArticle) return;
-  if (RULEBOOK_DATA.sections.length !== 18 || RULEBOOK_DATA.skills.length !== 24 || RULEBOOK_DATA.protocols.length !== 9) {
-    console.error("规则手册数据不完整，无法载入 V1.0");
+  if (getRulebook().sections.length !== 18 || getRulebook().skills.length !== 24 || getRulebook().protocols.length !== 9) {
+    console.error(t("toast.rulesIncomplete"));
     return;
   }
-  el.rulesToc.innerHTML = RULEBOOK_DATA.sections.map((section, index) => `
+  el.rulesToc.innerHTML = getRulebook().sections.map((section, index) => `
     <button
       type="button"
       class="${index === 0 ? "is-active" : ""}"
@@ -4618,8 +4936,8 @@ function renderRulesHandbook() {
     </button>
   `).join("");
   el.rulesArticle.innerHTML = `
-    <p id="rules-empty" class="rules-empty hidden">没有匹配的规则。可尝试「摊牌」「能量」「全下」或清空搜索。</p>
-    ${RULEBOOK_DATA.sections.map(rulebookSectionMarkup).join("")}
+    <p id="rules-empty" class="rules-empty hidden">${t("rules.searchEmpty")}</p>
+    ${getRulebook().sections.map(rulebookSectionMarkup).join("")}
   `;
   el.rulesEmpty = byId("rules-empty");
   rulesHandbookRendered = true;
@@ -4792,11 +5110,11 @@ function renderRulesSearchResults(matches, rawQuery) {
   el.rulesSearchResults.classList.toggle("hidden", !hasQuery);
   if (!hasQuery) {
     el.rulesSearchResultsList.innerHTML = "";
-    if (el.rulesSearchResultsCount) el.rulesSearchResultsCount.textContent = "0 条";
+    if (el.rulesSearchResultsCount) el.rulesSearchResultsCount.textContent = t("rules.resultCount", { count: 0 });
     return;
   }
   if (el.rulesSearchResultsCount) {
-    el.rulesSearchResultsCount.textContent = matches.length ? `${matches.length} 条` : "0 条";
+    el.rulesSearchResultsCount.textContent = t("rules.resultCount", { count: matches.length });
   }
   el.rulesSearchResultsList.innerHTML = matches.length
     ? matches.map((entry) => `
@@ -4811,7 +5129,7 @@ function renderRulesSearchResults(matches, rawQuery) {
           <span class="rules-search-result-snippet">${escapeRulesText(makeRulesSnippet(entry, rawQuery))}</span>
         </button>
       `).join("")
-    : '<p class="rules-search-no-results">没有找到匹配规则。可尝试中文技能名、英文术语或更短的关键词。</p>';
+    : `<p class="rules-search-no-results">${t("rules.searchNone")}</p>`;
 }
 
 function filterRulesHandbook(rawQuery) {
@@ -4821,7 +5139,7 @@ function filterRulesHandbook(rawQuery) {
   if (!normalizedQuery) {
     renderRulesSearchResults([], "");
     el.rulesEmpty?.classList.add("hidden");
-    if (el.rulesSearchStatus) el.rulesSearchStatus.textContent = "18 个章节";
+    if (el.rulesSearchStatus) el.rulesSearchStatus.textContent = t("rules.chapters", { count: 18 });
     return [];
   }
 
@@ -4836,8 +5154,8 @@ function filterRulesHandbook(rawQuery) {
   const chapterCount = new Set(matches.map((entry) => entry.sectionId)).size;
   if (el.rulesSearchStatus) {
     el.rulesSearchStatus.textContent = matches.length
-      ? `${matches.length} 条匹配 · ${chapterCount} 个章节`
-      : "未找到匹配规则";
+      ? t("rules.matchesChapters", { count: matches.length, chapters: chapterCount })
+      : t("rules.searchNone");
   }
   el.rulesEmpty?.classList.toggle("hidden", matches.length > 0);
   renderRulesSearchResults(matches, query);
@@ -4873,8 +5191,8 @@ function scheduleRulesScrollState() {
 
 function openRulesHandbook({ fromSettings = false, sectionId = "rule-overview" } = {}) {
   renderRulesHandbook();
-  if (!RULEBOOK_DATA.sections.length) {
-    showToast("规则手册暂时无法载入", "error");
+  if (!getRulebook().sections.length) {
+    showToast(t("toast.rulesFail"), "error");
     return false;
   }
   rulesHandbookFromSettings = Boolean(fromSettings);
@@ -4996,6 +5314,14 @@ el.btnSkillPreviewExpert?.addEventListener("click", () => {
 el.skillPreviewModal?.addEventListener("click", (event) => {
   if (event.target === el.skillPreviewModal) closeSkillPreview();
 });
+el.settingLanguage?.addEventListener("change", () => {
+  setAppLanguage(el.settingLanguage.value);
+});
+el.langButtons?.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    if (btn.dataset.locale) setAppLanguage(btn.dataset.locale);
+  });
+});
 el.settingAnimation.addEventListener("change", () => {
   state.settings.animation = el.settingAnimation.value;
   saveSettings();
@@ -5017,7 +5343,7 @@ el.settingProMode?.addEventListener("change", () => {
   saveSettings();
   applySettings();
   showToast(
-    state.settings.proPlayerMode ? "专家模式已开启 · TOURNAMENT DESK" : "已退出专家模式",
+    state.settings.proPlayerMode ? t("settings.proOn") : t("settings.proOff"),
     "success"
   );
 });
@@ -5094,7 +5420,7 @@ document.addEventListener("keydown", (event) => {
 });
 
 socket.on("connect", () => {
-  setConnectionUI(true, "连接正常");
+  setConnectionUI(true);
   playTone("connect");
   const savedRoom = safeStorageGet("sessionStorage", STORAGE.roomId);
   const savedToken = safeStorageGet("sessionStorage", STORAGE.reconnectToken);
@@ -5110,16 +5436,16 @@ socket.on("connect", () => {
 });
 socket.on("disconnect", () => {
   endAllUiRequests();
-  setConnectionUI(false, "网络连接已中断，正在尝试恢复牌局…");
+  setConnectionUI(false, null, { messageKey: "connection.lost" });
   playTone("disconnect");
   state.players = state.players.map((player) =>
     player.playerId === state.playerId ? Object.assign({}, player, { isConnected: false }) : player
   );
   renderState();
 });
-socket.on("connect_error", () => setConnectionUI(false, "无法连接服务器，正在重试…"));
-socket.io.on("reconnect_attempt", () => setConnectionUI(false, "正在恢复实时连接…"));
-socket.io.on("reconnect_failed", () => showToast("自动重连失败，请刷新页面", "error"));
+socket.on("connect_error", () => setConnectionUI(false, null, { messageKey: "connection.retrying" }));
+socket.io.on("reconnect_attempt", () => setConnectionUI(false, null, { messageKey: "connection.recovering" }));
+socket.io.on("reconnect_failed", () => showToast(t("connection.reconnectFailed"), "error"));
 
 socket.on("match:queued", (payload) => {
   endUiRequest("match");
@@ -5168,11 +5494,11 @@ socket.on("match:invite:expired", () => {
 
 socket.on("match:error", (payload) => {
   endUiRequest("match");
-  const msg = String(payload?.message || "匹配失败");
+  const msg = String(payload?.message || t("toast.matchFail"));
   // 取消与成局竞态：已不在队列时不弹错误
-  if (/未在匹配/.test(msg) && (state.roomId || !state.matching)) return;
+  if (/未在匹配/.test(String(payload?.message || "")) && (state.roomId || !state.matching)) return;
   if (!state.matching && !state.roomId) state.atLobby = true;
-  showToast(msg, "error");
+  showToast(localizeIncoming(payload?.message) || t("toast.matchFail"), "error");
 });
 
 socket.on("room_created", (payload) => {
@@ -5241,7 +5567,7 @@ socket.on("room_joined", (payload) => {
   applyRoomJoinedPayload(payload, { fromLobby: enteringFromLobby });
 
   if (enteringFromLobby && state.skillMode === "abyss" && !isLoadoutConfigured()) {
-    showToast("技能局需先完成技能自定义配置", "error");
+    showToast(t("skill.needLab"), "error");
     completeReturnToLobby();
     ensureSkillCatalog().then((catalog) => {
       if (catalog.length) openSkillLab(null);
@@ -5372,7 +5698,7 @@ socket.on("your_cards", (payload) => {
   state.myCards = payload.cards || [];
   state.showdownCards = {};
   state.bestFiveCodes = new Set();
-  state.handHint = "计算中…";
+  state.handHint = t("hand.computing");
   state.handCategory = 0;
   el.selfHandType.dataset.category = "0";
   renderState();
@@ -5381,12 +5707,12 @@ socket.on("your_cards", (payload) => {
 socket.on("hand_hint", (payload) => {
   if (shouldIgnoreSyncEvent(payload)) return;
   const previousCategory = state.handCategory;
-  state.handHint = payload.handName || "未成牌";
+  state.handHint = payload.handName || t("hand.none");
   state.handCategory = Number(payload.category || 0);
   state.bestFiveCodes = new Set((payload.bestFive || []).map((card) => card.code));
   el.selfHandType.dataset.category = String(state.handCategory);
   renderCards();
-  el.selfHandType.textContent = state.handHint;
+  el.selfHandType.textContent = displayHandHint(state.handHint);
   if (state.handCategory > previousCategory) {
     pulseBoard("hand-upgrade-" + Math.min(9, state.handCategory), 850);
     playTone("upgrade");
@@ -5426,7 +5752,7 @@ socket.on("player_turn", (payload) => {
   if (payload.handId && state.commitments.has(payload.handId)) {
     state.activeCommitment = state.commitments.get(payload.handId);
   }
-  logAction(payload.playerId === state.playerId ? "轮到你行动" : "对手正在行动");
+  logAction(payload.playerId === state.playerId ? t("game.yourTurnLog") : t("game.oppActing"));
   renderState();
 });
 socket.on("action_made", (payload) => {
@@ -5446,8 +5772,8 @@ socket.on("action_made", (payload) => {
     : payload.declaredAction === "allin" && (!state.chipViewHidden || payload.playerId === state.playerId)
       ? "allin"
       : payload.action;
-  const label = ACTION_LABELS[presentedAction] || presentedAction;
-  logAction("玩家 " + payload.playerId + " · " + label + (payload.amount ? " " + payload.amount : ""));
+  const label = actionLabel(presentedAction) || presentedAction;
+  logAction(t("game.playerAction", { id: payload.playerId, label: label + (payload.amount ? " " + payload.amount : "") }));
   if (["call", "raise", "allin"].includes(payload.action) && payload.amount > 0) {
     flyChip(payload.playerId);
     playTone("chips");
@@ -5490,7 +5816,7 @@ socket.on("rematch_started", (payload) => {
   state.fairnessStatus = "pending";
   safeStorageRemove("sessionStorage", STORAGE.commitments);
   if (Array.isArray(payload.players)) state.players = payload.players;
-  logAction("双方确认，再来一局");
+  logAction(t("game.rematchLog"));
   renderState();
 });
 socket.on("hand_commitment", (payload) => {
@@ -5517,21 +5843,21 @@ socket.on("player_joined", (payload) => {
   if (shouldIgnoreSyncEvent(payload)) return;
   if (payload.players) syncPlayers(payload.players);
   if (payload.playerId && payload.playerId !== state.playerId) {
-    showToast("玩家已接入", "success");
+    showToast(t("toast.playerJoined"), "success");
   }
 });
 socket.on("player_reconnected", (payload) => {
   if (shouldIgnoreSyncEvent(payload)) return;
   if (payload.players) syncPlayers(payload.players);
   if (payload.playerId && payload.playerId !== state.playerId) {
-    showToast("玩家连接已恢复", "success");
+    showToast(t("toast.playerRestored"), "success");
     playTone("connect");
   }
 });
 socket.on("player_disconnected", (payload) => {
   if (shouldIgnoreSyncEvent(payload)) return;
   if (Array.isArray(payload.players)) syncPlayers(payload.players);
-  showToast("玩家 " + payload.playerId + " 连接中断", "error");
+  showToast(t("toast.playerDropped", { playerId: payload.playerId }), "error");
   playTone("disconnect");
 });
 socket.on("player_left", (payload) => {
@@ -5541,7 +5867,7 @@ socket.on("player_left", (payload) => {
     state.players = state.players.filter((p) => p.playerId !== payload.playerId);
     renderState();
   }
-  showToast("玩家 " + payload.playerId + " 已离开", "info");
+  showToast(t("toast.playerLeft", { playerId: payload.playerId }), "info");
 });
 socket.on("room_closed", (payload) => {
   if (shouldIgnoreSyncEvent(payload)) return;
@@ -5550,7 +5876,7 @@ socket.on("room_closed", (payload) => {
   clearRoomSession();
   state.atLobby = true;
   showScreen("auth");
-  showToast(payload.reason === "rematch_declined" ? "有玩家结束连接，房间已关闭" : "重赛确认超时，房间已关闭", "info");
+  showToast(payload.reason === "rematch_declined" ? t("toast.roomClosedLeft") : t("toast.rematchTimeout"), "info");
 });
 socket.on("left_room", (payload) => {
   if (payload.reason === "session_replaced") {
@@ -5558,7 +5884,7 @@ socket.on("left_room", (payload) => {
     clearRoomSession();
     state.atLobby = true;
     showScreen("auth");
-    showToast("此席位已在另一个窗口恢复", "error");
+    showToast(t("toast.sessionReplaced"), "error");
   }
 });
 socket.on("join_error", (payload) => {
@@ -5573,7 +5899,7 @@ socket.on("join_error", (payload) => {
     state.atLobby = true;
     showScreen("auth");
     openJoinPasswordModal(payload.roomId || state.pendingJoinRoomId || (el.inputRoom.value || "").trim().toUpperCase());
-    showToast("请输入房间密码", "error");
+    showToast(t("toast.needPassword"), "error");
     return;
   }
   state.atLobby = true;
@@ -5582,22 +5908,22 @@ socket.on("join_error", (payload) => {
     clearRoomSession();
     showScreen("auth");
   }
-  showToast(payload.message || "加入房间失败", "error");
+  showToast(localizeIncoming(payload.message) || t("toast.joinFail"), "error");
 });
 socket.on("room:password_updated", (payload) => {
   if (shouldIgnoreSyncEvent(payload)) return;
   endUiRequest("password");
   state.hasPassword = Boolean(payload?.hasPassword);
-  if (el.waitPasswordStatus) el.waitPasswordStatus.textContent = state.hasPassword ? "已设置" : "未设置";
-  showToast(state.hasPassword ? "房间密码已设置" : "已清除房间密码", "success");
+  if (el.waitPasswordStatus) el.waitPasswordStatus.textContent = state.hasPassword ? t("wait.pwdOn") : t("wait.pwdOff");
+  showToast(state.hasPassword ? t("wait.pwdSet") : t("wait.pwdCleared"), "success");
 });
 socket.on("action_error", (payload) => {
   endUiRequest("action");
   endUiRequest("password");
-  showToast(payload.message || "操作失败", "error");
+  showToast(payload.message || t("toast.actionFail"), "error");
 });
 socket.on("room_fault", (payload) => {
-  const message = payload?.message || "牌局状态异常，本局已中止";
+  const message = payload?.message || t("server.aborted");
   showToast(message, "error");
 });
 
@@ -5608,13 +5934,13 @@ state.selectedLoadout = [...state.savedLoadout];
 setMode(GAME_MODE.STANDARD);
 setSkillMode("off");
 applySettings();
-updateQuickStartEntryState();
+applyLanguage();
 updateSkillPrepUi();
 ensureSkillCatalog().then(() => {
   const validation = validateLoadoutIds(state.savedLoadout);
   if (state.skillCatalogStatus === "ready" && state.savedLoadout.length && !validation.ok) {
     state.selectedLoadout = [];
-    showToast("检测到失效技能构筑，请重新配置。", "error");
+    showToast(t("toast.invalidBuild"), "error");
   } else {
     state.selectedLoadout = [...state.savedLoadout];
   }
@@ -5630,13 +5956,13 @@ window.addEventListener("resize", syncTableRailAccessibility, { passive: true })
 function setSkillMode(mode) {
   state.skillMode = mode === "abyss" ? "abyss" : "off";
   if (el.selectedSkillTag) {
-    el.selectedSkillTag.textContent = state.skillMode === "abyss" ? "技能" : "无技能";
+    el.selectedSkillTag.textContent = state.skillMode === "abyss" ? t("modal.skill") : t("lobby.noSkills");
     el.selectedSkillTag.className = "mode-pill " + (state.skillMode === "abyss" ? "abyss" : "standard");
   }
   el.skillModeInputs?.forEach((input) => {
     input.checked = input.value === state.skillMode;
   });
-  if (el.waitSkillMode) el.waitSkillMode.textContent = state.skillMode === "abyss" ? "超限技能" : "关闭";
+  if (el.waitSkillMode) el.waitSkillMode.textContent = state.skillMode === "abyss" ? t("lobby.overlimitSkills") : t("wait.skillsOff");
   if (el.waitInitialEnergy) el.waitInitialEnergy.textContent = state.skillMode === "abyss" ? "4" : "—";
   syncProtocolUi();
 }
@@ -5666,9 +5992,9 @@ function renderSkillDraft() {
   el.skillDraftPanel.classList.toggle("is-confirmed", confirmed);
   el.draftLoadMeter.textContent = load + " / " + maxLoad + " · " + draftIds.length + " / " + maxEquipped;
   el.draftStatus.textContent = invalidBuild
-    ? "当前技能构筑包含重复或无效技能，请重新配置。"
+    ? t("lab.duplicate")
     : confirmed
-    ? "构筑已确认，等待对手…"
+    ? t("wait.confirmed")
     : skillBuildRuleText();
   el.btnConfirmLoadout.disabled =
     confirmed ||
@@ -5693,7 +6019,7 @@ function renderSkillDraft() {
       else if (state.selectedLoadout.length < maxEquipped && loadoutLoad([...state.selectedLoadout, skill.id]) <= maxLoad) {
         state.selectedLoadout.push(skill.id);
       } else {
-        showToast("负载或数量已达上限", "error");
+        showToast(t("toast.loadCap"), "error");
         return;
       }
       renderSkillDraft();
@@ -5705,26 +6031,26 @@ function renderSkillDraft() {
 
 function skillAvailability(def, skills, me) {
   const tags = new Set(def?.tags || []);
-  if (tags.has("PASSIVE")) return { ready: false, kind: "passive", reason: "自动触发", cost: 0 };
+  if (tags.has("PASSIVE")) return { ready: false, kind: "passive", reason: "intel.autoTrigger", cost: 0 };
   const cost = def?.id === "NULLIFICATION"
     ? Number(def.energyCosts?.board || def.energyCost || 0)
     : Number(def?.energyCost || 0);
   const handUsed = Number(skills?.skillUsesThisHand?.[def.id] || 0);
   const gameUsed = Number(skills?.skillUsesThisGame?.[def.id] || 0);
-  let reason = "可发动";
-  if (!socket.connected) reason = "等待网络恢复";
-  else if (state.uiPending.skill) reason = "请求处理中";
-  else if (!me || me.status === "folded" || me.status === "out") reason = "当前已退出本手";
-  else if (Number(skills?.abyssEnergy || 0) < 0) reason = "负能量时不能发动";
-  else if (skills?.lockedThisHand || state.skillState?.fairnessActive) reason = "本手技能已封锁";
-  else if (Array.isArray(def.allowedPhases) && def.allowedPhases.length && !def.allowedPhases.includes(state.phase)) reason = "当前阶段不可用";
-  else if (def.requiresActionTurn && state.currentTurnPlayerId !== state.playerId && !(def.id === "ENDGAME" && state.skillState?.endgameWindow?.playerId === state.playerId)) reason = "等待你的行动回合";
-  else if (def.requiresActionTurn && me?.isAllIn && !(def.id === "ENDGAME" && state.skillState?.endgameWindow?.playerId === state.playerId)) reason = "All In 后没有下注行动回合";
-  else if (def.requiresFirstSkillEvent && Number(skills?.skillEventsThisHand || 0) > 0) reason = "必须是本手第一个技能事件";
-  else if (def.maxUsesPerHand != null && handUsed >= def.maxUsesPerHand) reason = "本手次数已用完";
-  else if (def.maxUsesPerGame != null && gameUsed >= def.maxUsesPerGame) reason = "本场次数已用完";
-  else if (Number(skills?.abyssEnergy || 0) < cost) reason = "能量不足";
-  return { ready: reason === "可发动", kind: "active", reason, cost };
+  let reason = "skill.ready";
+  if (!socket.connected) reason = "skill.waitNet";
+  else if (state.uiPending.skill) reason = "skill.pending";
+  else if (!me || me.status === "folded" || me.status === "out") reason = "skill.exited";
+  else if (Number(skills?.abyssEnergy || 0) < 0) reason = "skill.negative";
+  else if (skills?.lockedThisHand || state.skillState?.fairnessActive) reason = "skill.locked";
+  else if (Array.isArray(def.allowedPhases) && def.allowedPhases.length && !def.allowedPhases.includes(state.phase)) reason = "skill.badStreet";
+  else if (def.requiresActionTurn && state.currentTurnPlayerId !== state.playerId && !(def.id === "ENDGAME" && state.skillState?.endgameWindow?.playerId === state.playerId)) reason = "skill.waitTurn";
+  else if (def.requiresActionTurn && me?.isAllIn && !(def.id === "ENDGAME" && state.skillState?.endgameWindow?.playerId === state.playerId)) reason = "skill.allInNoTurn";
+  else if (def.requiresFirstSkillEvent && Number(skills?.skillEventsThisHand || 0) > 0) reason = "skill.firstOnly";
+  else if (def.maxUsesPerHand != null && handUsed >= def.maxUsesPerHand) reason = "skill.handCap";
+  else if (def.maxUsesPerGame != null && gameUsed >= def.maxUsesPerGame) reason = "skill.gameCap";
+  else if (Number(skills?.abyssEnergy || 0) < cost) reason = "skill.noEnergy";
+  return { ready: reason === "skill.ready", kind: "active", reason, cost };
 }
 
 function skillDefinition(skillId) {
@@ -5734,7 +6060,7 @@ function skillDefinition(skillId) {
     load: "—",
     energyCost: "—",
     tags: [],
-    description: "该技能已由服务器确认，但本地档案暂未同步。",
+    description: t("skill.unsynced"),
   };
 }
 
@@ -5776,7 +6102,7 @@ function createIntelSkillCard(skillId, certainty) {
   card.dataset.skillId = skillId;
   card.setAttribute(
     "aria-label",
-    (certainty === "known" ? "系统确认技能：" : "本地推测技能：") + def.name + "，点击查看档案"
+    (certainty === "known" ? t("intel.knownAria", { name: skillCopy(def, "name") }) : t("intel.suspectedAria", { name: skillCopy(def, "name") }))
   );
 
   const source = document.createElement("span");
@@ -5784,10 +6110,10 @@ function createIntelSkillCard(skillId, certainty) {
   source.textContent = certainty === "known" ? "CONFIRMED" : "SUSPECTED";
   const name = document.createElement("strong");
   name.className = "intel-card-name";
-  name.textContent = def.name;
+  name.textContent = skillCopy(def, "name");
   const meta = document.createElement("small");
   meta.className = "intel-card-meta";
-  meta.textContent = "负载 " + String(def.load ?? "—") + " · 能量 " + String(def.energyCost ?? 0);
+  meta.textContent = t("intel.loadEnergy", { load: String(def.load ?? "—"), energy: String(def.energyCost ?? 0) });
   card.append(source, name, meta);
   card.addEventListener("click", () => showSkillPreview(def, card));
   return card;
@@ -5797,14 +6123,17 @@ function syncOpponentIntelToggleAccessibility(accessibleDetails = null) {
   if (!el.btnToggleOpponentIntel) return;
   const details = accessibleDetails
     || el.btnToggleOpponentIntel.dataset.intelSummary
-    || "完全未知";
+    || t("intel.none");
   const expanded = el.btnToggleOpponentIntel.getAttribute("aria-expanded") === "true";
   el.btnToggleOpponentIntel.dataset.intelSummary = details;
   el.btnToggleOpponentIntel.setAttribute(
     "aria-label",
-    "构筑情报，" + details + "。" + (expanded ? "关闭详情。" : "打开详情。")
+    t("intel.toggleAria", {
+      details,
+      action: expanded ? t("intel.closeDetails") : t("intel.openDetails"),
+    })
   );
-  el.btnToggleOpponentIntel.title = "构筑情报 · " + details;
+  el.btnToggleOpponentIntel.title = t("intel.toggleTitle", { details });
 }
 
 function syncOpponentIntelSummary(opponent, known, suspected) {
@@ -5819,26 +6148,26 @@ function syncOpponentIntelSummary(opponent, known, suspected) {
     ...suspectedIds.map((skillId) => ({ skillId, certainty: "suspected" })),
   ];
   const summary = !opponent
-    ? "等待对手"
+    ? t("game.waitingOpponent")
     : confirmedCount && suspectedCount
-      ? "已确认 " + confirmedCount + " · 推测 " + suspectedCount
+      ? t("intel.confirmedSuspected", { confirmed: confirmedCount, suspected: suspectedCount })
       : confirmedCount
-        ? "已确认 " + confirmedCount
+        ? t("intel.confirmedCount", { count: confirmedCount })
         : suspectedCount
-          ? "推测 " + suspectedCount
-          : "完全未知";
+          ? t("intel.suspectedCount", { count: suspectedCount })
+          : t("intel.none");
   if (el.opponentIntelCount) el.opponentIntelCount.textContent = summary;
 
-  const confirmedNames = confirmedIds.map((skillId) => skillDefinition(skillId).name);
-  const suspectedNames = suspectedIds.map((skillId) => skillDefinition(skillId).name);
+  const confirmedNames = confirmedIds.map((skillId) => skillCopy(skillId, "name"));
+  const suspectedNames = suspectedIds.map((skillId) => skillCopy(skillId, "name"));
   const accessibleDetails = !opponent
-    ? "等待对手"
+    ? t("game.waitingOpponent")
     : entries.length
       ? [
-          confirmedNames.length ? "已确认：" + confirmedNames.join("、") : "",
-          suspectedNames.length ? "推测：" + suspectedNames.join("、") : "",
-        ].filter(Boolean).join("；")
-      : "完全未知";
+          confirmedNames.length ? t("intel.confirmedList", { names: listJoin(confirmedNames) }) : "",
+          suspectedNames.length ? t("intel.suspectedList", { names: listJoin(suspectedNames) }) : "",
+        ].filter(Boolean).join(listSeparator("semicolon"))
+      : t("intel.none");
 
   if (el.opponentIntelSlots) {
     const currentTags = [...el.opponentIntelSlots.children];
@@ -5859,7 +6188,7 @@ function syncOpponentIntelSummary(opponent, known, suspected) {
       }
       const def = skillDefinition(entry.skillId);
       const confirmed = entry.certainty === "confirmed";
-      const semanticLabel = (confirmed ? "已确认：" : "推测：") + def.name;
+      const semanticLabel = (confirmed ? t("intel.confirmedList", { names: skillCopy(entry.skillId, "name") }) : t("intel.suspectedList", { names: skillCopy(entry.skillId, "name") }));
       tag.className = "opponent-intel-tag is-" + entry.certainty;
       tag.dataset.intelKey = intelKey;
       tag.dataset.skillId = entry.skillId;
@@ -5867,7 +6196,7 @@ function syncOpponentIntelSummary(opponent, known, suspected) {
       tag.title = semanticLabel;
       tag.setAttribute("aria-label", semanticLabel);
       tag.querySelector(".opponent-intel-tag-mark").textContent = confirmed ? "✓" : "?";
-      tag.querySelector(".opponent-intel-tag-name").textContent = def.name;
+      tag.querySelector(".opponent-intel-tag-name").textContent = skillCopy(entry.skillId, "name");
       el.opponentIntelSlots.appendChild(tag);
       usedTags.add(tag);
     });
@@ -5877,7 +6206,7 @@ function syncOpponentIntelSummary(opponent, known, suspected) {
     el.opponentIntelSlots.classList.toggle("is-empty", entries.length === 0);
     el.opponentIntelSlots.setAttribute(
       "aria-label",
-      entries.length ? accessibleDetails : "当前没有已确认或推测的技能"
+      entries.length ? accessibleDetails : t("intel.emptySlots")
     );
   }
 
@@ -5900,6 +6229,7 @@ function renderOpponentSkillIntel() {
     .slice(0, Math.max(0, 4 - known.ids.length));
   const visibleCount = Math.min(4, known.ids.length + suspected.length);
   const intelSignature = [
+    currentLocale(),
     opponent?.playerId || "",
     known.complete ? "1" : "0",
     known.ids.join(","),
@@ -5921,9 +6251,9 @@ function renderOpponentSkillIntel() {
   if (!opponent) {
     const empty = document.createElement("div");
     empty.className = "intel-empty-state";
-    empty.innerHTML = "<span>NO TARGET</span><strong>等待对手接入</strong>";
+    empty.innerHTML = "<span>NO TARGET</span><strong>" + t("wait.waitingJoin") + "</strong>";
     el.opponentSkillBar.appendChild(empty);
-    if (el.opponentBuildStatus) el.opponentBuildStatus.textContent = "无目标";
+    if (el.opponentBuildStatus) el.opponentBuildStatus.textContent = t("choice.noTarget");
     if (el.btnMarkOpponentSkills) el.btnMarkOpponentSkills.disabled = true;
     return;
   }
@@ -5938,27 +6268,27 @@ function renderOpponentSkillIntel() {
   for (let index = combined.length; index < 4; index += 1) {
     const unknown = document.createElement("div");
     unknown.className = "intel-skill-card is-unknown";
-    unknown.setAttribute("aria-label", "未知技能槽位 " + String(index + 1));
-    unknown.innerHTML = "<span class=\"intel-card-source\">UNKNOWN</span><strong class=\"intel-card-name\">?</strong><small class=\"intel-card-meta\">等待情报</small>";
+    unknown.setAttribute("aria-label", t("intel.slotUnknown", { n: index + 1 }));
+    unknown.innerHTML = "<span class=\"intel-card-source\">UNKNOWN</span><strong class=\"intel-card-name\">?</strong><small class=\"intel-card-meta\">" + t("intel.waitingIntel") + "</small>";
     el.opponentSkillBar.appendChild(unknown);
   }
 
   if (el.opponentBuildStatus) {
     el.opponentBuildStatus.textContent = known.complete
-      ? "构筑已公开"
+      ? t("intel.published")
       : known.ids.length
-        ? "已确认 " + known.ids.length
+        ? t("intel.confirmedCount", { count: known.ids.length })
         : suspected.length
-          ? "本地研判"
-          : "完全未知";
+          ? t("intel.localJudge")
+          : t("intel.none");
   }
   if (el.btnMarkOpponentSkills) {
     el.btnMarkOpponentSkills.disabled = known.complete || !state.skillCatalog.length;
     el.btnMarkOpponentSkills.querySelector("span:last-child").textContent = known.complete
-      ? "构筑已公开"
+      ? t("intel.published")
       : suspected.length
-        ? "编辑推测"
-        : "标记推测";
+        ? t("intel.edit")
+        : t("intel.mark");
   }
 }
 
@@ -6004,7 +6334,7 @@ function rememberSkillFeedEntry(entry) {
     casterId: entry.casterId || null,
     skillId: entry.skillId || null,
     status: entry.status || "SUCCESS",
-    publicSummary: entry.publicSummary || skillDefinition(entry.skillId).name + " 已结算",
+    publicSummary: entry.publicSummary || t("intel.feedEvent"),
     scope: "public",
   };
   const key = skillFeedIdentity(normalized);
@@ -6115,7 +6445,7 @@ function renderSkillFeed() {
   const merged = [...(state.skillRecentLog || []), ...(state.skillSelfLog || [])]
     .sort((left, right) => Number(left.at || 0) - Number(right.at || 0));
   const entries = merged.slice(-12).reverse();
-  const feedSignature = merged.map((entry) => skillFeedIdentity(entry) + "@" + Number(entry.at || 0)).join(";");
+  const feedSignature = currentLocale() + "|" + merged.map((entry) => skillFeedIdentity(entry) + "@" + Number(entry.at || 0)).join(";");
   if (el.skillLog.dataset.feedSignature === feedSignature) {
     if (el.skillFeedCount) el.skillFeedCount.textContent = String(merged.length);
     return;
@@ -6126,7 +6456,7 @@ function renderSkillFeed() {
   if (!entries.length) {
     const empty = document.createElement("div");
     empty.className = "skill-feed-empty";
-    empty.innerHTML = "<strong>暂无公开技能事件</strong>";
+    empty.innerHTML = "<strong>" + t("intel.feedEmpty") + "</strong>";
     el.skillLog.appendChild(empty);
     return;
   }
@@ -6143,14 +6473,14 @@ function renderSkillFeed() {
     const label = document.createElement("span");
     label.className = "skill-feed-label";
     const time = Number(entry.at) > 0
-      ? new Date(Number(entry.at)).toLocaleTimeString("zh-CN", { hour12: false, hour: "2-digit", minute: "2-digit" })
+      ? new Date(Number(entry.at)).toLocaleTimeString(currentLocale() === "en-US" ? "en-US" : "zh-CN", { hour12: false, hour: "2-digit", minute: "2-digit" })
       : "LIVE";
-    const skillName = entry.skillId ? skillDefinition(entry.skillId).name : "技能协议";
+    const skillName = entry.skillId ? skillCopy(entry.skillId, "name") : t("intel.protocol");
     label.textContent = mine
-      ? time + " · 我 · " + skillName
+      ? time + " · " + t("intel.me") + " · " + skillName
       : time + " · " + skillName;
     const summary = document.createElement("strong");
-    summary.textContent = entry.publicSummary || "技能事件已结算";
+    summary.textContent = localizeIncoming(entry.publicSummary) || t("intel.feedEvent");
     copy.append(label, summary);
     line.append(marker, copy);
     el.skillLog.appendChild(line);
@@ -6185,11 +6515,11 @@ function renderSkillHud() {
   if (el.selfEnergyCap) el.selfEnergyCap.textContent = String(selfSkills.energyCap || 8);
   renderOpponentEnergy();
   const controlLabel = state.skillState?.fairnessActive
-    ? "公平封锁"
+    ? t("intel.silenceFair")
     : state.skillState?.noFoldActive
-      ? "恐吓 · 禁止弃牌"
+      ? t("intel.silenceIntimidation")
       : selfSkills.lockedThisHand
-        ? "技能封锁"
+        ? t("intel.silenceLock")
         : "";
   el.skillSilenceFlag.textContent = controlLabel;
   el.skillSilenceFlag.classList.toggle("hidden", !controlLabel);
@@ -6202,7 +6532,7 @@ function renderSkillHud() {
       tags: [],
     };
     const availability = skillAvailability(def, selfSkills, me);
-    return [skillId, availability.kind, availability.ready ? "1" : "0", availability.reason, availability.cost].join(":");
+    return [currentLocale(), skillId, availability.kind, availability.ready ? "1" : "0", availability.reason, availability.cost].join(":");
   }).join("|");
   if (el.skillBar.dataset.signature === hudSignature) {
     syncNullifyTargeting();
@@ -6226,25 +6556,29 @@ function renderSkillHud() {
     btn.dataset.skillUseId = skillId;
     btn.classList.toggle("is-ready", availability.ready);
     btn.disabled = !availability.ready;
-    btn.dataset.reason = availability.reason;
-    btn.title = skillDescriptionText(def) + "\n状态：" + availability.reason;
+    const reasonText = t(availability.reason);
+    btn.dataset.reason = reasonText;
+    btn.title = skillDescriptionText(def) + "\n" + t("skill.statusLine", { reason: reasonText });
     const isPassive = availability.kind === "passive";
+    const displayName = skillCopy(def, "name");
     btn.setAttribute(
       "aria-label",
-      def.name + (isPassive ? "，被动技能，" : "，") + availability.reason
+      isPassive
+        ? t("skill.ariaPassive", { name: displayName, reason: reasonText })
+        : t("skill.ariaActive", { name: displayName, reason: reasonText })
     );
 
     const skillLabel = document.createElement("span");
     skillLabel.className = "skill-use-label";
     const skillName = document.createElement("span");
     skillName.className = "skill-use-name";
-    skillName.textContent = def.name;
+    skillName.textContent = displayName;
     skillLabel.appendChild(skillName);
 
     if (isPassive) {
       const passiveTag = document.createElement("span");
       passiveTag.className = "skill-use-passive";
-      passiveTag.textContent = "被动";
+      passiveTag.textContent = t("intel.passive");
       skillLabel.appendChild(passiveTag);
     }
     btn.appendChild(skillLabel);
@@ -6278,7 +6612,7 @@ function emitSkillUse(skillId, target = {}) {
 }
 
 function cardChoiceLabel(card) {
-  if (!card) return "未知牌";
+  if (!card) return t("lab.unknownCard");
   return (card.rank === "T" ? "10" : card.rank) + suitText(card.suit);
 }
 
@@ -6293,15 +6627,15 @@ function futureBoardIndexes() {
   return Array.from({ length: Math.max(0, 5 - start) }, (_unused, index) => start + index);
 }
 
-function prepareSkillChoiceModal({ variant = "default", eyebrow = "TACTICAL DECISION", step = "选择目标", confirmLabel = "确认发动" } = {}) {
+function prepareSkillChoiceModal({ variant = "default", eyebrow = "TACTICAL DECISION", step, confirmLabel } = {}) {
   el.skillChoiceModal.dataset.variant = variant;
   if (el.skillChoiceEyebrow) el.skillChoiceEyebrow.textContent = eyebrow;
-  if (el.skillChoiceStep) el.skillChoiceStep.textContent = step;
+  if (el.skillChoiceStep) el.skillChoiceStep.textContent = step || t("choice.pickTarget");
   el.skillChoiceFilters?.classList.add("hidden");
   if (el.skillChoiceFilters) el.skillChoiceFilters.textContent = "";
   el.skillChoiceText?.classList.remove("hidden");
-  if (el.skillChoiceSelection) el.skillChoiceSelection.textContent = "尚未选择";
-  el.btnSkillChoiceConfirm.textContent = confirmLabel;
+  if (el.skillChoiceSelection) el.skillChoiceSelection.textContent = t("common.noneSelected");
+  el.btnSkillChoiceConfirm.textContent = confirmLabel || t("common.confirmLaunch");
   el.btnSkillChoiceConfirm.disabled = true;
   el.skillChoiceBody.textContent = "";
 }
@@ -6332,7 +6666,7 @@ function createGenericSkillChoice(option) {
   const title = document.createElement("strong");
   title.textContent = option.title || option.label;
   const detail = document.createElement("small");
-  detail.textContent = option.detail || "选择后锁定目标";
+  detail.textContent = option.detail || t("choice.lockAfter");
   copy.append(title, detail);
   btn.append(signal, copy);
   btn.addEventListener("click", () => chooseSkillTarget(btn, option));
@@ -6341,10 +6675,10 @@ function createGenericSkillChoice(option) {
 
 function renderDestinyChoices(options) {
   const suitInfo = {
-    S: { symbol: "♠", name: "黑桃", tone: "black" },
-    H: { symbol: "♥", name: "红桃", tone: "red" },
-    C: { symbol: "♣", name: "梅花", tone: "black" },
-    D: { symbol: "♦", name: "方片", tone: "red" },
+    S: { symbol: "♠", name: t("choice.spades"), tone: "black" },
+    H: { symbol: "♥", name: t("choice.hearts"), tone: "red" },
+    C: { symbol: "♣", name: t("choice.clubs"), tone: "black" },
+    D: { symbol: "♦", name: t("choice.diamonds"), tone: "red" },
   };
   const matrix = document.createElement("div");
   matrix.className = "destiny-card-matrix";
@@ -6362,12 +6696,12 @@ function renderDestinyChoices(options) {
       btn.type = "button";
       btn.className = "destiny-card-choice";
       btn.dataset.tone = info.tone;
-      btn.setAttribute("aria-label", "指定河牌 " + option.label);
+      btn.setAttribute("aria-label", t("choice.riverAria", { label: option.label }));
       btn.setAttribute("aria-pressed", "false");
       btn.innerHTML = "<strong>" + rank + "</strong><span>" + info.symbol + "</span>";
       btn.addEventListener("click", () => chooseSkillTarget(btn, {
         ...option,
-        selectionLabel: "已锁定河牌 · " + option.label,
+        selectionLabel: t("choice.riverLocked", { label: option.label }),
       }));
       grid.appendChild(btn);
     });
@@ -6379,11 +6713,11 @@ function renderDestinyChoices(options) {
 
 function cheatTargetLabel(option) {
   const target = option.target || {};
-  if (target.zone === "opponent") return { zone: "对手底牌", label: "暗牌 #" + String(Number(target.index || 0) + 1) };
-  if (target.zone === "community") return { zone: "公共牌", label: "牌位 #" + String(Number(target.index || 0) + 1) + " · " + cardChoiceLabel(state.communityCards[target.index]) };
-  if (target.zone === "future") return { zone: "未来公共牌", label: "牌位 #" + String(Number(target.index || 0) + 1) };
-  if (target.zone === "next") return { zone: "发牌序列", label: "下一张有效发牌" };
-  return { zone: "牌堆", label: "非顶部暗抽" };
+  if (target.zone === "opponent") return { zone: t("choice.zoneOpp"), label: t("choice.hiddenHoleN", { n: Number(target.index || 0) + 1 }) };
+  if (target.zone === "community") return { zone: t("choice.zoneBoard"), label: t("choice.seatCard", { n: Number(target.index || 0) + 1, card: cardChoiceLabel(state.communityCards[target.index]) }) };
+  if (target.zone === "future") return { zone: t("choice.zoneFuture"), label: t("choice.seatN", { n: Number(target.index || 0) + 1 }) };
+  if (target.zone === "next") return { zone: t("choice.zoneDeal"), label: t("choice.nextDeal") };
+  return { zone: t("choice.zoneDeck"), label: t("choice.hiddenDraw") };
 }
 
 function renderCheatChoices(options) {
@@ -6407,7 +6741,7 @@ function renderCheatChoices(options) {
     targetPanels.querySelectorAll(".is-target-selected, .selected").forEach((node) => node.classList.remove("is-target-selected", "selected"));
     state.pendingChoice.payload.target = {};
     el.btnSkillChoiceConfirm.disabled = true;
-    if (el.skillChoiceSelection) el.skillChoiceSelection.textContent = "已选择交换牌，请指定目标";
+    if (el.skillChoiceSelection) el.skillChoiceSelection.textContent = t("choice.swapSelected");
   };
 
   sourceIndexes.forEach((ownIndex, sourcePosition) => {
@@ -6421,7 +6755,7 @@ function renderCheatChoices(options) {
     const miniCard = createCard(ownCard, { reveal: true });
     miniCard.classList.add("skill-source-card");
     const sourceCopy = document.createElement("span");
-    sourceCopy.innerHTML = "<small>交换手牌</small><strong>" + cardChoiceLabel(ownCard) + "</strong>";
+    sourceCopy.innerHTML = "<small>" + t("choice.swapHole") + "</small><strong>" + cardChoiceLabel(ownCard) + "</strong>";
     source.append(miniCard, sourceCopy);
     source.addEventListener("click", () => activateSource(ownIndex));
     sourceRail.appendChild(source);
@@ -6435,7 +6769,7 @@ function renderCheatChoices(options) {
       btn.type = "button";
       btn.className = "cheat-target-choice";
       btn.setAttribute("aria-pressed", "false");
-      btn.innerHTML = "<span>" + targetInfo.zone + "</span><strong>" + targetInfo.label + "</strong><small>执行精确交换</small>";
+      btn.innerHTML = "<span>" + targetInfo.zone + "</span><strong>" + targetInfo.label + "</strong><small>" + t("choice.exactSwap") + "</small>";
       btn.addEventListener("click", () => chooseSkillTarget(btn, {
         ...option,
         selectionLabel: cardChoiceLabel(ownCard) + " ↔ " + targetInfo.label,
@@ -6531,7 +6865,7 @@ function handleNullifyHoleClick(event) {
   if (!card || !el.opponentCards?.contains(card)) return;
   event.preventDefault();
   if (currentSkillEnergy() < 7) {
-    showToast("零化底牌需要 7 点能量", "error");
+    showToast(t("toast.nullifyEnergy"), "error");
     return;
   }
   commitNullifyTarget({ mode: "hole" });
@@ -6539,7 +6873,7 @@ function handleNullifyHoleClick(event) {
 
 function openSkillTargetOptions({ skillId, title, text, options, variant = "default" }) {
   if (!options.length) {
-    showToast("当前没有可选择的牌", "error");
+    showToast(t("toast.noCards"), "error");
     return;
   }
   state.pendingChoice = {
@@ -6557,7 +6891,7 @@ function openSkillTargetOptions({ skillId, title, text, options, variant = "defa
   prepareSkillChoiceModal({
     variant,
     eyebrow: variant === "destiny" ? "RIVER OVERRIDE PROTOCOL" : variant === "cheat" ? "CARD EXCHANGE PROTOCOL" : "TACTICAL DECISION",
-    step: variant === "cheat" ? "1 选择手牌 · 2 锁定目标" : variant === "destiny" ? "指定唯一河牌" : "选择目标",
+    step: variant === "cheat" ? t("choice.stepSelect") : variant === "destiny" ? t("choice.nameRiver") : t("choice.pickTarget"),
   });
   if (variant === "destiny") renderDestinyChoices(options);
   else if (variant === "cheat") renderCheatChoices(options);
@@ -6572,42 +6906,42 @@ function useSkill(skillId) {
   }
   if (skillId === "INTEL_ONE") {
     const future = futureBoardIndexes();
-    const options = [{ label: "随机读取一张对手底牌", target: { zone: "opponent" }, tone: "intel" }];
+    const options = [{ label: t("choice.readOppHole"), target: { zone: "opponent" }, tone: "intel" }];
     future.forEach((boardIndex) => options.push({
-      label: `查看未来公共牌 #${boardIndex + 1}`,
+      label: t("choice.viewFuture", { n: boardIndex + 1 }),
       target: { zone: "future", boardIndex },
       tone: "intel",
     }));
-    return openSkillTargetOptions({ skillId, title: "情报", text: "先选择信息来源。确认后立即扣费，目标不可变更。", options, variant: "intel" });
+    return openSkillTargetOptions({ skillId, title: t("lab.filterIntel"), text: t("choice.intelHint"), options, variant: "intel" });
   }
   if (skillId === "CHEAT") {
     const options = [];
     state.myCards.forEach((ownCard, ownIndex) => {
       [0, 1].forEach((index) => options.push({
-        label: `${cardChoiceLabel(ownCard)} ↔ 对手底牌 #${index + 1}`,
+        label: t("choice.vsOppHole", { card: cardChoiceLabel(ownCard), n: index + 1 }),
         target: { ownIndex, zone: "opponent", index },
       }));
       state.communityCards.forEach((card, index) => options.push({
-        label: `${cardChoiceLabel(ownCard)} ↔ 公共牌 #${index + 1} ${cardChoiceLabel(card)}`,
+        label: t("choice.vsBoard", { card: cardChoiceLabel(ownCard), n: index + 1, other: cardChoiceLabel(card) }),
         target: { ownIndex, zone: "community", index },
       }));
       futureBoardIndexes().forEach((boardIndex) => options.push({
-        label: `${cardChoiceLabel(ownCard)} ↔ 未来公共牌 #${boardIndex + 1}`,
+        label: t("choice.vsFuture", { card: cardChoiceLabel(ownCard), n: boardIndex + 1 }),
         target: { ownIndex, zone: "future", index: boardIndex },
       }));
       if (futureBoardIndexes().length) options.push({
-        label: `${cardChoiceLabel(ownCard)} ↔ 下一张有效发牌`,
+        label: t("choice.vsNext", { card: cardChoiceLabel(ownCard) }),
         target: { ownIndex, zone: "next" },
       });
       options.push({
-        label: `${cardChoiceLabel(ownCard)} ↔ 牌堆暗抽（非顶部）`,
+        label: t("choice.vsHidden", { card: cardChoiceLabel(ownCard) }),
         target: { ownIndex, zone: "deck_random" },
       });
     });
     return openSkillTargetOptions({
       skillId,
-      title: "千术换牌",
-      text: "先选择要交出的手牌，再锁定精确交换目标。确认后立即执行。",
+      title: t("choice.cheatTitle"),
+      text: t("choice.cheatHint"),
       options,
       variant: "cheat",
     });
@@ -6631,33 +6965,33 @@ function useSkill(skillId) {
     const chipLeft = Math.min(Math.max(0, Number(quota.maxChip) - chipUses), totalLeft);
     const energyLeft = Math.min(Math.max(0, Number(quota.maxEnergy) - energyUses), totalLeft);
     if (credit === "DEFAULTED" || Number(quota.maxTotal) <= 0) {
-      showToast("贷款信用已违约，需先清偿剩余债务", "error");
+      showToast(t("loan.defaulted"), "error");
       return;
     }
     const options = [];
     if (chipLeft > 0) {
       options.push({
-        label: `筹码贷款：立即取得 100，下一手结束偿还 150（公开，本手还可 ${chipLeft} 次）`,
+        label: t("loan.chip", { count: chipLeft }),
         target: { mode: "chip" },
         tone: "intel",
       });
     }
     if (energyLeft > 0) {
       options.push({
-        label: "能量贷款：立即 +5 能量，下一手结束偿还 6（秘密）",
+        label: t("loan.energy"),
         target: { mode: "energy" },
       });
     }
     if (!options.length) {
-      showToast(credit === "RESTRICTED_CREDIT" ? "信用受限：本手贷款只能发动 1 次" : "本手贷款次数已用完", "error");
+      showToast(credit === "RESTRICTED_CREDIT" ? t("loan.restricted") : t("loan.handCap"), "error");
       return;
     }
     const hint = credit === "RESTRICTED_CREDIT"
-      ? "信用受限：本手所有贷款模式合计只能发动 1 次。"
-      : "支付前锁定分支。正常信用：筹码最多 2 次，能量最多 1 次，合计最多 3 次。";
+      ? t("loan.restrictedAll")
+      : t("choice.loanHint");
     return openSkillTargetOptions({
       skillId,
-      title: "贷款",
+      title: skillCopy("LOAN", "name"),
       text: hint,
       options,
       variant: "loan",
@@ -6677,8 +7011,8 @@ function useSkill(skillId) {
     });
     return openSkillTargetOptions({
       skillId,
-      title: "天命选牌",
-      text: "从完整牌面矩阵中指定唯一河牌。若目标不在可操作牌堆中，7 能量仍会支付且发动失败。",
+      title: t("choice.destinyTitle"),
+      text: t("choice.destinyHint"),
       options,
       variant: "destiny",
     });
@@ -6691,7 +7025,7 @@ function openSuspectPicker() {
   if (!opponent) return;
   const known = knownOpponentSkillIntel(opponent);
   if (known.complete) {
-    showToast("对手完整构筑已经公开，无需继续推测", "success");
+    showToast(t("intel.completeHint"), "success");
     return;
   }
   const limit = Math.max(0, 4 - known.ids.length);
@@ -6708,16 +7042,16 @@ function openSuspectPicker() {
     variant: "dossier",
     eyebrow: "",
     step: "",
-    confirmLabel: "保存标记",
+    confirmLabel: t("intel.saveMarks"),
   });
-  el.skillChoiceTitle.textContent = "标记对手技能";
+  el.skillChoiceTitle.textContent = t("intel.markTitle");
   el.skillChoiceText.classList.add("hidden");
   el.skillChoiceFilters?.classList.remove("hidden");
   el.btnSkillChoiceConfirm.disabled = false;
 
   const updateSummary = () => {
     if (el.skillChoiceSelection) {
-      el.skillChoiceSelection.textContent = "剩余可用 " + Math.max(0, limit - selected.size);
+      el.skillChoiceSelection.textContent = t("intel.remaining", { count: Math.max(0, limit - selected.size) });
     }
   };
 
@@ -6743,8 +7077,8 @@ function openSuspectPicker() {
       filterButton.type = "button";
       filterButton.className = "skill-lab-filter";
       filterButton.dataset.skillFilter = filter.id;
-      filterButton.textContent = filter.label;
-      filterButton.setAttribute("aria-label", "筛选" + filter.label + "技能");
+      filterButton.textContent = t(filter.labelKey);
+      filterButton.setAttribute("aria-label", t("lab.filterAria", { label: t(filter.labelKey) }));
       filterButton.addEventListener("click", () => {
         if (activeFilter === filter.id) return;
         activeFilter = filter.id;
@@ -6772,18 +7106,18 @@ function openSuspectPicker() {
     const copy = document.createElement("span");
     copy.className = "dossier-choice-copy";
     const name = document.createElement("strong");
-    name.textContent = skill.name;
+    name.textContent = skillCopy(skill, "name");
     const meta = document.createElement("small");
     meta.textContent = confirmed
-      ? "系统确认"
-      : "负载 " + String(skill.load ?? "—") + " · 能量 " + String(skill.energyCost ?? 0);
+      ? t("intel.confirmedSrc")
+      : t("intel.loadEnergy", { load: String(skill.load ?? "—"), energy: String(skill.energyCost ?? 0) });
     copy.append(name, meta);
     btn.append(mark, copy);
     btn.addEventListener("click", () => {
       if (selected.has(skill.id)) {
         selected.delete(skill.id);
       } else if (selected.size >= limit) {
-        showToast("对手构筑最多 4 项；已确认技能会占用槽位", "error");
+        showToast(t("intel.markHint"), "error");
         return;
       } else {
         selected.add(skill.id);
@@ -6813,7 +7147,7 @@ function closeSkillChoiceModal({ render = true, restoreFocus = true } = {}) {
   el.skillChoiceModal.classList.add("hidden");
   delete el.skillChoiceModal.dataset.variant;
   el.btnSkillChoiceConfirm.disabled = false;
-  el.btnSkillChoiceConfirm.textContent = "确认发动";
+  el.btnSkillChoiceConfirm.textContent = t("common.confirmLaunch");
   if (render) renderSkillHud();
   if (restoreFocus && wasOpen) {
     requestAnimationFrame(() => {
@@ -7045,14 +7379,16 @@ socket.on("skill:loadout:confirmed", (payload) => {
   if (shouldIgnoreSyncEvent(payload)) return;
   endUiRequest("loadout");
   if (!el.game.classList.contains("active")) {
-    showToast((payload.playerId === state.playerId ? "你" : "对手") + " 已确认技能构筑", "success");
+    showToast(t("choice.loadoutConfirmed", {
+      name: payload.playerId === state.playerId ? t("fx.you") : t("fx.opponent"),
+    }), "success");
   }
   renderSkillDraft();
 });
 
 socket.on("skill:pending", (payload) => {
   if (shouldIgnoreSyncEvent(payload)) return;
-  logAction(payload.publicSummary || "技能请求处理中");
+  logAction(localizeIncoming(payload.publicSummary) || t("skill.pending"));
 });
 
 socket.on("skill:resolved", (payload) => {
@@ -7064,12 +7400,12 @@ socket.on("skill:resolved", (payload) => {
       at: payload.at || Date.now(),
       casterId: payload.casterId,
       skillId: payload.skillId,
-      message: "你发动了「" + skillDefinition(payload.skillId).name + "」",
+    message: t("skill.used", { name: skillCopy(payload.skillId, "name") }),
       resultId: payload.requestId ? "resolved:" + payload.requestId : "",
       status: "SELF",
     });
   } else if (payload.publicSummary) {
-    logAction(payload.publicSummary);
+    logAction(localizeIncoming(payload.publicSummary));
     rememberPublicSkillIntel(payload);
     rememberSkillFeedEntry(payload);
   }
@@ -7097,15 +7433,15 @@ socket.on("skill:failed", (payload) => {
     state.autoLoadoutSubmitted = false;
     renderSkillDraft();
   }
-  showToast(payload.message || "技能失败", "error");
+  showToast(payload.message || t("skill.failedGeneric"), "error");
 });
 
 socket.on("skill:private-result", (payload) => {
   if (shouldIgnoreSyncEvent(payload)) return;
   const seen = Boolean(payload.resultId && state.seenPrivateResultIds.has(payload.resultId));
   const restored = Boolean(payload.restored || payload.replay);
-  const message = payload.message ||
-    (payload.opponentEnergy != null ? `对手真实能量：${payload.opponentEnergy}` : "私有技能结果已更新。");
+  const message = localizeIncoming(payload.message) ||
+    (payload.opponentEnergy != null ? t("private.oppEnergyKnown", { value: payload.opponentEnergy }) : t("private.updated"));
   rememberPrivateSkillFeed({
     ...payload,
     casterId: state.playerId,
@@ -7129,8 +7465,8 @@ socket.on("skill:private-result", (payload) => {
       Boolean(payload.cards) ||
       Object.prototype.hasOwnProperty.call(payload, "opponentEnergy");
     if (needsHold) {
-      if (el.skillPrivateModal.classList.contains("hidden")) {
-        el.skillPrivateText.textContent = message;
+    if (el.skillPrivateModal.classList.contains("hidden")) {
+        el.skillPrivateText.textContent = localizeIncoming(message);
         el.skillPrivateModal.classList.remove("hidden");
       } else {
         state.privateResultQueue.push(message);

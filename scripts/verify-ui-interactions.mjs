@@ -17,6 +17,21 @@ async function visible(page, selector) {
   return page.locator(selector).isVisible().catch(() => false);
 }
 
+async function protocolSkillCopy(page) {
+  const read = () => page.evaluate(() => (
+    document.querySelector(
+      '.protocol-card[data-game-mode="standard"][data-skill-mode="abyss"] .protocol-desc'
+    )?.textContent?.trim() || ""
+  ));
+  const zh = await read();
+  await page.click('.lang-btn[data-locale="en-US"]');
+  await page.waitForTimeout(80);
+  const en = await read();
+  await page.click('.lang-btn[data-locale="zh-CN"]');
+  await page.waitForTimeout(80);
+  return { zh, en };
+}
+
 async function skillGeometry(page) {
   return page.evaluate(() => {
     const bar = document.getElementById("skill-bar");
@@ -1296,6 +1311,7 @@ async function skillLabSelectionState(page) {
 async function main() {
   const browser = await chromium.launch(playwrightRuntime.chromiumLaunchOptions({ headless: true }));
   const context = await browser.newContext({ viewport: { width: 1280, height: 720 } });
+  await context.addInitScript(playwrightRuntime.pinZhCNLocale);
   const page = await context.newPage();
   const consoleErrors = [];
   const externalConsoleErrors = [];
@@ -1332,17 +1348,9 @@ async function main() {
   await page.goto(BASE + "/?verify-interactions=1", { waitUntil: "domcontentloaded" });
   await page.waitForSelector("#screen-auth.active", { timeout: 10000 });
   await page.waitForSelector("#btn-open-skill-lab:not([disabled])", { timeout: 10000 });
-  report.lobby.skillModeCopyLocked = await page.evaluate(() => {
-    const description = document.querySelector(
-      '.protocol-card[data-game-mode="standard"][data-skill-mode="abyss"] .protocol-desc'
-    );
-    return {
-      zh: description?.textContent?.trim() || "",
-      en: description?.dataset.currentEn || "",
-    };
-  });
 
   await page.waitForSelector("#quickstart-modal", { state: "hidden", timeout: 5000 });
+  report.lobby.skillModeCopyLocked = await protocolSkillCopy(page);
   report.quickstart.autoStart = await page.evaluate(() => ({
     autoOpened: !document.getElementById("quickstart-modal")?.classList.contains("hidden"),
     mainInert: Boolean(document.getElementById("main-content")?.inert),
@@ -1776,15 +1784,7 @@ async function main() {
   report.lab.saveEnabled = await page.locator("#btn-save-loadout").isEnabled();
   await page.click("#btn-save-loadout");
   await page.waitForSelector("#screen-auth.active");
-  report.lobby.skillModeCopyReady = await page.evaluate(() => {
-    const description = document.querySelector(
-      '.protocol-card[data-game-mode="standard"][data-skill-mode="abyss"] .protocol-desc'
-    );
-    return {
-      zh: description?.textContent?.trim() || "",
-      en: description?.dataset.currentEn || "",
-    };
-  });
+  report.lobby.skillModeCopyReady = await protocolSkillCopy(page);
 
   report.room.doubleClickGate = await page.evaluate(() => {
     const button = document.querySelector(
@@ -2230,9 +2230,9 @@ async function main() {
   if (report.lobby.hitAudit.failures.length) failures.push("lobby button hit targets blocked");
   if (
     report.lobby.skillModeCopyLocked.zh !== "需先完成技能构筑" ||
-    report.lobby.skillModeCopyLocked.en !== "Complete a skill build first" ||
+    report.lobby.skillModeCopyLocked.en !== "Complete a Skill Loadout first" ||
     report.lobby.skillModeCopyReady.zh !== "使用已保存的技能构筑" ||
-    report.lobby.skillModeCopyReady.en !== "Saved skill build ready"
+    report.lobby.skillModeCopyReady.en !== "Saved Skill Loadout ready"
   ) {
     failures.push("skill-mode readiness copy did not update in Chinese and English");
   }

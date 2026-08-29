@@ -116,6 +116,7 @@ async function main() {
     localStorage.setItem("overlimit_quickstart_v1", "seen");
     localStorage.setItem("overlimit_audio_enabled", "false");
   });
+  await context.addInitScript(playwrightRuntime.pinZhCNLocale);
   const page = await context.newPage();
   const consoleErrors = [];
   const externalConsoleErrors = [];

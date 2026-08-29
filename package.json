@@ -20,7 +20,9 @@
     "verify:rulebook": "node scripts/verify-rulebook.mjs",
     "verify:skill-fx": "node scripts/verify-skill-fx-gallery.mjs",
     "capture:ui": "node scripts/capture-ui-review.mjs",
-    "verify:online": "node scripts/verify-online-sync.js"
+    "capture:tutorial-en": "node scripts/capture-tutorial-en.mjs",
+    "verify:online": "node scripts/verify-online-sync.js",
+    "verify:i18n": "node scripts/verify-i18n.mjs"
   },
   "dependencies": {
     "express": "^4.18.2",

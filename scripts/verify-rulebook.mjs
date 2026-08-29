@@ -58,6 +58,7 @@ async function main() {
   await context.addInitScript(() => {
     localStorage.setItem("overlimit_quickstart_v1", "seen");
   });
+  await context.addInitScript(playwrightRuntime.pinZhCNLocale);
   const page = await context.newPage();
   const consoleErrors = [];
   page.on("console", (message) => {

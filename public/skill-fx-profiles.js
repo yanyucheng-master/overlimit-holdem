@@ -125,7 +125,7 @@
       haptics: Object.freeze([32, 24, 50]), persistent: "SILENCE", resultLabel: "SYSTEM RESET",
     }),
     CHEAT: profile({
-      id: "CHEAT", name: "千术", english: "CARD SWITCH",
+      id: "CHEAT", name: "千术", english: "CHEAT",
       tier: "FX3", family: "cheat", anchor: "cards", impact: "card", visibility: VISIBILITY.MIXED,
       accent: "#33e8ff", secondary: "#ff47c8", glyph: "⇄", sound: "swap",
       resultLabel: "CARD ROUTE ALTERED",
@@ -149,7 +149,7 @@
       persistent: "NULL", resultLabel: "TARGET EXCLUDED",
     }),
     FORTUNE: profile({
-      id: "FORTUNE", name: "强运", english: "STRONG FORTUNE",
+      id: "FORTUNE", name: "强运", english: "FORTUNE",
       tier: "FX3", family: "fortune", anchor: "cards", impact: "card", visibility: VISIBILITY.SECRET,
       accent: "#ffd66b", secondary: "#54f0c4", glyph: "✦", sound: "fortune",
       resultLabel: "FAVORABLE BRANCH",

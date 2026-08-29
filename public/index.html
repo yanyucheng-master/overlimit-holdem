@@ -1,18 +1,41 @@
 <!doctype html>
-<html lang="zh-CN" data-animation="high">
+<html lang="zh-CN" data-animation="high" data-locale="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0a0c10" />
+    <script>
+      (function bootLocale() {
+        try {
+          var stored = JSON.parse(localStorage.getItem("abyss_ui_settings_v2") || "{}") || {};
+          var lang = stored.languageChosen === true && (stored.language === "en-US" || stored.language === "zh-CN")
+            ? stored.language
+            : null;
+          if (!lang) {
+            var list = [].concat(navigator.languages || [], navigator.language || []);
+            var first = String(list[0] || "").toLowerCase();
+            if (!first) lang = "zh-CN";
+            else {
+              var zh = first === "zh" || first === "zh-cn" || first === "zh-sg"
+                || first.indexOf("zh-hans") === 0 || first.indexOf("zh-cn") === 0 || first.indexOf("zh-sg") === 0;
+              lang = zh ? "zh-CN" : "en-US";
+            }
+          }
+          document.documentElement.lang = lang === "en-US" ? "en" : "zh-CN";
+          document.documentElement.setAttribute("data-locale", lang);
+        } catch (_error) {}
+      })();
+    </script>
     <meta
       name="description"
       content="超限德州：双人实时联机德州扑克，可选高爆发牌与超限技能。"
+      data-i18n-attr="content:meta.description"
     />
-    <meta name="application-name" content="超限德州" />
-    <meta property="og:title" content="超限德州" />
-    <meta property="og:description" content="超限德州：双人实时联机德州扑克，可选高爆发牌与超限技能。" />
+    <meta name="application-name" content="OVERLIMIT: HOLD'EM" />
+    <meta property="og:title" content="OVERLIMIT: HOLD'EM" />
+    <meta property="og:description" content="超限德州：双人实时联机德州扑克，可选高爆发牌与超限技能。" data-i18n-attr="content:meta.description" />
     <meta property="og:image" content="./assets/overlimit-holdem-icon.png" />
-    <title>超限德州</title>
+    <title data-i18n="meta.title">超限德州</title>
     <link rel="icon" href="./favicon.ico" sizes="any" />
     <link rel="icon" type="image/png" sizes="32x32" href="./assets/overlimit-holdem-icon-32.png" />
     <link rel="icon" type="image/png" sizes="192x192" href="./assets/overlimit-holdem-icon-192.png" />
@@ -30,7 +53,7 @@
     <link rel="stylesheet" href="./skill-effects.css" />
   </head>
   <body class="salon-ui">
-    <a class="skip-link" href="#main-content">跳到主要内容</a>
+    <a class="skip-link" href="#main-content" data-i18n="a11y.skip">跳到主要内容</a>
 
     <div class="abyss-background" aria-hidden="true">
       <div class="salon-wash"></div>
@@ -39,7 +62,7 @@
 
     <div id="connection-banner" class="connection-banner hidden" role="status" aria-live="assertive">
       <span class="connection-pulse" aria-hidden="true"></span>
-      <span id="connection-banner-text">网络连接已中断，正在尝试恢复牌局…</span>
+      <span id="connection-banner-text" data-i18n="connection.lost">网络连接已中断，正在尝试恢复牌局…</span>
     </div>
 
     <div id="toast-region" class="toast-region" aria-live="polite" aria-atomic="true"></div>
@@ -72,7 +95,7 @@
     <div id="river-overload" class="river-overload hidden" aria-hidden="true">
       <span class="river-overline">FINAL STREET // CRITICAL</span>
       <strong>RIVER OVERLOAD</strong>
-      <span>河牌过载</span>
+      <span data-i18n="fx.riverCaption">河牌过载</span>
     </div>
 
     <div id="flash-endgame-declare" class="endgame-fx endgame-declare hidden" data-mode="declare" aria-hidden="true">
@@ -91,7 +114,7 @@
       </div>
       <div class="egd-lockup">
         <span class="egd-title">
-          <b class="egd-char char-a" data-char="终">终</b><b class="egd-char char-b" data-char="局">局</b>
+          <b class="egd-char char-a" data-char="终" data-i18n="fx.endgameA">终</b><b class="egd-char char-b" data-char="局" data-i18n="fx.endgameB">局</b>
         </span>
       </div>
       <div class="egd-scan"></div>
@@ -110,14 +133,14 @@
       </div>
       <div class="egk-lockup">
         <span class="egk-title">
-          <b class="egk-char char-a" data-char="斩">斩</b><b class="egk-char char-b" data-char="杀">杀</b>
+          <b class="egk-char char-a" data-char="斩" data-i18n="fx.killA">斩</b><b class="egk-char char-b" data-char="杀" data-i18n="fx.killB">杀</b>
         </span>
       </div>
     </div>
 
     <div id="protocol-burst" class="protocol-burst hidden" aria-hidden="true">
       <span>OVERDRIVE PROTOCOL</span>
-      <strong>高爆协议已启用</strong>
+      <strong data-i18n="fx.protocolEnabled">高爆协议已启用</strong>
     </div>
 
     <div id="skill-fx-public" class="skill-fx skill-fx-public hidden" data-skill="" aria-hidden="true">
@@ -146,6 +169,7 @@
       class="icon-button settings-trigger"
       type="button"
       aria-label="打开界面设置"
+      data-i18n-attr="aria-label:a11y.openSettings"
       aria-haspopup="dialog"
     >
       <span aria-hidden="true">⚙</span>
@@ -156,17 +180,17 @@
         <header class="modal-header">
           <div>
             <p class="eyebrow">INTERFACE CONTROL</p>
-            <h2 id="settings-title">界面设置</h2>
+            <h2 id="settings-title" data-i18n="settings.title">界面设置</h2>
           </div>
-          <button id="btn-close-settings" class="icon-button" type="button" aria-label="关闭设置">×</button>
+          <button id="btn-close-settings" class="icon-button" type="button" aria-label="关闭设置" data-i18n-attr="aria-label:a11y.closeSettings">×</button>
         </header>
 
         <div id="settings-navigation" class="settings-navigation hidden">
           <span>
-            <strong>牌局导航</strong>
-            <small>离开进行中的牌局前会再次确认</small>
+            <strong data-i18n="settings.navTitle">牌局导航</strong>
+            <small data-i18n="settings.navHint">离开进行中的牌局前会再次确认</small>
           </span>
-          <button id="btn-settings-lobby" class="button button-ghost" type="button">
+          <button id="btn-settings-lobby" class="button button-ghost" type="button" data-i18n="settings.backLobby">
             返回大厅
           </button>
         </div>
@@ -180,24 +204,35 @@
             aria-controls="rules-handbook-modal"
           >
             <span>
-              <strong>规则手册</strong>
-              <small>查阅官方对局规则、牌型等级与结算顺序</small>
+              <strong data-i18n="settings.rules">规则手册</strong>
+              <small data-i18n="settings.rulesHint">查阅官方对局规则、牌型等级与结算顺序</small>
             </span>
-            <span class="settings-rules-go">查阅</span>
+            <span class="settings-rules-go" data-i18n="settings.rulesGo">查阅</span>
           </button>
 
+          <label class="setting-row" for="setting-language">
+            <span>
+              <strong data-i18n="settings.language">语言</strong>
+              <small data-i18n="settings.languageHint">界面语言，立即生效</small>
+            </span>
+            <select id="setting-language" aria-label="语言" data-i18n-attr="aria-label:a11y.language">
+              <option value="zh-CN">简体中文</option>
+              <option value="en-US">English</option>
+            </select>
+          </label>
+
           <label class="setting-row" for="setting-animation">
-            <span><strong>动画强度</strong><small>控制发牌与能量演出</small></span>
+            <span><strong data-i18n="settings.animation">动画强度</strong><small data-i18n="settings.animationHint">控制发牌与能量演出</small></span>
             <select id="setting-animation">
-              <option value="high">高</option>
-              <option value="medium">中</option>
-              <option value="low">低</option>
+              <option value="high" data-i18n="settings.high">高</option>
+              <option value="medium" data-i18n="settings.medium">中</option>
+              <option value="low" data-i18n="settings.low">低</option>
             </select>
           </label>
 
           <fieldset class="setting-row allin-style-setting">
-            <legend id="allin-style-title">ALL IN 特效</legend>
-            <p>选择牌桌上的决胜演出；预览不会触发手机震动。</p>
+            <legend id="allin-style-title" data-i18n="settings.allIn">ALL IN 特效</legend>
+            <p data-i18n="settings.allInHint">选择牌桌上的决胜演出；预览不会触发手机震动。</p>
             <div
               id="allin-style-picker"
               class="allin-style-picker"
@@ -209,8 +244,8 @@
                 <span class="allin-style-option-body">
                   <span class="allin-style-swatch" aria-hidden="true"><span>ALL IN</span></span>
                   <span class="allin-style-copy">
-                    <strong>深渊裂变</strong>
-                    <small>霓虹冲击与深渊光环</small>
+                    <strong data-i18n="settings.abyss">深渊裂变</strong>
+                    <small data-i18n="settings.abyssHint">霓虹冲击与深渊光环</small>
                   </span>
                 </span>
               </label>
@@ -219,8 +254,8 @@
                 <span class="allin-style-option-body">
                   <span class="allin-style-swatch" aria-hidden="true"><span>ALL IN</span></span>
                   <span class="allin-style-copy">
-                    <strong>猩红处刑</strong>
-                    <small>断头光刃与碎片爆发</small>
+                    <strong data-i18n="settings.verdict">猩红处刑</strong>
+                    <small data-i18n="settings.verdictHint">断头光刃与碎片爆发</small>
                   </span>
                 </span>
               </label>
@@ -229,8 +264,8 @@
                 <span class="allin-style-option-body">
                   <span class="allin-style-swatch" aria-hidden="true"><span>ALL IN</span></span>
                   <span class="allin-style-copy">
-                    <strong>金曜终局</strong>
-                    <small>黑金赌厅与筹码震荡</small>
+                    <strong data-i18n="settings.royal">金曜终局</strong>
+                    <small data-i18n="settings.royalHint">黑金赌厅与筹码震荡</small>
                   </span>
                 </span>
               </label>
@@ -239,54 +274,54 @@
                 <span class="allin-style-option-body">
                   <span class="allin-style-swatch" aria-hidden="true"><span>ALL IN</span></span>
                   <span class="allin-style-copy">
-                    <strong>零点坍缩</strong>
-                    <small>量子网格与色差故障</small>
+                    <strong data-i18n="settings.singularity">零点坍缩</strong>
+                    <small data-i18n="settings.singularityHint">量子网格与色差故障</small>
                   </span>
                 </span>
               </label>
             </div>
-            <button id="btn-preview-allin" class="button button-ghost" type="button">
+            <button id="btn-preview-allin" class="button button-ghost" type="button" data-i18n="settings.preview">
               预览所选特效
             </button>
           </fieldset>
 
           <label class="setting-row switch-row" for="setting-pro-mode">
-            <span><strong>专家模式</strong><small>国际赛桌手感 · 行动键仅显示英文艺术字</small></span>
+            <span><strong data-i18n="settings.proMode">专家模式</strong><small data-i18n="settings.proModeHint">国际赛桌手感 · 行动键仅显示英文艺术字</small></span>
             <input id="setting-pro-mode" type="checkbox" role="switch" />
           </label>
 
           <label class="setting-row" for="setting-pro-font" id="setting-pro-font-row">
-            <span><strong>专家字型</strong><small>赛场播报体 / 霓虹轨 / 铬质板 / 经典宽字</small></span>
+            <span><strong data-i18n="settings.proFont">专家字型</strong><small data-i18n="settings.proFontHint">赛场播报体 / 霓虹轨 / 铬质板 / 经典宽字</small></span>
             <select id="setting-pro-font">
-              <option value="broadcast">赛场播报</option>
-              <option value="neonrail">霓虹轨</option>
-              <option value="chrome">铬质板</option>
-              <option value="classic">经典宽字</option>
+              <option value="broadcast" data-i18n="settings.broadcast">赛场播报</option>
+              <option value="neonrail" data-i18n="settings.neonrail">霓虹轨</option>
+              <option value="chrome" data-i18n="settings.chrome">铬质板</option>
+              <option value="classic" data-i18n="settings.classic">经典宽字</option>
             </select>
           </label>
 
           <label class="setting-row switch-row" for="setting-reduce-motion">
-            <span><strong>减少动态效果</strong><small>停用大幅位移与闪烁</small></span>
+            <span><strong data-i18n="settings.reduceMotion">减少动态效果</strong><small data-i18n="settings.reduceMotionHint">停用大幅位移与闪烁</small></span>
             <input id="setting-reduce-motion" type="checkbox" role="switch" />
           </label>
 
           <label class="setting-row range-setting" for="setting-sfx">
-            <span><strong>音效音量</strong><small id="setting-sfx-value">55%</small></span>
+            <span><strong data-i18n="settings.sfx">音效音量</strong><small id="setting-sfx-value">55%</small></span>
             <input id="setting-sfx" type="range" min="0" max="100" step="5" value="55" />
           </label>
 
           <label class="setting-row range-setting" for="setting-music">
-            <span><strong>背景音乐音量</strong><small id="setting-music-value">0%</small></span>
+            <span><strong data-i18n="settings.music">背景音乐音量</strong><small id="setting-music-value">0%</small></span>
             <input id="setting-music" type="range" min="0" max="100" step="5" value="0" />
           </label>
 
           <label class="setting-row switch-row" for="setting-low-performance">
-            <span><strong>低性能模式</strong><small>减少粒子、模糊与背景刷新</small></span>
+            <span><strong data-i18n="settings.lowPerf">低性能模式</strong><small data-i18n="settings.lowPerfHint">减少粒子、模糊与背景刷新</small></span>
             <input id="setting-low-performance" type="checkbox" role="switch" />
           </label>
         </div>
 
-        <p class="settings-note">设置只保存在当前设备，不参与牌局判定。</p>
+        <p class="settings-note" data-i18n="settings.note">设置只保存在当前设备，不参与牌局判定。</p>
       </section>
     </div>
 
@@ -302,9 +337,9 @@
         <header class="quickstart-book-header">
           <div class="quickstart-book-brand">
             <span>FIELD MANUAL · 01—04</span>
-            <strong id="quickstart-modal-title">快速入门</strong>
+            <strong id="quickstart-modal-title" data-i18n="quickstart.title">快速入门</strong>
           </div>
-          <button id="btn-close-quickstart" class="icon-button quickstart-close" type="button" aria-label="关闭快速入门">×</button>
+          <button id="btn-close-quickstart" class="icon-button quickstart-close" type="button" aria-label="关闭快速入门" data-i18n-attr="aria-label:quickstart.close">×</button>
         </header>
 
         <div id="quickstart-viewport" class="quickstart-viewport">
@@ -313,6 +348,7 @@
             class="quickstart-corner quickstart-corner-prev is-hidden"
             type="button"
             aria-label="上一页"
+            data-i18n-attr="aria-label:quickstart.prev"
           >
             <span aria-hidden="true">‹</span>
           </button>
@@ -321,139 +357,149 @@
             <article class="quickstart-page quickstart-page-objective" data-quickstart-page="1" aria-labelledby="quickstart-page-title-1">
               <div class="quickstart-copy">
                 <p class="quickstart-chapter">01 · MATCH OBJECTIVE</p>
-                <h2 id="quickstart-page-title-1">赢下比赛</h2>
-                <p class="quickstart-lead">《超限德州》是一场 1 对 1 的德州扑克对决。双方以 1000 筹码开始，每手通过弃牌或摊牌决定筹码归属。</p>
-                <div class="quickstart-versus" aria-label="双方起始筹码均为一千">
+                <h2 id="quickstart-page-title-1" data-i18n="quickstart.p1title">赢下比赛</h2>
+                <p class="quickstart-lead" data-i18n="quickstart.p1lead">《超限德州》是一场 1 对 1 的德州扑克对决。双方以 1000 筹码开始，每手通过弃牌或摊牌决定筹码归属。</p>
+                <div class="quickstart-versus" aria-label="双方起始筹码均为一千" data-i18n-attr="aria-label:quickstart.stacksAria">
                   <strong>1000</strong><span>VS</span><strong>1000</strong>
                 </div>
-                <div class="quickstart-facts" aria-label="基础盲注">
-                  <span><small>小盲注</small><strong>25</strong></span>
-                  <span><small>大盲注</small><strong>50</strong></span>
+                <div class="quickstart-facts" aria-label="基础盲注" data-i18n-attr="aria-label:quickstart.blindsAria">
+                  <span><small data-i18n="common.sb">小盲注</small><strong>25</strong></span>
+                  <span><small data-i18n="common.bb">大盲注</small><strong>50</strong></span>
                 </div>
-                <p class="quickstart-rule-key">对手筹码归零 = 获得比赛胜利</p>
+                <p class="quickstart-rule-key" data-i18n="quickstart.p1key">对手筹码归零 = 获得比赛胜利</p>
               </div>
               <figure
                 class="quickstart-shot quickstart-shot-table quickstart-shot-objective"
                 data-quickstart-zoom
                 data-quickstart-zoom-title="翻牌前牌桌"
+                data-i18n-zoom-title="quickstart.p1shot"
                 role="button"
                 tabindex="0"
                 aria-label="放大查看翻牌前牌桌图片"
+                data-i18n-attr="aria-label:quickstart.p1zoom"
               >
-                <img src="./assets/tutorial/shot-01-preflop.png" alt="真实牌桌翻牌前画面，显示双方筹码、底牌、公共牌区和底池" width="1440" height="797" decoding="async" />
+                <img src="./assets/tutorial/shot-01-preflop.png" data-tutorial-src-zh="./assets/tutorial/shot-01-preflop.png" data-tutorial-src-en="./assets/tutorial/en-US/shot-01-preflop.png" alt="真实牌桌翻牌前画面，显示双方筹码、底牌、公共牌区和底池" width="1440" height="797" decoding="async" data-i18n-attr="alt:quickstart.p1alt" />
                 <figcaption>
-                  <span class="quickstart-callout callout-opponent">对手筹码</span>
-                  <span class="quickstart-callout callout-self">你的筹码</span>
+                  <span class="quickstart-callout callout-opponent" data-i18n="quickstart.calloutOpp">对手筹码</span>
+                  <span class="quickstart-callout callout-self" data-i18n="quickstart.calloutSelf">你的筹码</span>
                 </figcaption>
               </figure>
-              <p class="quickstart-page-foot">筹码归零的一方输掉比赛。</p>
+              <p class="quickstart-page-foot" data-i18n="quickstart.p1foot">筹码归零的一方输掉比赛。</p>
             </article>
 
             <article class="quickstart-page quickstart-page-hand" data-quickstart-page="2" aria-labelledby="quickstart-page-title-2" aria-hidden="true" inert>
               <div class="quickstart-copy">
                 <p class="quickstart-chapter">02 · ONE HAND</p>
-                <h2 id="quickstart-page-title-2">打一手德州</h2>
-                <p class="quickstart-lead">每名玩家获得 <strong>2 张底牌</strong>，桌面最多发出 <strong>5 张公共牌</strong>。轮到你时，可过牌、跟注、下注 / 加注、弃牌或全下。</p>
-                <ol class="quickstart-flow" aria-label="一手牌流程">
-                  <li>翻牌前</li><li>翻牌</li><li>转牌</li><li>河牌</li><li>摊牌</li>
+                <h2 id="quickstart-page-title-2" data-i18n="quickstart.p2title">打一手德州</h2>
+                <p class="quickstart-lead" data-i18n-html="quickstart.p2lead">每名玩家获得 <strong>2 张底牌</strong>，桌面最多发出 <strong>5 张公共牌</strong>。轮到你时，可过牌、跟注、下注 / 加注、弃牌或全下。</p>
+                <ol class="quickstart-flow" aria-label="一手牌流程" data-i18n-attr="aria-label:quickstart.flowAria">
+                  <li data-i18n="phase.pre_flop">翻牌前</li><li data-i18n="phase.flop">翻牌</li><li data-i18n="phase.turn">转牌</li><li data-i18n="phase.river">河牌</li><li data-i18n="phase.showdown">摊牌</li>
                 </ol>
-                <p class="quickstart-combine"><strong>2 张底牌 + 5 张公共牌</strong><span>组成最强的 5 张牌</span></p>
+                <p class="quickstart-combine" data-i18n-html="quickstart.p2combine"><strong>2 张底牌 + 5 张公共牌</strong><span>组成最强的 5 张牌</span></p>
               </div>
               <figure
                 class="quickstart-shot quickstart-shot-table quickstart-shot-hand"
                 data-quickstart-zoom
                 data-quickstart-zoom-title="翻牌阶段牌桌"
+                data-i18n-zoom-title="quickstart.p2shot"
                 role="button"
                 tabindex="0"
                 aria-label="放大查看翻牌阶段牌桌图片"
+                data-i18n-attr="aria-label:quickstart.p2zoom"
               >
-                <img src="./assets/tutorial/shot-02-flop.png" alt="真实翻牌阶段牌桌，显示自己的两张底牌、三张公共牌和操作区" width="1440" height="797" loading="lazy" decoding="async" />
+                <img src="./assets/tutorial/shot-02-flop.png" data-tutorial-src-zh="./assets/tutorial/shot-02-flop.png" data-tutorial-src-en="./assets/tutorial/en-US/shot-02-flop.png" alt="真实翻牌阶段牌桌，显示自己的两张底牌、三张公共牌和操作区" width="1440" height="797" loading="lazy" decoding="async" data-i18n-attr="alt:quickstart.p2alt" />
                 <figcaption>
-                  <span class="quickstart-callout callout-hole">你的底牌</span>
-                  <span class="quickstart-callout callout-board">公共牌</span>
-                  <span class="quickstart-callout callout-actions">可执行操作</span>
+                  <span class="quickstart-callout callout-hole" data-i18n="quickstart.calloutHole">你的底牌</span>
+                  <span class="quickstart-callout callout-board" data-i18n="quickstart.calloutBoard">公共牌</span>
+                  <span class="quickstart-callout callout-actions" data-i18n="quickstart.calloutActions">可执行操作</span>
                 </figcaption>
               </figure>
               <div class="quickstart-rank-strip">
-                <span>皇家同花顺</span><i>›</i><span>同花顺</span><i>›</i><span>四条</span><i>›</i><span>葫芦</span><i>›</i><span>同花</span><i>›</i><span>顺子</span><i>›</i><span>三条</span><i>›</i><span>两对</span><i>›</i><span>一对</span><i>›</i><span>高牌</span>
+                <span data-i18n="hand.royalFlush">皇家同花顺</span><i>›</i><span data-i18n="hand.straightFlush">同花顺</span><i>›</i><span data-i18n="hand.fourOfAKind">四条</span><i>›</i><span data-i18n="hand.fullHouse">葫芦</span><i>›</i><span data-i18n="hand.flush">同花</span><i>›</i><span data-i18n="hand.straight">顺子</span><i>›</i><span data-i18n="hand.threeOfAKind">三条</span><i>›</i><span data-i18n="hand.twoPair">两对</span><i>›</i><span data-i18n="hand.onePair">一对</span><i>›</i><span data-i18n="hand.highCard">高牌</span>
               </div>
               <div class="quickstart-page-foot quickstart-page-foot-action">
-                <span>对手弃牌，或摊牌时组成更强牌型，即可赢下这一手。</span>
-                <button id="btn-quickstart-hands" class="quickstart-text-button" type="button">查看牌型说明</button>
+                <span data-i18n="quickstart.p2foot">对手弃牌，或摊牌时组成更强牌型，即可赢下这一手。</span>
+                <button id="btn-quickstart-hands" class="quickstart-text-button" type="button" data-i18n="quickstart.viewRanks">查看牌型说明</button>
               </div>
             </article>
 
             <article class="quickstart-page quickstart-page-bonus" data-quickstart-page="3" aria-labelledby="quickstart-page-title-3" aria-hidden="true" inert>
               <div class="quickstart-copy">
                 <p class="quickstart-chapter">03 · HAND BONUS</p>
-                <h2 id="quickstart-page-title-3">强牌获得额外收益</h2>
-                <p class="quickstart-lead">只有通过摊牌获胜时，才会根据最终牌型获得额外筹码。高牌、一对、两对、普通弃牌获胜与平局均无牌型奖励。</p>
-                <div class="quickstart-bonus-ladder" aria-label="牌型奖励阶梯">
-                  <div><span>三条</span><strong>+25</strong></div>
-                  <div><span>顺子</span><strong>+50</strong></div>
-                  <div><span>同花</span><strong>+75</strong></div>
-                  <div><span>葫芦</span><strong>+100</strong></div>
-                  <div><span>四条</span><strong>+250</strong></div>
-                  <div><span>同花顺</span><strong>+400</strong></div>
-                  <div class="is-peak"><span>皇家同花顺</span><strong>+500</strong></div>
+                <h2 id="quickstart-page-title-3" data-i18n="quickstart.p3title">强牌获得额外收益</h2>
+                <p class="quickstart-lead" data-i18n="quickstart.p3lead">只有通过摊牌获胜时，才会根据最终牌型获得额外筹码。高牌、一对、两对、普通弃牌获胜与平局均无牌型奖励。</p>
+                <div class="quickstart-bonus-ladder" aria-label="牌型奖励阶梯" data-i18n-attr="aria-label:quickstart.bonusAria">
+                  <div><span data-i18n="hand.threeOfAKind">三条</span><strong>+25</strong></div>
+                  <div><span data-i18n="hand.straight">顺子</span><strong>+50</strong></div>
+                  <div><span data-i18n="hand.flush">同花</span><strong>+75</strong></div>
+                  <div><span data-i18n="hand.fullHouse">葫芦</span><strong>+100</strong></div>
+                  <div><span data-i18n="hand.fourOfAKind">四条</span><strong>+250</strong></div>
+                  <div><span data-i18n="hand.straightFlush">同花顺</span><strong>+400</strong></div>
+                  <div class="is-peak"><span data-i18n="hand.royalFlush">皇家同花顺</span><strong>+500</strong></div>
                 </div>
               </div>
               <figure
                 class="quickstart-shot quickstart-shot-settlement"
                 data-quickstart-zoom
                 data-quickstart-zoom-title="摊牌结算"
+                data-i18n-zoom-title="quickstart.p3shot"
                 role="button"
                 tabindex="0"
                 aria-label="放大查看摊牌结算图片"
+                data-i18n-attr="aria-label:quickstart.p3zoom"
               >
-                <img src="./assets/tutorial/shot-03-showdown.png" alt="真实摊牌结算画面，显示双方底牌、公共牌、获胜牌型和筹码结算" width="1440" height="797" loading="lazy" decoding="async" />
-                <figcaption>真实摊牌结算</figcaption>
+                <img src="./assets/tutorial/shot-03-showdown.png" data-tutorial-src-zh="./assets/tutorial/shot-03-showdown.png" data-tutorial-src-en="./assets/tutorial/en-US/shot-03-showdown.png" alt="真实摊牌结算画面，显示双方底牌、公共牌、获胜牌型和筹码结算" width="1440" height="797" loading="lazy" decoding="async" data-i18n-attr="alt:quickstart.p3alt" />
+                <figcaption data-i18n="quickstart.p3caption">真实摊牌结算</figcaption>
               </figure>
-              <p class="quickstart-page-foot">牌型奖励适用于所有游戏模式。</p>
+              <p class="quickstart-page-foot" data-i18n="quickstart.p3foot">牌型奖励适用于所有游戏模式。</p>
             </article>
 
             <article class="quickstart-page quickstart-page-build" data-quickstart-page="4" aria-labelledby="quickstart-page-title-4" aria-hidden="true" inert>
               <div class="quickstart-copy">
                 <p class="quickstart-chapter">04 · SKILL LOADOUT</p>
-                <h2 id="quickstart-page-title-4">构筑你的打法</h2>
-                <p class="quickstart-lead">启用技能模式时，每场比赛开始前装备技能。大多数技能消耗能量，可影响信息、筹码、能量、牌面、牌堆、行动与结算。</p>
+                <h2 id="quickstart-page-title-4" data-i18n="quickstart.p4title">构筑你的打法</h2>
+                <p class="quickstart-lead" data-i18n="quickstart.p4lead">启用技能模式时，每场比赛开始前装备技能。大多数技能消耗能量，可影响信息、筹码、能量、牌面、牌堆、行动与结算。</p>
                 <div class="quickstart-build-metrics">
-                  <span><strong>1—4</strong><small>个技能</small></span>
-                  <span><strong>≤ 8</strong><small>总负载</small></span>
-                  <span><strong>4</strong><small>初始能量</small></span>
-                  <span><strong>8</strong><small>普通上限</small></span>
+                  <span><strong>1—4</strong><small data-i18n="quickstart.skillCount">个技能</small></span>
+                  <span><strong>≤ 8</strong><small data-i18n="quickstart.loadCap">总负载</small></span>
+                  <span><strong>4</strong><small data-i18n="quickstart.startEnergy">初始能量</small></span>
+                  <span><strong>8</strong><small data-i18n="quickstart.energyCap">普通上限</small></span>
                 </div>
-                <p class="quickstart-build-note">每手失败后通常恢复 1 点能量。完整构筑不会在开局时公开给对手。</p>
+                <p class="quickstart-build-note" data-i18n="quickstart.p4note">每手失败后通常恢复 1 点能量。完整构筑不会在开局时公开给对手。</p>
               </div>
-              <div class="quickstart-build-shots" aria-label="真实技能构筑和实战界面">
+              <div class="quickstart-build-shots" aria-label="真实技能构筑和实战界面" data-i18n-attr="aria-label:quickstart.shotsAria">
                 <figure
                   class="quickstart-shot quickstart-shot-loadout"
                   data-quickstart-zoom
                   data-quickstart-zoom-title="技能构筑"
+                  data-i18n-zoom-title="quickstart.p4loadout"
                   role="button"
                   tabindex="0"
                   aria-label="放大查看技能构筑图片"
+                  data-i18n-attr="aria-label:quickstart.p4zoomLoadout"
                 >
-                  <img src="./assets/tutorial/shot-04-loadout.png" alt="真实技能构筑界面，显示已选技能和总负载" width="1440" height="797" loading="lazy" decoding="async" />
-                  <figcaption>构筑 · 技能与负载</figcaption>
+                  <img src="./assets/tutorial/shot-04-loadout.png" data-tutorial-src-zh="./assets/tutorial/shot-04-loadout.png" data-tutorial-src-en="./assets/tutorial/en-US/shot-04-loadout.png" alt="真实技能构筑界面，显示已选技能和总负载" width="1440" height="797" loading="lazy" decoding="async" data-i18n-attr="alt:quickstart.p4loadoutAlt" />
+                  <figcaption data-i18n="quickstart.p4loadoutCap">构筑 · 技能与负载</figcaption>
                 </figure>
                 <figure
                   class="quickstart-shot quickstart-shot-skillhud"
                   data-quickstart-zoom
                   data-quickstart-zoom-title="技能实战界面"
+                  data-i18n-zoom-title="quickstart.p4table"
                   role="button"
                   tabindex="0"
                   aria-label="放大查看技能实战界面图片"
+                  data-i18n-attr="aria-label:quickstart.p4zoomTable"
                 >
-                  <img src="./assets/tutorial/shot-05-skill-table.png" alt="真实技能牌桌，显示当前能量、技能按钮和未知对手构筑" width="1440" height="797" loading="lazy" decoding="async" />
-                  <figcaption>实战 · 能量与发动窗口</figcaption>
+                  <img src="./assets/tutorial/shot-05-skill-table.png" data-tutorial-src-zh="./assets/tutorial/shot-05-skill-table.png" data-tutorial-src-en="./assets/tutorial/en-US/shot-05-skill-table.png" alt="真实技能牌桌，显示当前能量、技能按钮和未知对手构筑" width="1440" height="797" loading="lazy" decoding="async" data-i18n-attr="alt:quickstart.p4tableAlt" />
+                  <figcaption data-i18n="quickstart.p4tableCap">实战 · 能量与发动窗口</figcaption>
                 </figure>
               </div>
               <div class="quickstart-page-foot quickstart-build-foot">
-                <strong>牌力决定基础，技能改变局面。</strong>
+                <strong data-i18n="quickstart.p4foot">牌力决定基础，技能改变局面。</strong>
                 <div>
-                  <button id="btn-quickstart-rules" class="quickstart-text-button" type="button">查看完整规则</button>
-                  <button id="btn-quickstart-skills" class="quickstart-text-button" type="button">技能图鉴</button>
+                  <button id="btn-quickstart-rules" class="quickstart-text-button" type="button" data-i18n="quickstart.viewRules">查看完整规则</button>
+                  <button id="btn-quickstart-skills" class="quickstart-text-button" type="button" data-i18n="quickstart.viewSkills">技能图鉴</button>
                 </div>
               </div>
             </article>
@@ -464,23 +510,24 @@
             class="quickstart-corner quickstart-corner-next"
             type="button"
             aria-label="下一页"
+            data-i18n-attr="aria-label:quickstart.next"
           >
             <span aria-hidden="true">›</span>
           </button>
         </div>
 
         <footer class="quickstart-controls">
-          <button id="btn-quickstart-prev" class="button button-ghost quickstart-prev is-hidden" type="button">上一页</button>
+          <button id="btn-quickstart-prev" class="button button-ghost quickstart-prev is-hidden" type="button" data-i18n="quickstart.prev">上一页</button>
           <div class="quickstart-progress">
             <strong id="quickstart-page-status" aria-live="polite">01 / 04</strong>
-            <div id="quickstart-dots" class="quickstart-dots" aria-label="教程页码">
+            <div id="quickstart-dots" class="quickstart-dots" aria-label="教程页码" data-i18n-attr="aria-label:quickstart.pages">
               <button type="button" data-quickstart-target="1" aria-label="第 1 页" aria-current="page"></button>
               <button type="button" data-quickstart-target="2" aria-label="第 2 页"></button>
               <button type="button" data-quickstart-target="3" aria-label="第 3 页"></button>
               <button type="button" data-quickstart-target="4" aria-label="第 4 页"></button>
             </div>
           </div>
-          <button id="btn-quickstart-next" class="button button-primary quickstart-next" type="button">下一页</button>
+          <button id="btn-quickstart-next" class="button button-primary quickstart-next" type="button" data-i18n="quickstart.next">下一页</button>
         </footer>
       </section>
     </div>
@@ -497,16 +544,17 @@
         <header class="quickstart-image-header">
           <div class="quickstart-image-heading">
             <span>IMAGE REVIEW</span>
-            <strong id="quickstart-image-title">教程图片</strong>
+            <strong id="quickstart-image-title" data-i18n="quickstart.imageTitle">教程图片</strong>
           </div>
           <div class="quickstart-image-actions">
-            <div class="quickstart-image-zoom-controls" role="group" aria-label="图片缩放控制">
+            <div class="quickstart-image-zoom-controls" role="group" aria-label="图片缩放控制" data-i18n-attr="aria-label:common.imageZoom">
               <button
                 id="btn-quickstart-image-zoom-out"
                 class="quickstart-image-tool"
                 type="button"
                 aria-label="缩小图片"
                 title="缩小"
+                data-i18n-attr="aria-label:quickstart.zoomOut title:common.zoom"
               >
                 −
               </button>
@@ -516,6 +564,7 @@
                 type="button"
                 aria-label="重置图片缩放，当前 100%"
                 title="重置缩放"
+                data-i18n-attr="title:common.resetZoom"
               >
                 <span id="quickstart-image-scale" aria-hidden="true">100%</span>
               </button>
@@ -525,11 +574,12 @@
                 type="button"
                 aria-label="放大图片"
                 title="放大"
+                data-i18n-attr="aria-label:quickstart.zoomIn title:common.zoomIn"
               >
                 +
               </button>
             </div>
-            <button id="btn-close-quickstart-image" class="icon-button quickstart-image-close" type="button" aria-label="关闭放大图片">×</button>
+            <button id="btn-close-quickstart-image" class="icon-button quickstart-image-close" type="button" aria-label="关闭放大图片" data-i18n-attr="aria-label:quickstart.closeImage">×</button>
           </div>
         </header>
         <figure
@@ -537,12 +587,13 @@
           class="quickstart-image-stage"
           role="group"
           aria-label="教程图片查看器。可使用滚轮或双指缩放，放大后拖动查看。"
+          data-i18n-attr="aria-label:quickstart.stageAria"
           aria-keyshortcuts="+ - 0"
           tabindex="0"
         >
           <img id="quickstart-image-expanded" alt="" decoding="async" draggable="false" />
-          <p id="quickstart-image-help" class="quickstart-image-help">滚轮 / 双指缩放 · 放大后拖动查看</p>
-          <figcaption id="quickstart-image-caption">点击图片外区域或按 Esc 关闭</figcaption>
+          <p id="quickstart-image-help" class="quickstart-image-help" data-i18n="quickstart.help">滚轮 / 双指缩放 · 放大后拖动查看</p>
+          <figcaption id="quickstart-image-caption" data-i18n="quickstart.caption">点击图片外区域或按 Esc 关闭</figcaption>
         </figure>
       </section>
     </div>
@@ -552,15 +603,15 @@
         <header class="modal-header rules-handbook-header">
           <div>
             <p class="eyebrow">OFFICIAL RULEBOOK</p>
-            <h2 id="rules-handbook-title">超限德州规则手册</h2>
-            <p class="rules-handbook-lead">完整 V1.0 · 标准牌局、技能、协议与关键交互的正式裁定。</p>
+            <h2 id="rules-handbook-title" data-i18n="rules.title">超限德州规则手册</h2>
+            <p class="rules-handbook-lead" data-i18n="rules.lead">完整 V1.0 · 标准牌局、技能、协议与关键交互的正式裁定。</p>
           </div>
-          <button id="btn-close-rules" class="icon-button" type="button" aria-label="关闭规则手册">×</button>
+          <button id="btn-close-rules" class="icon-button" type="button" aria-label="关闭规则手册" data-i18n-attr="aria-label:rules.close">×</button>
         </header>
 
         <div class="rules-handbook-toolbar">
           <label class="rules-search-field" for="rules-search">
-            <span class="sr-only">搜索规则</span>
+            <span class="sr-only" data-i18n="rules.search">搜索规则</span>
             <input
               id="rules-search"
               type="search"
@@ -568,6 +619,7 @@
               autocomplete="off"
               spellcheck="false"
               placeholder="搜索规则、术语或章节，例如：摊牌、能量、全下"
+              data-i18n-placeholder="rules.searchPh"
             />
           </label>
           <div class="rules-toolbar-actions">
@@ -578,25 +630,26 @@
               type="button"
               aria-controls="rules-toc"
               aria-expanded="false"
+              data-i18n="rules.chaptersBtn"
             >章节</button>
           </div>
         </div>
 
-        <section id="rules-search-results" class="rules-search-results hidden" aria-label="规则搜索结果">
+        <section id="rules-search-results" class="rules-search-results hidden" aria-label="规则搜索结果" data-i18n-attr="aria-label:rules.results">
           <div class="rules-search-results-head">
-            <strong>搜索结果</strong>
+            <strong data-i18n="rules.results">搜索结果</strong>
             <span id="rules-search-results-count">0 条</span>
           </div>
           <div id="rules-search-results-list" class="rules-search-results-list"></div>
         </section>
 
         <div class="rules-handbook-body">
-          <button id="rules-toc-backdrop" class="rules-toc-backdrop" type="button" aria-label="关闭章节目录" tabindex="-1"></button>
-          <nav id="rules-toc" class="rules-toc" aria-label="规则目录"></nav>
+          <button id="rules-toc-backdrop" class="rules-toc-backdrop" type="button" aria-label="关闭章节目录" tabindex="-1" data-i18n-attr="aria-label:rules.closeToc"></button>
+          <nav id="rules-toc" class="rules-toc" aria-label="规则目录" data-i18n-attr="aria-label:rules.toc"></nav>
           <div id="rules-article" class="rules-article" tabindex="0">
-            <p id="rules-empty" class="rules-empty hidden">没有匹配的规则。可尝试「摊牌」「能量」「全下」或清空搜索。</p>
+            <p id="rules-empty" class="rules-empty hidden" data-i18n="rules.searchEmpty">没有匹配的规则。可尝试「摊牌」「能量」「全下」或清空搜索。</p>
           </div>
-          <button id="btn-rules-top" class="rules-top-button hidden" type="button" aria-label="返回规则手册顶部">返回顶部</button>
+          <button id="btn-rules-top" class="rules-top-button hidden" type="button" aria-label="返回规则手册顶部" data-i18n="rules.backTop" data-i18n-attr="aria-label:rules.backTop">返回顶部</button>
         </div>
       </section>
     </div>
@@ -604,14 +657,14 @@
     <div id="match-queue-modal" class="modal-layer hidden" role="dialog" aria-modal="true" aria-labelledby="match-queue-title">
       <section class="modal-panel match-queue-panel glass-panel" tabindex="-1">
         <p class="eyebrow">GLOBAL MATCHMAKING</p>
-        <h2 id="match-queue-title">正在匹配</h2>
-        <p id="match-queue-lane" class="match-queue-lane">标准局 · 无技能</p>
+        <h2 id="match-queue-title" data-i18n="modal.matching">正在匹配</h2>
+        <p id="match-queue-lane" class="match-queue-lane" data-i18n="lobby.summaryOff">标准局 · 无技能</p>
         <div class="match-queue-timer">
-          已等待 <strong id="match-wait-seconds">0</strong>s
+          <span data-i18n="modal.waited">已等待</span> <strong id="match-wait-seconds">0</strong>s
         </div>
-        <p class="match-queue-hint">可随时取消；60 秒后询问是否继续匹配</p>
+        <p class="match-queue-hint" data-i18n="modal.matchHint">可随时取消；60 秒后询问是否继续匹配</p>
         <div class="modal-actions">
-          <button id="btn-match-cancel" class="button button-ghost" type="button">取消匹配</button>
+          <button id="btn-match-cancel" class="button button-ghost" type="button" data-i18n="modal.cancelMatch">取消匹配</button>
         </div>
       </section>
     </div>
@@ -619,11 +672,11 @@
     <div id="match-continue-modal" class="modal-layer hidden" role="dialog" aria-modal="true" aria-labelledby="match-continue-title">
       <section class="modal-panel confirm-panel glass-panel" tabindex="-1">
         <p class="eyebrow">MATCH SESSION</p>
-        <h2 id="match-continue-title">本轮匹配已结束</h2>
-        <p>60 秒内未找到对手，是否继续匹配？继续后将重新开始 60 秒计时。</p>
+        <h2 id="match-continue-title" data-i18n="modal.matchEnded">本轮匹配已结束</h2>
+        <p data-i18n="modal.matchEndedBody">60 秒内未找到对手，是否继续匹配？继续后将重新开始 60 秒计时。</p>
         <div class="modal-actions">
-          <button id="btn-match-stop" class="button button-ghost" type="button">结束</button>
-          <button id="btn-match-continue" class="button button-primary" type="button">继续匹配</button>
+          <button id="btn-match-stop" class="button button-ghost" type="button" data-i18n="modal.stop">结束</button>
+          <button id="btn-match-continue" class="button button-primary" type="button" data-i18n="modal.continueMatch">继续匹配</button>
         </div>
       </section>
     </div>
@@ -631,12 +684,12 @@
     <div id="match-invite-modal" class="modal-layer hidden" role="dialog" aria-modal="true" aria-labelledby="match-invite-title">
       <section class="modal-panel confirm-panel glass-panel" tabindex="-1">
         <p class="eyebrow">CROSS-LANE INVITE</p>
-        <h2 id="match-invite-title">跨赛道开局邀请</h2>
-        <p id="match-invite-text">对手邀请你切换到另一条赛道立即开局。</p>
-        <div class="match-invite-countdown">剩余 <strong id="match-invite-seconds">6</strong>s</div>
+        <h2 id="match-invite-title" data-i18n="modal.inviteTitle">跨赛道开局邀请</h2>
+        <p id="match-invite-text" data-i18n="modal.inviteBody">对手邀请你切换到另一条赛道立即开局。</p>
+        <div class="match-invite-countdown"><span data-i18n="modal.remaining">剩余</span> <strong id="match-invite-seconds">6</strong>s</div>
         <div class="modal-actions">
-          <button id="btn-match-decline" class="button button-ghost" type="button">拒绝</button>
-          <button id="btn-match-accept" class="button button-primary" type="button">接受</button>
+          <button id="btn-match-decline" class="button button-ghost" type="button" data-i18n="modal.decline">拒绝</button>
+          <button id="btn-match-accept" class="button button-primary" type="button" data-i18n="modal.accept">接受</button>
         </div>
       </section>
     </div>
@@ -644,13 +697,13 @@
     <div id="join-password-modal" class="modal-layer hidden" role="dialog" aria-modal="true" aria-labelledby="join-password-title">
       <section class="modal-panel confirm-panel glass-panel" tabindex="-1">
         <p class="eyebrow">SECURE ACCESS</p>
-        <h2 id="join-password-title">房间需要密码</h2>
-        <p>该房间已设置访问密码，请输入后继续加入。</p>
-        <label class="modal-field" for="modal-join-password">房间密码</label>
-        <input id="modal-join-password" type="password" maxlength="16" autocomplete="current-password" placeholder="输入房间密码" />
+        <h2 id="join-password-title" data-i18n="modal.needPassword">房间需要密码</h2>
+        <p data-i18n="modal.needPasswordBody">该房间已设置访问密码，请输入后继续加入。</p>
+        <label class="modal-field" for="modal-join-password" data-i18n="modal.roomPassword">房间密码</label>
+        <input id="modal-join-password" type="password" maxlength="16" autocomplete="current-password" placeholder="输入房间密码" data-i18n-placeholder="modal.passwordPh" />
         <div class="modal-actions">
-          <button id="btn-join-password-cancel" class="button button-ghost" type="button">取消</button>
-          <button id="btn-join-password-confirm" class="button button-primary" type="button">确认加入</button>
+          <button id="btn-join-password-cancel" class="button button-ghost" type="button" data-i18n="common.cancel">取消</button>
+          <button id="btn-join-password-confirm" class="button button-primary" type="button" data-i18n="modal.joinConfirm">确认加入</button>
         </div>
       </section>
     </div>
@@ -658,11 +711,11 @@
     <div id="leave-confirm-modal" class="modal-layer hidden" role="dialog" aria-modal="true" aria-labelledby="leave-confirm-title">
       <section class="modal-panel confirm-panel danger-panel glass-panel" tabindex="-1">
         <p class="eyebrow danger-text">ABORT CURRENT SESSION</p>
-        <h2 id="leave-confirm-title">确认离开牌桌？</h2>
-        <p>当前牌局尚未结束，离开将由服务器按弃权处理。</p>
+        <h2 id="leave-confirm-title" data-i18n="modal.leaveTitle">确认离开牌桌？</h2>
+        <p data-i18n="modal.leaveBody">当前牌局尚未结束，离开将由服务器按弃权处理。</p>
         <div class="modal-actions">
-          <button id="btn-leave-cancel" class="button button-ghost" type="button">继续对局</button>
-          <button id="btn-leave-confirm" class="button button-danger" type="button">确认离开</button>
+          <button id="btn-leave-cancel" class="button button-ghost" type="button" data-i18n="modal.keepPlaying">继续对局</button>
+          <button id="btn-leave-confirm" class="button button-danger" type="button" data-i18n="modal.leaveConfirm">确认离开</button>
         </div>
       </section>
     </div>
@@ -670,17 +723,17 @@
     <div id="game-over-modal" class="modal-layer hidden" role="dialog" aria-modal="true" aria-labelledby="game-over-title">
       <section class="modal-panel game-over-panel glass-panel" tabindex="-1">
         <p class="eyebrow">ABYSS SESSION RESULT</p>
-        <h2 id="game-over-title">对局结束</h2>
+        <h2 id="game-over-title" data-i18n="modal.gameOver">对局结束</h2>
         <p id="game-over-msg"></p>
         <div id="rematch-box" class="rematch-box hidden">
-          <p id="rematch-status" class="rematch-status">是否再来一局？</p>
-          <div class="rematch-time">协议窗口 <strong id="rematch-countdown">10</strong>s</div>
+          <p id="rematch-status" class="rematch-status" data-i18n="modal.rematchAsk">是否再来一局？</p>
+          <div class="rematch-time"><span data-i18n="modal.rematchWindow">协议窗口</span> <strong id="rematch-countdown">10</strong>s</div>
           <div class="modal-actions">
-            <button id="btn-rematch-yes" type="button" class="button button-primary">再来一局</button>
-            <button id="btn-rematch-no" type="button" class="button button-ghost">结束连接</button>
+            <button id="btn-rematch-yes" type="button" class="button button-primary" data-i18n="modal.rematchYes">再来一局</button>
+            <button id="btn-rematch-no" type="button" class="button button-ghost" data-i18n="modal.rematchNo">结束连接</button>
           </div>
         </div>
-        <button id="btn-back-lobby" type="button" class="button button-primary">返回大厅</button>
+        <button id="btn-back-lobby" type="button" class="button button-primary" data-i18n="modal.backLobby">返回大厅</button>
       </section>
     </div>
 
@@ -690,28 +743,28 @@
         <div class="settle-header">
           <div>
             <p class="eyebrow">ABYSS JUDGMENT</p>
-            <h2 id="settle-verdict">结算中</h2>
+            <h2 id="settle-verdict" data-i18n="modal.settling">结算中</h2>
           </div>
-          <div id="settle-countdown" class="settle-countdown" aria-label="结算剩余时间">
+          <div id="settle-countdown" class="settle-countdown" aria-label="结算剩余时间" data-i18n-attr="aria-label:modal.settleTime">
             <span id="settle-countdown-num">2</span>
           </div>
-          <button id="btn-settle-close" class="button button-ghost settle-close hidden" type="button">关闭</button>
+          <button id="btn-settle-close" class="button button-ghost settle-close hidden" type="button" data-i18n="common.close">关闭</button>
         </div>
         <p id="settle-detail" class="settle-detail"></p>
 
         <div id="settle-board" class="settle-board">
           <div class="settle-community-block">
-            <span class="settle-label">公共牌</span>
+            <span class="settle-label" data-i18n="modal.community">公共牌</span>
             <div id="settle-community" class="settle-card-row"></div>
           </div>
           <div class="settle-hands-grid">
             <div class="settle-hand">
-              <span id="settle-self-label" class="settle-label">你</span>
+              <span id="settle-self-label" class="settle-label" data-i18n="game.you">你</span>
               <div id="settle-self-cards" class="settle-card-row"></div>
               <strong id="settle-self-hand">—</strong>
             </div>
             <div class="settle-hand">
-              <span id="settle-opp-label" class="settle-label">对手</span>
+              <span id="settle-opp-label" class="settle-label" data-i18n="table.opponent">对手</span>
               <div id="settle-opp-cards" class="settle-card-row"></div>
               <strong id="settle-opp-hand">—</strong>
             </div>
@@ -720,7 +773,7 @@
         <div class="settle-outcome">
           <p id="settle-hand-name" class="settle-hand-name"></p>
           <div id="settle-chip-ledger" class="settle-ledger hidden">
-            <span class="settle-label">筹码结算</span>
+            <span class="settle-label" data-i18n="modal.chipBreakdown">筹码结算</span>
             <ol id="settle-chip-steps" class="settle-chip-steps"></ol>
             <p id="settle-chip-total" class="settle-chip-total"></p>
           </div>
@@ -728,7 +781,7 @@
             <button id="settle-opp-energy" class="settle-energy hidden" type="button" aria-controls="opponent-energy-pop">
               对方剩余能量 —
             </button>
-            <p id="settle-next" class="settle-next">下一手即将开始</p>
+            <p id="settle-next" class="settle-next" data-i18n="game.nextHand">下一手即将开始</p>
           </div>
         </div>
       </section>
@@ -739,28 +792,28 @@
         <div class="settle-header">
           <div>
             <p class="eyebrow">MATCH ARCHIVE</p>
-            <h2 id="hand-history-title">本局结算</h2>
+            <h2 id="hand-history-title" data-i18n="modal.historyTitle">本局结算</h2>
           </div>
-          <button id="btn-history-close" class="button button-ghost" type="button">关闭</button>
+          <button id="btn-history-close" class="button button-ghost" type="button" data-i18n="common.close">关闭</button>
         </div>
-        <p id="hand-history-empty" class="history-empty">还没有本局结算记录。</p>
+        <p id="hand-history-empty" class="history-empty" data-i18n="modal.historyEmpty">还没有本局结算记录。</p>
         <div id="hand-history-list" class="history-list" role="list"></div>
       </section>
     </div>
 
     <div id="opponent-energy-pop" class="opponent-energy-pop hidden" role="dialog" aria-labelledby="opponent-energy-pop-title">
       <div class="opponent-energy-pop-card glass-panel">
-        <h3 id="opponent-energy-pop-title">对手能量</h3>
-        <p>公开 <strong id="energy-pop-public">0</strong></p>
-        <p id="energy-pop-clair-row" class="hidden">灵视 <strong id="energy-pop-clair">—</strong></p>
+        <h3 id="opponent-energy-pop-title" data-i18n="table.energyPop">对手能量</h3>
+        <p><span data-i18n="common.public">公开</span> <strong id="energy-pop-public">0</strong></p>
+        <p id="energy-pop-clair-row" class="hidden"><span data-i18n="table.clairvoyance">灵视</span> <strong id="energy-pop-clair">—</strong></p>
         <label class="energy-pop-infer">
-          <span>推测</span>
+          <span data-i18n="intel.suspected">推测</span>
           <input id="energy-pop-infer" type="number" inputmode="numeric" step="1" />
         </label>
-        <p class="intel-privacy">标记只保存在本机，不会同步或影响结算。</p>
+        <p class="intel-privacy" data-i18n="intel.privacy">标记只保存在本机，不会同步或影响结算。</p>
         <div class="energy-pop-actions">
-          <button id="btn-energy-pop-close" type="button" class="button button-ghost">关闭</button>
-          <button id="btn-energy-pop-confirm" type="button" class="button button-primary">确认</button>
+          <button id="btn-energy-pop-close" type="button" class="button button-ghost" data-i18n="common.close">关闭</button>
+          <button id="btn-energy-pop-confirm" type="button" class="button button-primary" data-i18n="common.confirm">确认</button>
         </div>
       </div>
     </div>
@@ -773,7 +826,7 @@
               <img
                 class="lobby-logo"
                 src="./assets/overlimit-holdem-logo.webp"
-                alt="超限德州 OVERLIMIT: HOLD'EM"
+                alt="OVERLIMIT: HOLD'EM"
                 width="220"
                 height="220"
                 decoding="async"
@@ -781,11 +834,16 @@
             </div>
             <div class="hero-copy">
               <p class="hero-kicker">OVERLIMIT: HOLD'EM</p>
-              <h1 id="brand-title" class="brand-title neon-title">超限德州</h1>
-              <p class="hero-subtitle">双人实时对局 · 选模式直接开打</p>
+              <h1 id="brand-title" class="brand-title neon-title" data-i18n="meta.brand">超限德州</h1>
+              <p class="hero-subtitle" data-i18n="lobby.subtitle">双人实时对局 · 选模式直接开打</p>
             </div>
           </div>
           <div class="lobby-hero-meta">
+            <div class="lobby-lang-switch" role="group" data-i18n-attr="aria-label:a11y.language" aria-label="语言">
+              <button type="button" class="lang-btn is-active" data-locale="zh-CN" aria-pressed="true">中文</button>
+              <span class="lobby-lang-sep" aria-hidden="true">|</span>
+              <button type="button" class="lang-btn" data-locale="en-US" aria-pressed="false">EN</button>
+            </div>
             <span id="selected-mode-tag" class="mode-pill standard">标准</span>
             <span id="selected-skill-tag" class="mode-pill standard">无技能</span>
             <button
@@ -794,39 +852,40 @@
               type="button"
               aria-haspopup="dialog"
               aria-controls="rules-handbook-modal"
+              data-i18n="lobby.rules"
             >
               规则查询
             </button>
-            <span id="lobby-connection" class="connection-chip sr-only" aria-live="polite"><i class="status-dot"></i>连接中</span>
+            <span id="lobby-connection" class="connection-chip sr-only" aria-live="polite"><i class="status-dot"></i><span data-i18n="lobby.connecting">连接中</span></span>
           </div>
         </header>
 
         <section class="skill-prep-bar glass-panel" aria-labelledby="skill-prep-title">
           <div class="skill-prep-copy">
-            <h2 id="skill-prep-title">技能构筑</h2>
-            <p id="skill-prep-status" class="skill-prep-status">未配置 · 技能局不可进入</p>
+            <h2 id="skill-prep-title" data-i18n="lobby.skillLoadout">技能构筑</h2>
+            <p id="skill-prep-status" class="skill-prep-status" data-i18n="lobby.prepEmpty">未配置 · 技能局不可进入</p>
           </div>
           <button id="btn-open-skill-lab" class="button button-secondary" type="button">
-            <span>去配置</span>
+            <span data-i18n="lobby.configure">去配置</span>
           </button>
         </section>
 
         <section class="mode-section protocol-section glass-panel" aria-labelledby="mode-title">
           <div class="section-heading compact">
             <div>
-              <h2 id="mode-title">开局模式</h2>
+              <h2 id="mode-title" data-i18n="lobby.modes">开局模式</h2>
             </div>
-            <p id="protocol-summary" class="protocol-summary">标准局 · 无技能</p>
+            <p id="protocol-summary" class="protocol-summary" data-i18n="lobby.summaryOff">标准局 · 无技能</p>
           </div>
 
           <aside class="quickstart-entry" aria-labelledby="quickstart-entry-title">
             <span class="quickstart-entry-index" aria-hidden="true">01—04</span>
             <div class="quickstart-entry-copy">
               <p>NEW PLAYER FIELD MANUAL</p>
-              <h3 id="quickstart-entry-title">快速入门</h3>
-              <span>4 页了解胜负、牌局、牌型奖励与技能构筑</span>
+              <h3 id="quickstart-entry-title" data-i18n="lobby.quickstartTitle">快速入门</h3>
+              <span data-i18n="lobby.quickstartHint">4 页了解胜负、牌局、牌型奖励与技能构筑</span>
             </div>
-            <span id="quickstart-entry-state" class="quickstart-entry-state">约 45 秒</span>
+            <span id="quickstart-entry-state" class="quickstart-entry-state" data-i18n="lobby.quickstartEta">约 45 秒</span>
             <button
               id="btn-open-quickstart"
               class="button quickstart-entry-button"
@@ -834,7 +893,7 @@
               aria-haspopup="dialog"
               aria-controls="quickstart-modal"
             >
-              <span id="quickstart-entry-action">开始阅读</span>
+              <span id="quickstart-entry-action" data-i18n="lobby.startReading">开始阅读</span>
               <b aria-hidden="true">→</b>
             </button>
           </aside>
@@ -842,69 +901,57 @@
           <div class="protocol-grid" role="list">
             <article class="protocol-card selected" data-game-mode="standard" data-skill-mode="off" role="listitem" tabindex="0" aria-current="true">
               <input type="radio" name="protocol" value="standard-off" checked tabindex="-1" />
-              <strong>标准局 <small>无技能</small></strong>
+              <strong><span data-i18n="lobby.standard">标准局</span> <small data-i18n="lobby.noSkills">无技能</small></strong>
               <div class="protocol-mid">
-                <span class="protocol-desc">完整随机牌堆</span>
-                <span class="protocol-note">标准发牌 · 含超限牌型奖励</span>
+                <span class="protocol-desc" data-i18n="lobby.standardDesc">完整随机牌堆</span>
+                <span class="protocol-note" data-i18n="lobby.standardNote">标准发牌 · 含超限牌型奖励</span>
               </div>
               <div class="protocol-actions">
-                <button type="button" class="button button-match protocol-btn" data-room-action="match">匹配</button>
-                <button type="button" class="button button-secondary protocol-btn" data-room-action="solo">人机</button>
-                <button type="button" class="button button-primary protocol-btn" data-room-action="create">建房</button>
+                <button type="button" class="button button-match protocol-btn" data-room-action="match" data-i18n="lobby.match">匹配</button>
+                <button type="button" class="button button-secondary protocol-btn" data-room-action="solo" data-i18n="lobby.solo">人机</button>
+                <button type="button" class="button button-primary protocol-btn" data-room-action="create" data-i18n="lobby.create">建房</button>
               </div>
             </article>
 
             <article class="protocol-card overdrive" data-game-mode="overdrive" data-skill-mode="off" role="listitem" tabindex="-1">
               <input type="radio" name="protocol" value="overdrive-off" tabindex="-1" />
-              <strong>高爆局 <small>无技能</small></strong>
+              <strong><span data-i18n="lobby.overdrive">高爆局</span> <small data-i18n="lobby.noSkills">无技能</small></strong>
               <div class="protocol-mid">
-                <span class="protocol-desc">高潜力起手与河牌</span>
-                <span class="protocol-note">高爆牌面 · 含超限牌型奖励</span>
+                <span class="protocol-desc" data-i18n="lobby.overdriveDesc">高潜力起手与河牌</span>
+                <span class="protocol-note" data-i18n="lobby.overdriveNote">高爆牌面 · 含超限牌型奖励</span>
               </div>
               <div class="protocol-actions">
-                <button type="button" class="button button-match protocol-btn" data-room-action="match">匹配</button>
-                <button type="button" class="button button-secondary protocol-btn" data-room-action="solo">人机</button>
-                <button type="button" class="button button-primary protocol-btn" data-room-action="create">建房</button>
+                <button type="button" class="button button-match protocol-btn" data-room-action="match" data-i18n="lobby.match">匹配</button>
+                <button type="button" class="button button-secondary protocol-btn" data-room-action="solo" data-i18n="lobby.solo">人机</button>
+                <button type="button" class="button button-primary protocol-btn" data-room-action="create" data-i18n="lobby.create">建房</button>
               </div>
             </article>
 
             <article class="protocol-card abyss" data-game-mode="standard" data-skill-mode="abyss" role="listitem" tabindex="-1">
               <input type="radio" name="protocol" value="standard-abyss" tabindex="-1" />
-              <strong>标准局 <small>超限技能</small></strong>
+              <strong><span data-i18n="lobby.standard">标准局</span> <small data-i18n="lobby.overlimitSkills">超限技能</small></strong>
               <div class="protocol-mid">
-                <span
-                  class="protocol-desc"
-                  data-locked-copy="需先完成技能构筑"
-                  data-ready-copy="使用已保存的技能构筑"
-                  data-locked-en="Complete a skill build first"
-                  data-ready-en="Saved skill build ready"
-                >需先完成技能构筑</span>
-                <span class="protocol-note">标准牌桌 · 技能改写局势</span>
+                <span class="protocol-desc" data-i18n="lobby.skillLocked">需先完成技能构筑</span>
+                <span class="protocol-note" data-i18n="lobby.skillNote">标准牌桌 · 技能改写局势</span>
               </div>
               <div class="protocol-actions">
-                <button type="button" class="button button-match protocol-btn" data-room-action="match">匹配</button>
-                <button type="button" class="button button-secondary protocol-btn" data-room-action="solo">人机</button>
-                <button type="button" class="button button-primary protocol-btn" data-room-action="create">建房</button>
+                <button type="button" class="button button-match protocol-btn" data-room-action="match" data-i18n="lobby.match">匹配</button>
+                <button type="button" class="button button-secondary protocol-btn" data-room-action="solo" data-i18n="lobby.solo">人机</button>
+                <button type="button" class="button button-primary protocol-btn" data-room-action="create" data-i18n="lobby.create">建房</button>
               </div>
             </article>
 
             <article class="protocol-card overdrive abyss" data-game-mode="overdrive" data-skill-mode="abyss" role="listitem" tabindex="-1">
               <input type="radio" name="protocol" value="overdrive-abyss" tabindex="-1" />
-              <strong>高爆局 <small>超限技能</small></strong>
+              <strong><span data-i18n="lobby.overdrive">高爆局</span> <small data-i18n="lobby.overlimitSkills">超限技能</small></strong>
               <div class="protocol-mid">
-                <span
-                  class="protocol-desc"
-                  data-locked-copy="需先完成技能构筑"
-                  data-ready-copy="高爆 + 已保存技能构筑"
-                  data-locked-en="Complete a skill build first"
-                  data-ready-en="Overdrive with saved skill build"
-                >需先完成技能构筑</span>
-                <span class="protocol-note">极限节奏 · 技能与牌面齐飞</span>
+                <span class="protocol-desc" data-i18n="lobby.skillLocked">需先完成技能构筑</span>
+                <span class="protocol-note" data-i18n="lobby.overdriveSkillNote">极限节奏 · 技能与牌面齐飞</span>
               </div>
               <div class="protocol-actions">
-                <button type="button" class="button button-match protocol-btn" data-room-action="match">匹配</button>
-                <button type="button" class="button button-secondary protocol-btn" data-room-action="solo">人机</button>
-                <button type="button" class="button button-primary protocol-btn" data-room-action="create">建房</button>
+                <button type="button" class="button button-match protocol-btn" data-room-action="match" data-i18n="lobby.match">匹配</button>
+                <button type="button" class="button button-secondary protocol-btn" data-room-action="solo" data-i18n="lobby.solo">人机</button>
+                <button type="button" class="button button-primary protocol-btn" data-room-action="create" data-i18n="lobby.create">建房</button>
               </div>
             </article>
           </div>
@@ -919,15 +966,15 @@
 
         <section class="lobby-entry glass-panel" aria-labelledby="join-title">
           <div class="lobby-entry-head">
-            <h2 id="join-title">加入房间</h2>
+            <h2 id="join-title" data-i18n="lobby.joinTitle">加入房间</h2>
           </div>
           <div class="lobby-entry-grid lobby-entry-join">
-            <label for="input-name">昵称</label>
-            <input id="input-name" type="text" maxlength="16" autocomplete="nickname" placeholder="你的昵称" />
-            <label for="input-room">房间号</label>
-            <input id="input-room" class="room-input" type="text" maxlength="8" autocomplete="off" spellcheck="false" enterkeyhint="go" placeholder="六位房间号" />
+            <label for="input-name" data-i18n="lobby.name">昵称</label>
+            <input id="input-name" type="text" maxlength="16" autocomplete="nickname" placeholder="你的昵称" data-i18n-placeholder="lobby.namePh" />
+            <label for="input-room" data-i18n="lobby.room">房间号</label>
+            <input id="input-room" class="room-input" type="text" maxlength="8" autocomplete="off" spellcheck="false" enterkeyhint="go" placeholder="六位房间号" data-i18n-placeholder="lobby.roomPh" />
             <button id="btn-join" class="button button-primary" type="button">
-              <span>加入</span>
+              <span data-i18n="lobby.join">加入</span>
             </button>
           </div>
         </section>
@@ -936,27 +983,27 @@
       <section id="screen-skill-lab" class="screen skill-lab-screen" aria-labelledby="skill-lab-title">
         <header class="screen-bar skill-lab-bar">
           <div class="skill-lab-bar-start">
-            <button type="button" id="btn-back-skill-lab" class="button button-ghost back-button">返回</button>
-            <nav id="skill-lab-filters" class="skill-lab-filters" aria-label="技能标签筛选"></nav>
+            <button type="button" id="btn-back-skill-lab" class="button button-ghost back-button" data-i18n="lab.back">返回</button>
+            <nav id="skill-lab-filters" class="skill-lab-filters" aria-label="技能标签筛选" data-i18n-attr="aria-label:lab.filtersAria"></nav>
           </div>
-          <div class="screen-brand">技能构筑</div>
+          <div class="screen-brand" data-i18n="lab.brand">技能构筑</div>
           <span id="lab-load-meter" class="mode-pill">0 / 8</span>
         </header>
         <section class="skill-lab-panel glass-panel">
           <div class="section-heading compact">
             <div>
-              <h2 id="skill-lab-title">选择技能</h2>
+              <h2 id="skill-lab-title" data-i18n="lab.title">选择技能</h2>
             </div>
             <p id="skill-lab-hint" class="protocol-summary">1–4 个 · 负载 ≤ 8</p>
           </div>
-          <p id="skill-lab-status" class="panel-tip">配置保存在本机，进入技能局后自动提交。</p>
+          <p id="skill-lab-status" class="panel-tip" data-i18n="lab.status">配置保存在本机，进入技能局后自动提交。</p>
           <div id="skill-lab-catalog" class="skill-catalog"></div>
           <div class="button-stack horizontal skill-lab-actions">
             <button id="btn-clear-loadout" class="button button-ghost" type="button">
-              <span>清空</span>
+              <span data-i18n="lab.clear">清空</span>
             </button>
             <button id="btn-save-loadout" class="button button-primary" type="button" disabled>
-              <span>保存</span>
+              <span data-i18n="lab.save">保存</span>
             </button>
           </div>
         </section>
@@ -964,39 +1011,39 @@
 
       <section id="screen-wait" class="screen wait-screen" aria-labelledby="wait-title">
         <header class="screen-bar">
-          <button type="button" id="btn-back-wait" class="button button-ghost back-button">返回</button>
-          <div class="screen-brand">等待室</div>
-          <span id="wait-connection" class="connection-chip"><i class="status-dot"></i>连接中</span>
+          <button type="button" id="btn-back-wait" class="button button-ghost back-button" data-i18n="wait.back">返回</button>
+          <div class="screen-brand" data-i18n="wait.brand">等待室</div>
+          <span id="wait-connection" class="connection-chip"><i class="status-dot"></i><span data-i18n="lobby.connecting">连接中</span></span>
         </header>
 
         <div class="wait-layout">
           <section class="wait-primary glass-panel">
-            <h1 id="wait-title">等待对手</h1>
-            <p class="wait-lead">分享房间号，对手加入后自动开局。</p>
+            <h1 id="wait-title" data-i18n="wait.title">等待对手</h1>
+            <p class="wait-lead" data-i18n="wait.lead">分享房间号，对手加入后自动开局。</p>
 
             <div class="room-code-block">
-              <span>房间号</span>
+              <span data-i18n="wait.room">房间号</span>
               <strong id="wait-room-id">——</strong>
-              <button id="btn-copy-room" class="button button-primary" type="button">复制</button>
+              <button id="btn-copy-room" class="button button-primary" type="button" data-i18n="wait.copy">复制</button>
             </div>
 
             <section id="wait-password-panel" class="wait-password-inline">
               <div class="wait-password-row">
-                <input id="input-wait-password" type="password" maxlength="16" autocomplete="new-password" enterkeyhint="done" placeholder="可选密码" />
-                <button id="btn-set-room-password" class="button button-secondary" type="button">设密码</button>
-                <span id="wait-password-status" class="wait-password-chip">未设置</span>
+                <input id="input-wait-password" type="password" maxlength="16" autocomplete="new-password" enterkeyhint="done" placeholder="可选密码" data-i18n-placeholder="wait.passwordPh" />
+                <button id="btn-set-room-password" class="button button-secondary" type="button" data-i18n="wait.setPassword">设密码</button>
+                <span id="wait-password-status" class="wait-password-chip" data-i18n="wait.pwdOff">未设置</span>
               </div>
             </section>
 
             <div class="wait-player-slots">
               <div id="wait-host-slot" class="wait-player-slot ready">
-                <span class="slot-icon">主</span>
-                <div><small>房主</small><strong id="wait-host-name">等待同步</strong></div>
+                <span class="slot-icon" data-i18n="wait.hostMark">主</span>
+                <div><small data-i18n="wait.host">房主</small><strong id="wait-host-name">等待同步</strong></div>
                 <span id="wait-host-state" class="state-chip">就绪</span>
               </div>
               <div id="wait-guest-slot" class="wait-player-slot">
-                <span class="slot-icon">客</span>
-                <div><small>挑战者</small><strong id="wait-guest-name">等待接入</strong></div>
+                <span class="slot-icon" data-i18n="wait.guestMark">客</span>
+                <div><small data-i18n="wait.challenger">挑战者</small><strong id="wait-guest-name">等待接入</strong></div>
                 <span id="wait-guest-state" class="state-chip muted">空位</span>
               </div>
             </div>
@@ -1005,35 +1052,35 @@
           <aside class="wait-side">
             <section class="glass-panel room-manifest">
               <div class="section-heading compact">
-                <div><h2>房间信息</h2></div>
+                <div><h2 data-i18n="wait.info">房间信息</h2></div>
                 <span id="wait-mode-badge" class="mode-pill standard">标准</span>
               </div>
               <dl class="manifest-list">
-                <div><dt>模式</dt><dd id="wait-mode-name">标准局</dd></div>
-                <div><dt>技能</dt><dd id="wait-skill-mode">关闭</dd></div>
-                <div><dt>筹码</dt><dd id="wait-initial-chips">1000</dd></div>
-                <div><dt>能量</dt><dd id="wait-initial-energy">—</dd></div>
-                <div><dt>阶段</dt><dd id="wait-room-status">等待中</dd></div>
+                <div><dt data-i18n="wait.mode">模式</dt><dd id="wait-mode-name">标准局</dd></div>
+                <div><dt data-i18n="wait.skills">技能</dt><dd id="wait-skill-mode">关闭</dd></div>
+                <div><dt data-i18n="wait.chips">筹码</dt><dd id="wait-initial-chips">1000</dd></div>
+                <div><dt data-i18n="wait.energy">能量</dt><dd id="wait-initial-energy">—</dd></div>
+                <div><dt data-i18n="wait.phase">阶段</dt><dd id="wait-room-status">等待中</dd></div>
               </dl>
             </section>
 
             <section id="skill-draft-panel" class="glass-panel skill-draft-panel hidden">
               <div class="section-heading compact">
-                <div><h2>技能确认</h2></div>
+                <div><h2 data-i18n="wait.confirmTitle">技能确认</h2></div>
                 <span id="draft-load-meter" class="mode-pill">0 / 8</span>
               </div>
               <p id="draft-status" class="panel-tip">选择 1–4 个技能，总负载不超过 8。</p>
               <div id="skill-catalog" class="skill-catalog"></div>
               <div class="button-stack">
                 <button id="btn-confirm-loadout" class="button button-primary" type="button" disabled>
-                  <span>确认构筑</span>
+                  <span data-i18n="wait.confirm">确认构筑</span>
                 </button>
               </div>
             </section>
 
             <section id="wait-mode-brief" class="glass-panel mode-brief standard">
-              <h2>标准局</h2>
-              <p>完整随机洗牌，保留标准德州的不确定性。</p>
+              <h2 data-i18n="lobby.standard">标准局</h2>
+              <p data-i18n="wait.standardBrief">完整随机洗牌，保留标准德州的不确定性。</p>
             </section>
           </aside>
         </div>
@@ -1042,30 +1089,30 @@
       <section id="screen-game" class="screen game-screen" aria-labelledby="table-title">
         <header class="game-topbar">
           <div class="table-tools-left">
-            <button type="button" id="btn-back-game" class="button button-ghost back-button" aria-label="离开牌桌" title="离开牌桌">
-              <span class="game-exit-icon" aria-hidden="true">←</span><span class="game-exit-label">离开</span>
+            <button type="button" id="btn-back-game" class="button button-ghost back-button" aria-label="离开牌桌" title="离开牌桌" data-i18n-attr="aria-label:a11y.leaveTable title:table.leaveTitle">
+              <span class="game-exit-icon" aria-hidden="true">←</span><span class="game-exit-label" data-i18n="game.leave">离开</span>
             </button>
-            <button id="btn-hand-history" class="history-chip" type="button" title="查看本局历史结算">
+            <button id="btn-hand-history" class="history-chip" type="button" title="查看本局历史结算" data-i18n-attr="title:game.historyTitle">
               <svg class="history-restore-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
                 <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
                 <path d="M3 3v5h5" />
                 <path d="M12 7v5l4 2" />
               </svg>
-              <span class="history-label">历史</span>
+              <span class="history-label" data-i18n="game.history">历史</span>
             </button>
           </div>
-          <p id="table-title" class="sr-only">超限牌桌</p>
+          <p id="table-title" class="sr-only" data-i18n="game.tableTitle">超限牌桌</p>
           <div class="table-runtime-data" aria-hidden="true">
             <span id="game-room-id">——</span>
             <span id="game-mode-badge" class="mode-pill standard">标准局</span>
             <span id="current-bet">0</span>
-            <span id="commitment-short">待定</span>
-            <span id="fairness-summary" title="牌堆承诺状态">待锁</span>
+            <span id="commitment-short" data-i18n="game.pending">待定</span>
+            <span id="fairness-summary" title="牌堆承诺状态" data-i18n="game.lockPending" data-i18n-attr="title:fairness.pending">待锁</span>
             <span id="fairness-hand-id">HAND —</span>
-            <span id="fairness-result">等待牌堆承诺</span>
+            <span id="fairness-result" data-i18n="game.fairnessWait">等待牌堆承诺</span>
             <div id="overdrive-profile" class="overdrive-profile hidden">
-              <span>高爆</span>
-              <strong id="overdrive-profile-label">高能牌局</strong>
+              <span data-i18n="game.overdriveShort">高爆</span>
+              <strong id="overdrive-profile-label" data-i18n="game.overdriveHot">高能牌局</strong>
             </div>
           </div>
           <div class="topbar-status">
@@ -1076,7 +1123,8 @@
               aria-live="polite"
               aria-label="连接中"
               title="连接中"
-            ><i class="status-dot"></i><span class="sr-only">连接中</span></span>
+              data-i18n-attr="aria-label:a11y.connecting title:a11y.connecting"
+            ><i class="status-dot"></i><span class="sr-only" data-i18n="lobby.connecting">连接中</span></span>
           </div>
         </header>
 
@@ -1084,17 +1132,17 @@
           <div class="board-grid-overlay" aria-hidden="true"></div>
           <div id="overdrive-stage" class="overdrive-stage" aria-hidden="true"></div>
 
-          <section id="opponent-area" class="player-zone opponent-zone" aria-label="对手状态">
+          <section id="opponent-area" class="player-zone opponent-zone" aria-label="对手状态" data-i18n-attr="aria-label:table.opponentState">
             <div class="player-console">
               <div id="opponent-avatar" class="player-avatar player-avatar-secondary"><span>?</span><i></i></div>
               <div class="player-main">
                 <div class="player-title-row">
-                  <strong id="opponent-name">对手</strong>
-                  <span id="opponent-connection" class="mini-status opponent-connection"><i class="status-dot"></i><span>离线</span></span>
+                  <strong id="opponent-name" data-i18n="table.opponent">对手</strong>
+                  <span id="opponent-connection" class="mini-status opponent-connection"><i class="status-dot"></i><span data-i18n="game.offline">离线</span></span>
                 </div>
                 <div class="player-metrics">
-                  <span class="player-chip-metric">筹码 <strong id="opponent-chips">—</strong></span>
-                  <span class="player-bet-metric">下注 <strong id="opponent-bet">0</strong></span>
+                  <span class="player-chip-metric"><span data-i18n="common.chips">筹码</span> <strong id="opponent-chips">—</strong></span>
+                  <span class="player-bet-metric"><span data-i18n="common.bet">下注</span> <strong id="opponent-bet">0</strong></span>
                   <button
                     id="btn-opponent-energy"
                     class="opponent-energy-metric hidden"
@@ -1102,14 +1150,15 @@
                     aria-controls="opponent-energy-pop"
                     aria-expanded="false"
                     title="查看并推测对手能量"
+                    data-i18n-attr="title:table.energyTitle"
                   >
-                    能量 <strong id="opponent-visible-energy">—</strong>
+                    <span data-i18n="game.energy">能量</span> <strong id="opponent-visible-energy">—</strong>
                   </button>
                 </div>
               </div>
-              <div id="opponent-state" class="player-state">等待</div>
+              <div id="opponent-state" class="player-state" data-i18n="table.waiting">等待</div>
             </div>
-            <div id="opponent-cards" class="cards-row opponent-cards" aria-label="对手底牌"></div>
+            <div id="opponent-cards" class="cards-row opponent-cards" aria-label="对手底牌" data-i18n-attr="aria-label:game.holeOpp"></div>
             <div class="opponent-intel-cluster">
               <button
                 id="btn-toggle-opponent-intel"
@@ -1120,14 +1169,15 @@
                 aria-label="构筑情报，完全未知。打开详情。"
               >
                 <span class="opponent-intel-summary-copy">
-                  <small>构筑情报</small>
-                  <strong id="opponent-intel-count">完全未知</strong>
+                  <small data-i18n="intel.title">构筑情报</small>
+                  <strong id="opponent-intel-count" data-i18n="intel.none">完全未知</strong>
                 </span>
                 <span
                   id="opponent-intel-slots"
                   class="opponent-intel-tags is-empty"
                   role="group"
                   aria-label="当前没有已确认或推测的技能"
+                  data-i18n-attr="aria-label:intel.emptySlots"
                 ></span>
                 <span class="opponent-intel-chevron" aria-hidden="true">⌄</span>
               </button>
@@ -1135,22 +1185,22 @@
 
               <aside id="opponent-skill-field" class="table-side-rail opponent-skill-field" aria-labelledby="opponent-skill-title">
                 <header class="rail-heading">
-                  <h2 id="opponent-skill-title">对手技能</h2>
+                  <h2 id="opponent-skill-title" data-i18n="intel.oppSkills">对手技能</h2>
                   <div class="rail-heading-actions">
-                    <span id="opponent-build-status" class="intel-status">未确认</span>
-                    <button id="btn-close-opponent-intel" class="rail-close-button" type="button" aria-label="关闭对手技能情报">×</button>
+                    <span id="opponent-build-status" class="intel-status" data-i18n="intel.unconfirmed">未确认</span>
+                    <button id="btn-close-opponent-intel" class="rail-close-button" type="button" aria-label="关闭对手技能情报" data-i18n-attr="aria-label:intel.closeOpp">×</button>
                   </div>
                 </header>
-                <div class="intel-legend" aria-label="技能情报图例">
-                  <span title="系统确认"><i class="known"></i><span class="sr-only">系统确认</span></span>
-                  <span title="本地推测"><i class="suspected"></i><span class="sr-only">本地推测</span></span>
+                <div class="intel-legend" aria-label="技能情报图例" data-i18n-attr="aria-label:intel.legend">
+                  <span title="系统确认" data-i18n-attr="title:intel.confirmedSrc"><i class="known"></i><span class="sr-only" data-i18n="intel.confirmedSrc">系统确认</span></span>
+                  <span title="本地推测" data-i18n-attr="title:intel.suspectedSrc"><i class="suspected"></i><span class="sr-only" data-i18n="intel.suspectedSrc">本地推测</span></span>
                 </div>
-                <div id="opponent-skill-bar" class="opponent-skill-bar" aria-label="对手已知与推测技能"></div>
-                <button id="btn-mark-opponent-skills" class="intel-edit-button" type="button" title="标记仅保存在本机，不会同步或影响结算">
+                <div id="opponent-skill-bar" class="opponent-skill-bar" aria-label="对手已知与推测技能" data-i18n-attr="aria-label:intel.barAria"></div>
+                <button id="btn-mark-opponent-skills" class="intel-edit-button" type="button" title="标记仅保存在本机，不会同步或影响结算" data-i18n-attr="title:intel.privacy">
                   <span aria-hidden="true">＋</span>
-                  <span>标记推测</span>
+                  <span data-i18n="intel.mark">标记推测</span>
                 </button>
-                <p class="intel-privacy sr-only">标记只保存在本机，不会同步或影响结算。</p>
+                <p class="intel-privacy sr-only" data-i18n="intel.privacy">标记只保存在本机，不会同步或影响结算。</p>
               </aside>
             </div>
             <button
@@ -1161,21 +1211,21 @@
               aria-expanded="false"
             >
               <span aria-hidden="true">≋</span>
-              <strong>播报</strong>
+              <strong data-i18n="intel.feedTab">播报</strong>
               <small id="skill-feed-count">0</small>
             </button>
           </section>
 
-          <section class="table-center" id="table-center" aria-label="底池、行动倒计时与公共牌">
+          <section class="table-center" id="table-center" aria-label="底池、行动倒计时与公共牌" data-i18n-attr="aria-label:game.boardAria">
             <div class="board-core">
               <div id="skill-fx-stage-anchor" class="skill-fx-stage-anchor" aria-hidden="true"></div>
               <div class="board-potline">
-                <span id="phase-text" class="board-street">等待</span>
+                <span id="phase-text" class="board-street" data-i18n="phase.waiting">等待</span>
                 <div id="pot-core" class="pot-core" aria-label="当前底池 0">
                   <div class="core-ring ring-outer"></div>
                   <div class="core-ring ring-inner"></div>
                   <div class="core-value">
-                    <span>底池</span>
+                    <span data-i18n="game.pot">底池</span>
                     <strong id="pot-value">0</strong>
                   </div>
                 </div>
@@ -1183,13 +1233,13 @@
               <div class="board-stage-line">
                 <div class="turn-clock-block board-turn-clock">
                   <span class="instrument-label">TURN</span>
-                  <div id="action-countdown" class="action-countdown" role="timer" aria-label="本回合剩余行动时间">
+                  <div id="action-countdown" class="action-countdown" role="timer" aria-label="本回合剩余行动时间" data-i18n-attr="aria-label:table.turnTime">
                     <span id="action-countdown-value">—</span>
                     <small class="turn-clock-unit" aria-hidden="true">SEC</small>
                   </div>
                 </div>
                 <div class="board-midline">
-                  <div id="community-cards" class="community-row" aria-label="公共牌"></div>
+                  <div id="community-cards" class="community-row" aria-label="公共牌" data-i18n-attr="aria-label:game.community"></div>
                   <div id="deck-fx-anchor" class="deck-fx-anchor" aria-hidden="true">
                     <div id="deck-stack" class="deck-stack">
                       <span class="deck-card"></span>
@@ -1202,77 +1252,77 @@
             </div>
             <div class="turn-status" role="status" aria-live="polite">
               <div>
-                <span id="turn-kicker">回合</span>
-                <strong id="turn-message">等待行动</strong>
+                <span id="turn-kicker" data-i18n="table.turnKicker">回合</span>
+                <strong id="turn-message" data-i18n="table.waitAction">等待行动</strong>
               </div>
             </div>
-            <span id="action-log" class="action-log sr-only" aria-live="polite">同步中</span>
+            <span id="action-log" class="action-log sr-only" aria-live="polite" data-i18n="table.syncing">同步中</span>
             <div id="skill-board-target-bar" class="skill-board-target-bar hidden" role="status" aria-live="polite">
-              <strong>零化</strong>
-              <button id="btn-cancel-skill-target" class="button button-ghost" type="button">取消</button>
+              <strong data-i18n="table.nullify">零化</strong>
+              <button id="btn-cancel-skill-target" class="button button-ghost" type="button" data-i18n="table.cancel">取消</button>
             </div>
           </section>
 
-          <section id="self-area" class="player-zone self-zone" aria-label="你的状态">
+          <section id="self-area" class="player-zone self-zone" aria-label="你的状态" data-i18n-attr="aria-label:table.selfState">
             <div class="self-stage">
               <div class="self-cards-wrap">
-                <div id="self-cards" class="cards-row self-cards" aria-label="你的底牌"></div>
+                <div id="self-cards" class="cards-row self-cards" aria-label="你的底牌" data-i18n-attr="aria-label:game.holeSelf"></div>
               </div>
               <div class="player-console">
-                <div id="self-avatar" class="player-avatar player-avatar-secondary"><span>我</span><i></i></div>
+                <div id="self-avatar" class="player-avatar player-avatar-secondary"><span data-i18n="common.me">我</span><i></i></div>
                 <div class="player-main">
                   <div class="player-title-row">
-                    <strong id="self-name">你</strong>
-                    <span id="self-connection" class="mini-status online self-connection"><i class="status-dot online"></i><span>在线</span></span>
+                    <strong id="self-name" data-i18n="game.you">你</strong>
+                    <span id="self-connection" class="mini-status online self-connection"><i class="status-dot online"></i><span data-i18n="game.online">在线</span></span>
                   </div>
                   <div class="player-metrics">
-                    <span class="player-chip-metric">筹码 <strong id="self-chips">—</strong></span>
-                    <span class="player-bet-metric self-bet-metric">下注 <strong id="self-bet">0</strong></span>
+                    <span class="player-chip-metric"><span data-i18n="common.chips">筹码</span> <strong id="self-chips">—</strong></span>
+                    <span class="player-bet-metric self-bet-metric"><span data-i18n="common.bet">下注</span> <strong id="self-bet">0</strong></span>
                   </div>
                   <div class="hand-hint">
-                    <span>牌力</span>
-                    <strong id="self-hand-type">等待发牌</strong>
+                    <span data-i18n="table.power">牌力</span>
+                    <strong id="self-hand-type" data-i18n="game.waitingDeal">等待发牌</strong>
                   </div>
                 </div>
-                <div id="self-state" class="player-state">等待</div>
+                <div id="self-state" class="player-state" data-i18n="table.waiting">等待</div>
               </div>
             </div>
           </section>
 
-          <aside id="own-skill-arsenal" class="table-side-rail own-skill-arsenal" aria-label="己方已装备技能">
+          <aside id="own-skill-arsenal" class="table-side-rail own-skill-arsenal" aria-label="己方已装备技能" data-i18n-attr="aria-label:table.ownSkillsAria">
             <div id="skill-hud" class="skill-hud hidden">
               <div class="skill-energy-row">
-                <span class="skill-hud-label">己方技能</span>
-                <span class="skill-energy-meter">能量 <strong id="self-energy">0</strong>/<span id="self-energy-cap">8</span></span>
-                <span class="skill-opponent-energy sr-only">对手 <strong id="opponent-energy">0</strong></span>
-                <span id="skill-silence-flag" class="hidden">技能封锁</span>
+                <span class="skill-hud-label" data-i18n="table.ownSkills">己方技能</span>
+                <span class="skill-energy-meter"><span data-i18n="game.energy">能量</span> <strong id="self-energy">0</strong>/<span id="self-energy-cap">8</span></span>
+                <span class="skill-opponent-energy sr-only"><span data-i18n="table.opponent">对手</span> <strong id="opponent-energy">0</strong></span>
+                <span id="skill-silence-flag" class="hidden" data-i18n="intel.silenceLock">技能封锁</span>
               </div>
-              <div id="skill-bar" class="skill-bar" aria-label="已装备技能"></div>
+              <div id="skill-bar" class="skill-bar" aria-label="已装备技能" data-i18n-attr="aria-label:table.equipped"></div>
             </div>
           </aside>
 
-          <aside id="table-telemetry" class="table-side-rail table-telemetry" aria-label="战术播报">
+          <aside id="table-telemetry" class="table-side-rail table-telemetry" aria-label="战术播报" data-i18n-attr="aria-label:table.feedAria">
             <section id="skill-broadcast" class="skill-broadcast" aria-labelledby="skill-broadcast-title">
               <header>
-                <h2 id="skill-broadcast-title">战术播报</h2>
-                <button id="btn-close-skill-feed" class="rail-close-button skill-feed-close" type="button" aria-label="关闭战术播报">×</button>
+                <h2 id="skill-broadcast-title" data-i18n="intel.feedTitle">战术播报</h2>
+                <button id="btn-close-skill-feed" class="rail-close-button skill-feed-close" type="button" aria-label="关闭战术播报" data-i18n-attr="aria-label:table.feedClose">×</button>
               </header>
               <div id="skill-log" class="skill-log" aria-live="polite"></div>
             </section>
           </aside>
         </div>
 
-        <section class="action-dock" aria-label="玩家操作">
+        <section class="action-dock" aria-label="玩家操作" data-i18n-attr="aria-label:game.actionsAria">
           <div class="poker-actions-layer">
             <div class="primary-actions">
               <button data-action="fold" class="action-button fold" type="button">
-                <span class="action-zh">弃牌</span><span class="action-en">FOLD</span>
+                <span class="action-zh" data-i18n="action.fold">弃牌</span><span class="action-en">FOLD</span>
               </button>
               <button data-action="check" class="action-button check" type="button">
-                <span class="action-zh">过牌</span><span class="action-en">CHECK</span>
+                <span class="action-zh" data-i18n="action.check">过牌</span><span class="action-en">CHECK</span>
               </button>
               <button data-action="call" class="action-button call" type="button">
-                <span class="action-zh" id="call-label">跟注</span>
+                <span class="action-zh" id="call-label" data-i18n="action.call">跟注</span>
                 <span class="action-en">CALL</span>
                 <small id="call-amount" class="action-amt">—</small>
               </button>
@@ -1282,10 +1332,10 @@
             </div>
             <div id="endgame-window-actions" class="endgame-window-actions hidden">
               <button id="btn-endgame-fire" class="action-button allin" type="button">
-                <span class="action-zh">发动终局</span><span class="action-en">ENDGAME</span>
+                <span class="action-zh" data-i18n="game.fireEndgame">发动终局</span><span class="action-en">ENDGAME</span>
               </button>
               <button id="btn-endgame-skip" class="action-button fold" type="button">
-                <span class="action-zh">放弃</span><span class="action-en">SKIP</span>
+                <span class="action-zh" data-i18n="game.skip">放弃</span><span class="action-en">SKIP</span>
               </button>
             </div>
 
@@ -1298,26 +1348,27 @@
                   aria-controls="raise-panel"
                   aria-expanded="false"
                   title="调整加注额度"
+                  data-i18n-attr="title:action.adjustRaise"
                 >
-                  <span class="action-zh">加注至</span>
+                  <span class="action-zh" data-i18n="action.raiseTo">加注至</span>
                   <span class="action-en raise-to-en">RAISE TO</span>
                   <strong id="raise-value">0</strong>
                   <i aria-hidden="true">⌃</i>
                 </button>
                 <button data-action="raise" id="btn-raise" class="action-button raise" type="button">
-                  <span class="action-zh" id="raise-label">加注</span>
+                  <span class="action-zh" id="raise-label" data-i18n="action.raise">加注</span>
                   <span class="action-en">RAISE</span>
                 </button>
               </div>
               <div id="raise-panel" class="raise-panel">
-                <label class="sr-only" for="raise-input">加注到</label>
+                <label class="sr-only" for="raise-input" data-i18n="action.raiseInput">加注到</label>
                 <input id="raise-input" type="range" min="0" max="0" step="1" value="0" />
                 <div class="raise-range-labels"><span id="raise-min-label">最小 —</span><span id="raise-max-label">最大 —</span></div>
-                <div class="raise-presets" aria-label="加注快捷值">
-                  <button type="button" data-raise-preset="min"><span class="action-zh">最小</span><span class="action-en">MIN</span></button>
-                  <button type="button" data-raise-preset="half"><span class="action-zh">半池</span><span class="action-en">½ POT</span></button>
-                  <button type="button" data-raise-preset="pot"><span class="action-zh">满池</span><span class="action-en">POT</span></button>
-                  <button type="button" data-raise-preset="max"><span class="action-zh">最大</span><span class="action-en">MAX</span></button>
+                <div class="raise-presets" aria-label="加注快捷值" data-i18n-attr="aria-label:action.presets">
+                  <button type="button" data-raise-preset="min"><span class="action-zh" data-i18n="action.min">最小</span><span class="action-en">MIN</span></button>
+                  <button type="button" data-raise-preset="half"><span class="action-zh" data-i18n="action.halfPot">半池</span><span class="action-en">½ POT</span></button>
+                  <button type="button" data-raise-preset="pot"><span class="action-zh" data-i18n="action.pot">满池</span><span class="action-en">POT</span></button>
+                  <button type="button" data-raise-preset="max"><span class="action-zh" data-i18n="action.max">最大</span><span class="action-en">MAX</span></button>
                 </div>
               </div>
             </div>
@@ -1340,21 +1391,21 @@
         <header class="modal-header skill-preview-header">
           <div>
             <p class="eyebrow">ABYSS TACTICAL ARCHIVE</p>
-            <h2 id="skill-preview-title">技能档案</h2>
+            <h2 id="skill-preview-title" data-i18n="modal.skillPreview">技能档案</h2>
           </div>
           <div class="skill-preview-header-actions">
-            <div class="skill-preview-mode" role="group" aria-label="技能说明详细程度">
-              <button id="btn-skill-preview-novice" class="skill-preview-mode-btn is-active" type="button">简易</button>
-              <button id="btn-skill-preview-expert" class="skill-preview-mode-btn" type="button">详细</button>
+            <div class="skill-preview-mode" role="group" aria-label="技能说明详细程度" data-i18n-attr="aria-label:modal.skillDetail">
+              <button id="btn-skill-preview-novice" class="skill-preview-mode-btn is-active" type="button" data-i18n="common.novice">简易</button>
+              <button id="btn-skill-preview-expert" class="skill-preview-mode-btn" type="button" data-i18n="common.expert">详细</button>
             </div>
-            <button id="btn-close-skill-preview" class="icon-button" type="button" aria-label="关闭技能详情">×</button>
+            <button id="btn-close-skill-preview" class="icon-button" type="button" aria-label="关闭技能详情" data-i18n-attr="aria-label:modal.closeSkill">×</button>
           </div>
         </header>
-        <div id="skill-preview-meta" class="skill-preview-meta" aria-label="技能属性"></div>
+        <div id="skill-preview-meta" class="skill-preview-meta" aria-label="技能属性" data-i18n-attr="aria-label:modal.skillAttrs"></div>
         <p id="skill-preview-description" class="skill-preview-description"></p>
         <dl id="skill-preview-rules" class="skill-preview-rules"></dl>
         <div class="modal-actions">
-          <button id="btn-skill-preview-done" class="button button-primary" type="button">返回构筑</button>
+          <button id="btn-skill-preview-done" class="button button-primary" type="button" data-i18n="modal.backLab">返回构筑</button>
         </div>
       </section>
     </div>
@@ -1364,19 +1415,19 @@
         <header class="modal-header skill-command-header">
           <div>
             <p id="skill-choice-eyebrow" class="eyebrow">TACTICAL DECISION</p>
-            <h2 id="skill-choice-title">技能选择</h2>
+            <h2 id="skill-choice-title" data-i18n="modal.skillChoice">技能选择</h2>
           </div>
-          <span id="skill-choice-step" class="skill-choice-step">选择目标</span>
+          <span id="skill-choice-step" class="skill-choice-step" data-i18n="common.chooseTarget">选择目标</span>
         </header>
         <div class="skill-choice-brief">
-          <nav id="skill-choice-filters" class="skill-choice-filters hidden" aria-label="技能标签筛选"></nav>
-          <p id="skill-choice-text">请完成技能选择</p>
-          <strong id="skill-choice-selection" aria-live="polite">尚未选择</strong>
+          <nav id="skill-choice-filters" class="skill-choice-filters hidden" aria-label="技能标签筛选" data-i18n-attr="aria-label:lab.filtersAria"></nav>
+          <p id="skill-choice-text" data-i18n="common.completeChoice">请完成技能选择</p>
+          <strong id="skill-choice-selection" aria-live="polite" data-i18n="common.noneSelected">尚未选择</strong>
         </div>
         <div id="skill-choice-body" class="skill-choice-body"></div>
         <div class="modal-actions skill-command-actions">
-          <button id="btn-skill-choice-cancel" class="button button-ghost" type="button">取消</button>
-          <button id="btn-skill-choice-confirm" class="button button-primary" type="button">确认发动</button>
+          <button id="btn-skill-choice-cancel" class="button button-ghost" type="button" data-i18n="common.cancel">取消</button>
+          <button id="btn-skill-choice-confirm" class="button button-primary" type="button" data-i18n="common.confirmLaunch">确认发动</button>
         </div>
       </section>
     </div>
@@ -1384,11 +1435,11 @@
     <div id="skill-private-modal" class="modal-layer hidden" role="dialog" aria-modal="true" aria-labelledby="skill-private-title">
       <section class="modal-panel confirm-panel glass-panel" tabindex="-1">
         <header class="modal-header">
-          <h2 id="skill-private-title">私有情报</h2>
+          <h2 id="skill-private-title" data-i18n="modal.privateIntel">私有情报</h2>
         </header>
         <p id="skill-private-text"></p>
         <div class="modal-actions">
-          <button id="btn-skill-private-close" class="button button-primary" type="button">关闭</button>
+          <button id="btn-skill-private-close" class="button button-primary" type="button" data-i18n="common.close">关闭</button>
         </div>
       </section>
     </div>
@@ -1398,42 +1449,42 @@
         <header class="modal-header">
           <div>
             <p class="eyebrow">DEVELOPMENT VISUAL SYSTEM</p>
-            <h2 id="skill-fx-gallery-title">首发技能 FX 画廊</h2>
+            <h2 id="skill-fx-gallery-title" data-i18n="modal.fxGallery">首发技能 FX 画廊</h2>
           </div>
-          <button id="btn-close-skill-fx-gallery" class="icon-button" type="button" aria-label="关闭技能特效画廊">×</button>
+          <button id="btn-close-skill-fx-gallery" class="icon-button" type="button" aria-label="关闭技能特效画廊" data-i18n-attr="aria-label:modal.closeGallery">×</button>
         </header>
         <div class="skill-fx-gallery-workspace">
           <form id="skill-fx-gallery-controls" class="skill-fx-gallery-controls" autocomplete="off">
-            <label><span>技能</span><select id="skill-fx-gallery-skill"></select></label>
-            <label><span>阶段</span><select id="skill-fx-gallery-phase">
-              <option value="pre_flop">翻牌前</option><option value="flop">翻牌</option>
-              <option value="turn">转牌</option><option value="river">河牌</option>
-              <option value="showdown">摊牌</option>
+            <label><span data-i18n="modal.gallerySkill">技能</span><select id="skill-fx-gallery-skill"></select></label>
+            <label><span data-i18n="modal.galleryPhase">阶段</span><select id="skill-fx-gallery-phase">
+              <option value="pre_flop" data-i18n="phase.pre_flop">翻牌前</option><option value="flop" data-i18n="phase.flop">翻牌</option>
+              <option value="turn" data-i18n="phase.turn">转牌</option><option value="river" data-i18n="phase.river">河牌</option>
+              <option value="showdown" data-i18n="phase.showdown">摊牌</option>
             </select></label>
-            <label><span>观看视角</span><select id="skill-fx-gallery-perspective">
-              <option value="self">发动者本人</option><option value="opponent">普通对手</option>
+            <label><span data-i18n="modal.galleryPerspective">观看视角</span><select id="skill-fx-gallery-perspective">
+              <option value="self" data-i18n="modal.gallerySelf">发动者本人</option><option value="opponent" data-i18n="modal.galleryOppView">普通对手</option>
             </select></label>
-            <label><span>信息权限</span><select id="skill-fx-gallery-disclosure">
-              <option value="self">本人私有</option><option value="public">公开事件</option>
-              <option value="result">仅公开结果</option><option value="secret">对手不可见</option>
+            <label><span data-i18n="modal.galleryDisclosure">信息权限</span><select id="skill-fx-gallery-disclosure">
+              <option value="self" data-i18n="modal.gallerySelfPrivate">本人私有</option><option value="public" data-i18n="modal.galleryPublic">公开事件</option>
+              <option value="result" data-i18n="modal.galleryResult">仅公开结果</option><option value="secret" data-i18n="modal.gallerySecret">对手不可见</option>
             </select></label>
-            <label><span>结算状态</span><select id="skill-fx-gallery-status">
-              <option value="SUCCESS">成功</option><option value="TRIGGERED">触发</option>
-              <option value="REVEALED">揭示</option><option value="FAILED">失败</option>
-              <option value="COUNTERED">被反制</option><option value="REFUNDED">返能</option>
+            <label><span data-i18n="modal.galleryStatus">结算状态</span><select id="skill-fx-gallery-status">
+              <option value="SUCCESS" data-i18n="modal.gallerySuccess">成功</option><option value="TRIGGERED" data-i18n="modal.galleryTriggered">触发</option>
+              <option value="REVEALED" data-i18n="modal.galleryRevealed">揭示</option><option value="FAILED" data-i18n="modal.galleryFailed">失败</option>
+              <option value="COUNTERED" data-i18n="modal.galleryCountered">被反制</option><option value="REFUNDED" data-i18n="modal.galleryRefunded">返能</option>
             </select></label>
-            <label><span>作用目标</span><select id="skill-fx-gallery-target">
-              <option value="profile">配置默认</option><option value="self">我方状态</option>
-              <option value="opponent">对方状态</option><option value="board">牌桌中央</option>
-              <option value="pot">底池</option><option value="river">河牌位</option>
-              <option value="cards">我方底牌</option><option value="settlement">结算区域</option>
+            <label><span data-i18n="modal.galleryTarget">作用目标</span><select id="skill-fx-gallery-target">
+              <option value="profile" data-i18n="modal.galleryDefault">配置默认</option><option value="self" data-i18n="modal.gallerySelfState">我方状态</option>
+              <option value="opponent" data-i18n="modal.galleryOppState">对方状态</option><option value="board" data-i18n="modal.galleryBoard">牌桌中央</option>
+              <option value="pot" data-i18n="modal.galleryPot">底池</option><option value="river" data-i18n="modal.galleryRiver">河牌位</option>
+              <option value="cards" data-i18n="modal.galleryCards">我方底牌</option><option value="settlement" data-i18n="modal.gallerySettle">结算区域</option>
             </select></label>
-            <label><span>分支</span><select id="skill-fx-gallery-variant">
-              <option value="default">默认</option><option value="chip">筹码</option>
-              <option value="energy">能量</option><option value="board">公共牌</option>
-              <option value="hole">底牌</option><option value="refund">返能结果</option>
+            <label><span data-i18n="modal.galleryVariant">分支</span><select id="skill-fx-gallery-variant">
+              <option value="default" data-i18n="modal.galleryVariantDefault">默认</option><option value="chip" data-i18n="modal.galleryChip">筹码</option>
+              <option value="energy" data-i18n="modal.galleryEnergy">能量</option><option value="board" data-i18n="modal.galleryBoardCards">公共牌</option>
+              <option value="hole" data-i18n="modal.galleryHole">底牌</option><option value="refund" data-i18n="modal.galleryRefund">返能结果</option>
             </select></label>
-            <label><span>质量</span><select id="skill-fx-gallery-quality">
+            <label><span data-i18n="modal.galleryQuality">质量</span><select id="skill-fx-gallery-quality">
               <option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option>
             </select></label>
             <label class="skill-fx-gallery-check"><span>Reduce Motion</span><input id="skill-fx-gallery-reduced" type="checkbox" /></label>
@@ -1446,7 +1497,7 @@
             </div>
             <output id="skill-fx-gallery-status-text" class="skill-fx-gallery-status-text">READY</output>
           </form>
-          <div id="skill-fx-gallery-stage" class="skill-fx-gallery-stage" aria-label="技能特效预览舞台">
+          <div id="skill-fx-gallery-stage" class="skill-fx-gallery-stage" aria-label="技能特效预览舞台" data-i18n-attr="aria-label:modal.galleryStageAria">
             <div class="skill-fx-gallery-grid" aria-hidden="true"></div>
             <div data-fx-gallery-anchor="stageCenter" class="skill-fx-gallery-stage-center" aria-hidden="true"></div>
             <div id="skill-fx-gallery-target-marker" class="skill-fx-gallery-target-marker" aria-hidden="true"></div>
@@ -1482,7 +1533,14 @@
     </div>
 
     <script src="/socket.io/socket.io.js"></script>
+    <script src="./i18n/i18n.js"></script>
+    <script src="./i18n/catalog-zh-CN.js"></script>
+    <script src="./i18n/catalog-en-US.js"></script>
+    <script src="./i18n/skills-zh-CN.js"></script>
+    <script src="./i18n/skills-en-US.js"></script>
+    <script src="./i18n/incoming-map.js"></script>
     <script src="./rulebook-data.js"></script>
+    <script src="./i18n/rulebook-en-US.js"></script>
     <script src="./skill-fx-profiles.js"></script>
     <script src="./skill-fx-manager.js"></script>
     <script src="./skill-fx-gallery.js"></script>

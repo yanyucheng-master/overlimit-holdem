@@ -47,15 +47,37 @@
     close: byId("btn-close-skill-fx-gallery"),
   };
 
+  function tt(key, vars) {
+    return root.OverlimitI18n ? root.OverlimitI18n.t(key, vars) : key;
+  }
+
+  function skillOptionLabel(profile) {
+    const name = root.OverlimitI18n?.has("skills." + profile.id + ".name")
+      ? tt("skills." + profile.id + ".name")
+      : profile.name;
+    return `${name} / ${profile.english} · ${profile.tier}`;
+  }
+
+  function relocalizeGallery() {
+    [...controls.skill.options].forEach((option) => {
+      if (option.value === "PROTOCOL_PAIR") {
+        option.textContent = tt("modal.galleryProtocol");
+        return;
+      }
+      const profile = profilesApi.SKILL_FX_PROFILES[option.value];
+      if (profile) option.textContent = skillOptionLabel(profile);
+    });
+  }
+
   Object.values(profilesApi.SKILL_FX_PROFILES).forEach((profile) => {
     const option = document.createElement("option");
     option.value = profile.id;
-    option.textContent = `${profile.name} / ${profile.english} · ${profile.tier}`;
+    option.textContent = skillOptionLabel(profile);
     controls.skill.appendChild(option);
   });
   const protocolOption = document.createElement("option");
   protocolOption.value = "PROTOCOL_PAIR";
-  protocolOption.textContent = "协议模板 / SHOWDOWN PROTOCOL · FX3";
+  protocolOption.textContent = tt("modal.galleryProtocol");
   controls.skill.appendChild(protocolOption);
 
   const anchor = (name) => stage.querySelector(`[data-fx-gallery-anchor="${name}"]`);
@@ -87,7 +109,7 @@
       detail: { kind, profileId: job.profile.id, gallery: true },
     })),
     onSuppressed: () => {
-      statusText.textContent = "SUPPRESSED // 此视角无权看到该事件";
+      statusText.textContent = tt("modal.gallerySuppressed");
       statusText.dataset.tone = "suppressed";
     },
   });
@@ -156,7 +178,7 @@
       audience: perspective === "self" ? "self" : "opponent",
       casterId: "GALLERY_CASTER",
       viewerId: perspective === "self" ? "GALLERY_CASTER" : "GALLERY_VIEWER",
-      casterLabel: perspective === "self" ? "你" : "对手",
+      casterLabel: perspective === "self" ? tt("fx.you") : tt("fx.opponent"),
       stageElement: anchor("stageCenter"),
       targetElement: selectedTarget(),
       fromElement: anchor("opponent"),
@@ -193,7 +215,7 @@
     const accepted = manager.play(event);
     statusText.textContent = accepted
       ? `${event.skillId} // ${perspective.toUpperCase()} // ${disclosure.toUpperCase()}`
-      : "SUPPRESSED // 此视角无权看到该事件";
+      : tt("modal.gallerySuppressed");
     requestAnimationFrame(() => {
       syncAnchorGuides();
       if (root.matchMedia?.("(max-width: 560px)").matches) {
@@ -245,6 +267,7 @@
     if (event.key === "Escape" && !modal.classList.contains("hidden")) closeGallery();
   });
 
+  root.OverlimitSkillFxGalleryRelocalize = relocalizeGallery;
   root.OverlimitSkillFxGallery = Object.freeze({
     open: openGallery,
     close: closeGallery,

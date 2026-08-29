@@ -7481,3 +7481,88 @@ body.reduce-motion .skill-fx-secret:not(.hidden) {
   }
 }
 
+html[data-locale="en-US"] body:not(.i18n-ready) {
+  visibility: hidden;
+}
+
+html[data-locale="en-US"] .action-button .action-zh,
+html[data-locale="en-US"] .raise-presets .action-zh,
+html[data-locale="en-US"] .raise-amount-meta .action-zh {
+  display: none !important;
+}
+
+html[data-locale="en-US"] .action-button .action-en,
+html[data-locale="en-US"] .raise-presets .action-en,
+html[data-locale="en-US"] .raise-amount-meta .raise-to-en {
+  display: block;
+  margin-top: 0;
+  color: inherit;
+  font-size: clamp(0.78rem, 1.4vw, 1.05rem);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  line-height: 1.1;
+  text-transform: uppercase;
+}
+
+html[data-locale="en-US"] .raise-presets .action-en {
+  display: inline;
+}
+
+html[data-locale="en-US"] .button,
+html[data-locale="en-US"] .protocol-card strong,
+html[data-locale="en-US"] .mode-pill,
+html[data-locale="en-US"] .intel-edit-button,
+html[data-locale="en-US"] .opponent-intel-summary-copy {
+  min-width: 0;
+}
+
+html[data-locale="en-US"] .protocol-card strong,
+html[data-locale="en-US"] .hero-subtitle,
+html[data-locale="en-US"] .skill-prep-status,
+html[data-locale="en-US"] .quickstart-lead,
+html[data-locale="en-US"] .settle-detail,
+html[data-locale="en-US"] .wait-lead,
+html[data-locale="en-US"] .intel-edit-button,
+html[data-locale="en-US"] .player-chip-metric,
+html[data-locale="en-US"] .player-bet-metric,
+html[data-locale="en-US"] .skill-energy-meter,
+html[data-locale="en-US"] .opponent-intel-summary-copy strong,
+html[data-locale="en-US"] .raise-amount-meta {
+  overflow-wrap: anywhere;
+  min-width: 0;
+}
+
+html[data-locale="en-US"] .game-topbar,
+html[data-locale="en-US"] .wait-player-slot,
+html[data-locale="en-US"] .manifest-list,
+html[data-locale="en-US"] .skill-energy-row,
+html[data-locale="en-US"] .primary-actions {
+  min-width: 0;
+}
+
+html[data-locale="en-US"] .primary-actions {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 360px) {
+  html[data-locale="en-US"] .salon-ui #screen-game .raise-amount-meta {
+    align-items: center;
+    padding-block: 0;
+    min-height: 0;
+  }
+
+  html[data-locale="en-US"] .salon-ui #screen-game .raise-amount-meta .raise-to-en {
+    display: block;
+    white-space: nowrap;
+    font-size: 0.62rem;
+    letter-spacing: 0.04em;
+    line-height: 1;
+  }
+
+  html[data-locale="en-US"] .salon-ui #screen-game .raise-console .raise-heading,
+  html[data-locale="en-US"] .salon-ui #screen-game .raise-console.collapsed .raise-heading {
+    min-height: 0;
+    align-items: stretch;
+  }
+}
+

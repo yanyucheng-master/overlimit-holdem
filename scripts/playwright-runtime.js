@@ -16,4 +16,64 @@ function chromiumLaunchOptions(overrides = {}) {
   return executablePath ? { ...overrides, executablePath } : { ...overrides };
 }
 
-module.exports = { chromiumLaunchOptions, findChromiumExecutable };
+function pinEnUSLocale() {
+  try {
+    const key = "abyss_ui_settings_v2";
+    let stored = {};
+    try {
+      stored = JSON.parse(localStorage.getItem(key) || "{}") || {};
+    } catch (_error) {
+      stored = {};
+    }
+    localStorage.setItem(key, JSON.stringify({
+      ...stored,
+      language: "en-US",
+      languageChosen: true,
+    }));
+  } catch (_error) {
+    // Ignore storage failures in verification browsers.
+  }
+}
+
+function pinZhCNLocale() {
+  try {
+    const key = "abyss_ui_settings_v2";
+    let stored = {};
+    try {
+      stored = JSON.parse(localStorage.getItem(key) || "{}") || {};
+    } catch (_error) {
+      stored = {};
+    }
+    localStorage.setItem(key, JSON.stringify({
+      ...stored,
+      language: "zh-CN",
+      languageChosen: true,
+    }));
+  } catch (_error) {
+    // Ignore storage failures in verification browsers.
+  }
+}
+
+function pinEnUSLocaleUnlessChosen() {
+  try {
+    const key = "abyss_ui_settings_v2";
+    let stored = {};
+    try {
+      stored = JSON.parse(localStorage.getItem(key) || "{}") || {};
+    } catch (_error) {
+      stored = {};
+    }
+    if (stored.languageChosen === true && (stored.language === "zh-CN" || stored.language === "en-US")) {
+      return;
+    }
+    localStorage.setItem(key, JSON.stringify({
+      ...stored,
+      language: "en-US",
+      languageChosen: true,
+    }));
+  } catch (_error) {
+    // Ignore storage failures in verification browsers.
+  }
+}
+
+module.exports = { chromiumLaunchOptions, findChromiumExecutable, pinZhCNLocale, pinEnUSLocale, pinEnUSLocaleUnlessChosen };

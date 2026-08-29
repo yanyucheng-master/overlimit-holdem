@@ -529,6 +529,8 @@ async function auditSkillLabViewport(page, viewport, scenario) {
 async function main() {
   const browser = await chromium.launch(playwrightRuntime.chromiumLaunchOptions({ headless: true }));
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
+  await page.addInitScript(playwrightRuntime.pinZhCNLocale);
+  await page.addInitScript(() => localStorage.setItem("overlimit_quickstart_v1", "seen"));
   const report = [];
 
   await page.goto(BASE + "/?verify=1", { waitUntil: "domcontentloaded" });
@@ -714,6 +716,7 @@ async function main() {
 
   const mobileContext = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const mobilePage = await mobileContext.newPage();
+  await mobilePage.addInitScript(playwrightRuntime.pinZhCNLocale);
   await mobilePage.addInitScript(() => localStorage.setItem("overlimit_quickstart_v1", "seen"));
   await mobilePage.goto(BASE + "/?mobile=1", { waitUntil: "networkidle" });
   await mobilePage.waitForSelector("#screen-auth.active", { timeout: 5000 });

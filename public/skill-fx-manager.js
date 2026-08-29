@@ -22,6 +22,19 @@
     return text.slice(0, 180);
   }
 
+  function localizedSkillName(profile) {
+    const i18n = typeof window !== "undefined" ? window.OverlimitI18n : null;
+    const id = profile && profile.id;
+    const key = id ? "skills." + id + ".name" : "";
+    if (i18n && key && i18n.has(key)) return i18n.t(key);
+    return profile && profile.name ? profile.name : "";
+  }
+
+  function localizedSkillKicker(profile) {
+    const name = localizedSkillName(profile);
+    return name ? String(name).toUpperCase() : cleanToken(profile && profile.english);
+  }
+
   function explicitSkillFxKey(event) {
     if (!event) return "";
     const eventId = cleanToken(event.eventId);
@@ -425,8 +438,8 @@
       node.dataset.identity = revealIdentity ? "revealed" : "result-only";
       node.dataset.caption = event.stageCaption === false ? "hidden" : "visible";
       caption.append(
-        makeAtom("strong", "skill-effect-title", revealIdentity ? profile.name : cleanToken(event.resultTitle || profile.resultLabel)),
-        makeAtom("span", "skill-effect-kicker", revealIdentity ? profile.english : (event.resultOnly ? "PUBLIC RESULT" : "TACTICAL RESULT")),
+        makeAtom("strong", "skill-effect-title", revealIdentity ? localizedSkillName(profile) : cleanToken(event.resultTitle || profile.resultLabel)),
+        makeAtom("span", "skill-effect-kicker", revealIdentity ? localizedSkillKicker(profile) : (event.resultOnly ? "PUBLIC RESULT" : "TACTICAL RESULT")),
         makeAtom("em", "skill-effect-result", cleanToken(event.effectLabel || event.safeMessage || profile.resultLabel))
       );
       if (compositeSkills.length > 1) {
@@ -457,7 +470,7 @@
         this.privateLayer.style.setProperty("--skfx-dur", `${broadcastMs}ms`);
         const name = this.privateLayer.querySelector(".skfx-secret-name");
         const message = this.privateLayer.querySelector(".skfx-secret-msg");
-        if (name) name.textContent = profile.name;
+        if (name) name.textContent = localizedSkillName(profile);
         if (message) message.textContent = cleanToken(event.safeMessage || profile.resultLabel);
         this.privateLayer.classList.remove("hidden");
         return;
@@ -475,8 +488,12 @@
       const tag = this.broadcastLayer.querySelector(".skfx-tag");
       if (who) who.textContent = event.resultOnly
         ? "PUBLIC RESULT"
-        : cleanToken(event.casterLabel || (event.casterId === event.viewerId ? "你" : "对手"));
-      if (name) name.textContent = event.resultOnly ? profile.resultLabel : "战术已执行";
+        : cleanToken(event.casterLabel || (event.casterId === event.viewerId
+          ? (window.OverlimitI18n ? window.OverlimitI18n.t("fx.you") : "YOU")
+          : (window.OverlimitI18n ? window.OverlimitI18n.t("fx.opponent") : "OPPONENT")));
+      if (name) name.textContent = event.resultOnly
+        ? profile.resultLabel
+        : (event.executedLabel || (window.OverlimitI18n ? window.OverlimitI18n.t("fx.executed") : "TACTICAL EXECUTED"));
       if (tag) tag.textContent = cleanToken(event.effectLabel || event.safeMessage || profile.resultLabel);
       this.broadcastLayer.classList.remove("hidden");
       if (typeof document !== "undefined") document.body?.classList.add("skill-fx-public-on");
