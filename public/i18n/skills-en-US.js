@@ -8,9 +8,9 @@
     skills: {
       DEEP_BREATH: {
         name: "Deep Breath",
-        catalogSummary: "No more skills this hand; refund 2 Energy at the end",
+        catalogSummary: "No more skills this hand; recover 2 Energy at the end",
         shortDescription: "Spend 1 Energy to pause. If you use no other skills this hand, you recover 2 Energy at the end — a net gain of 1.",
-        expertDescription: "Active / Secret. Load 1, cost 1, at most once per hand, only on your legal betting action turn, Pre-Flop through River. Pay 1 Energy on use; if no further skill events of your own occur until the hand ends, recover 2 Energy. There is no current-Energy ceiling requirement beyond the actual Energy Cap. A normal Fold does not cancel the refund; if Deep Breath is followed by no other skill events and you Fold: recover 2, then also gain the losing-hand natural +1. Can be Countered; a cost-1 failed skill refunds 0 after Recycle rounding. Fairness clears the pending refund and suppresses all end-of-hand Energy recovery this hand."
+        expertDescription: "Active / Secret. Load 1, cost 1, at most once per hand, only on your legal betting action turn, Pre-Flop through River. Pay 1 Energy on use; if no further skill events of your own occur until the hand ends, recover 2 Energy. There is no current-Energy ceiling requirement beyond the actual Energy Cap. A normal Fold does not cancel the recovery; if Deep Breath is followed by no other skill events and you Fold: recover 2, then also gain the losing-hand natural +1. Can be Countered; a cost-1 failed skill refunds 0 after Recycle rounding. Fairness clears the pending recovery and suppresses all end-of-hand Energy recovery this hand."
       },
       RECYCLE: {
         name: "Recycle",
@@ -26,8 +26,8 @@
       },
       DESPERATION: {
         name: "Desperation",
-        catalogSummary: "Start ≤ 200 chips: win payout ×3 and refund 1 Energy",
-        shortDescription: "If you start a hand with 200 chips or fewer, a win triples net chip winnings and refunds 1 extra Energy.",
+        catalogSummary: "Start ≤ 200 chips: win payout ×3 and recover 1 Energy",
+        shortDescription: "If you start a hand with 200 chips or fewer, a win triples net chip winnings and recovers 1 extra Energy.",
         expertDescription: "Passive. Load 2, cost 0. At the start of each hand, check the start-of-hand chip snapshot: if your chips <= 200, this hand automatically enters Desperation. Do not trigger from current chips, ALL IN, or being behind mid-hand. If you uniquely win: standard net chip winnings ×3, plus recover 1 Energy. A split pot does not trigger the multiplier."
       },
       BLOOD_BATTLE: {
@@ -68,9 +68,9 @@
       },
       FAIRNESS: {
         name: "Fairness",
-        catalogSummary: "Clears unfinished skill states and locks skills and Energy refunds this hand",
-        shortDescription: "Immediately clear unfinished skill states on both sides. Nobody may use skills for the rest of the hand, and end-of-hand Energy refunds are cancelled. Completed card swaps do not revert.",
-        expertDescription: "Active / Public / global control. Load 4, cost 3, at most once per hand, on any of your legal betting action turns; it does not have to be the first skill this hand. Cannot be stopped by Counter. On success, immediately clear both players' current persistent, planted, pending, and unfinished skill states (including Blood Battle, Defense, Intimidation, Top Secret protection, pending Desperation, Counter traps, pending Deep Breath refunds, Nullification, unpaid Loan debt, Retreat, untriggered Probe, and Disguise); for the rest of this hand neither player may launch Active Skills or produce new Passive Skill events; all end-of-hand Energy recovery this hand is cancelled, including the loser natural +1, Deep Breath refund, Desperation refund, Fortune resource refund, and other skill end-of-hand refunds. Fairness is not a time rewind: it cannot restore already swapped cards, already changed decks, already seen information, already moved chips, or already completed Endgame direct chip transfers. Nullification is a persistent settlement state, so Fairness can cancel it. After Fairness succeeds, Endgame cannot be launched this hand. Fairness can still clear Loan pending repayment and residual debt, but does not roll back chips or Energy already obtained. If it actually clears any Loan debt amount greater than 0, that player's Loan credit is settled by the official Loan rules: normal credit becomes restricted; already restricted stays restricted; defaulted leaves full lockout and becomes restricted, not restored to normal. If no Loan debt exists at launch, credit status must not change."
+        catalogSummary: "Clears unfinished skill states and locks skills and Energy recovery this hand",
+        shortDescription: "Immediately clear unfinished skill states on both sides. Nobody may use skills for the rest of the hand, and end-of-hand Energy recovery is cancelled. Completed card swaps do not revert.",
+        expertDescription: "Active / Public / global control. Load 4, cost 3, at most once per hand, on any of your legal betting action turns; it does not have to be the first skill this hand. Cannot be stopped by Counter. On success, immediately clear both players' current persistent, planted, pending, and unfinished skill states (including Blood Battle, Defense, Intimidation, Top Secret protection, pending Desperation, Counter traps, pending Deep Breath recovery, Nullification, unpaid Loan debt, Retreat, untriggered Probe, and Disguise); for the rest of this hand neither player may launch Active Skills or produce new Passive Skill events; all end-of-hand Energy recovery this hand is cancelled, including the loser natural +1, Deep Breath recovery, Desperation recovery, Fortune resource recovery, and other skill end-of-hand recovery. Fairness is not a time rewind: it cannot restore already swapped cards, already changed decks, already seen information, already moved chips, or already completed Endgame direct chip transfers. Nullification is a persistent settlement state, so Fairness can cancel it. After Fairness succeeds, Endgame cannot be launched this hand. Fairness can still clear Loan pending repayment and residual debt, but does not roll back chips or Energy already obtained. If it actually clears any Loan debt amount greater than 0, that player's Loan credit is settled by the official Loan rules: normal credit becomes restricted; already restricted stays restricted; defaulted leaves full lockout and becomes restricted, not restored to normal. If no Loan debt exists at launch, credit status must not change."
       },
       CHEAT: {
         name: "Cheat",
@@ -99,7 +99,7 @@
       FORTUNE: {
         name: "Fortune",
         catalogSummary: "Chance to auto-spend Energy for better cards; likelier when behind",
-        shortDescription: "Luck may quietly improve your Hole Cards or the next Community Card, or refund 1 Energy at the end. Card changes cost 3 Energy and may go negative.",
+        shortDescription: "Luck may quietly improve your Hole Cards or the next Community Card, or recover 1 Energy at the end. Card changes cost 3 Energy and may go negative.",
         expertDescription: "Passive / fully Secret / luck system. Load 5. Card-rewrite Fortune costs 3 Energy. It auto-checks at several predefined luck nodes; chance is affected by both chip disadvantage and current Energy. Current recommended soft-v1, status FROZEN_V1 (2026-08-20). If Hole Cards are already strong enough, hole-improving Fortune does not fire; if they are weak it may auto-improve. The player cannot choose whether it triggers, which card, or the replacement. You see original → Fortune → new card; the opponent does not know. Only an actual card change pays. Community Card Fortune may only judge what is better for you from your Hole Cards, current Community Cards, and your own state — it must not read the opponent's Hole Cards. Resource Fortune, if it succeeds at hand end, recovers 1 extra Energy, costs no Energy, and cannot recursively trigger another Fortune. Fortune may take Energy down to -4; a paid Fortune that would go below -4 cannot occur. While Energy is negative, no other skill may be launched or auto-trigger a new Passive Skill event except Fortune; completed old effects are not rolled back."
       },
       DESTINY: {

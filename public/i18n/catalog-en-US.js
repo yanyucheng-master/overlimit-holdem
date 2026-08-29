@@ -881,7 +881,7 @@
       galleryRevealed: "Revealed",
       galleryFailed: "Failed",
       galleryCountered: "Countered",
-      galleryRefunded: "Refunded",
+      galleryRefunded: "Energy Returned",
       galleryDefault: "Profile default",
       gallerySelfState: "Your state",
       galleryOppState: "Opponent state",
@@ -895,7 +895,7 @@
       galleryEnergy: "Energy",
       galleryBoardCards: "Community Cards",
       galleryHole: "Hole Cards",
-      galleryRefund: "Refund result",
+      galleryRefund: "Energy return result",
       galleryStageAria: "Skill FX preview stage",
       gallerySuppressed: "SUPPRESSED // This view cannot see this event",
       galleryProtocol: "Protocol template / SHOWDOWN PROTOCOL · FX3"

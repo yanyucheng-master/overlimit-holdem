@@ -1440,12 +1440,33 @@ body[data-screen="game"] .skill-fx-gallery-launcher {
 
 @media (max-width: 560px) {
   .skill-fx-gallery-panel {
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
     width: calc(100vw - 16px);
     height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 24px);
+    overflow: hidden;
   }
-  .skill-fx-gallery-workspace { display: flex; flex-direction: column; }
-  .skill-fx-gallery-stage { order: -1; flex: 0 0 420px; min-height: 420px; }
-  .skill-fx-gallery-controls { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .skill-fx-gallery-workspace {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    height: auto;
+    overflow: hidden;
+  }
+  .skill-fx-gallery-stage {
+    order: -1;
+    flex: 0 0 clamp(300px, 55%, 420px);
+    min-height: 300px;
+  }
+  .skill-fx-gallery-controls {
+    flex: 1 1 0;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+  }
   .skill-fx-gallery-controls label { grid-template-columns: 1fr; align-content: start; gap: 4px; }
   .skill-fx-gallery-actions,
   .skill-fx-gallery-status-text { grid-column: 1 / -1; }

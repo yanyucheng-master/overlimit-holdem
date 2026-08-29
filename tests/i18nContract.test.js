@@ -1,6 +1,7 @@
 const path = require("path");
 
 require(path.join(__dirname, "..", "public", "i18n", "index.js"));
+const incoming = require(path.join(__dirname, "..", "public", "i18n", "incoming-map.js"));
 
 const i18n = globalThis.OverlimitI18n;
 const SKILL_IDS = [
@@ -113,6 +114,30 @@ describe("i18n contract", () => {
     expect(i18n.t("intel.feedTitle")).toBe("Tactical Feed");
     expect(i18n.t("modal.loadoutLine")).toBe("{name}: {skills}");
     expect(i18n.t("game.botName")).toBe("Overlimit AI");
+  });
+
+  test("Energy 恢复与退款语义保持区分", () => {
+    i18n.setLocale("en-US", { silent: true });
+    expect(i18n.t("skills.DEEP_BREATH.catalogSummary")).toContain("recover 2 Energy");
+    expect(i18n.t("skills.DEEP_BREATH.expertDescription")).toContain("pending recovery");
+    expect(i18n.t("skills.DESPERATION.shortDescription")).toContain("recovers 1 extra Energy");
+    expect(i18n.t("skills.FORTUNE.shortDescription")).toContain("recover 1 Energy");
+    expect(i18n.t("skills.FAIRNESS.shortDescription")).toContain("Energy recovery is cancelled");
+    expect(i18n.t("skills.RECYCLE.shortDescription")).toContain("refunded at half price");
+    expect(i18n.t("skills.COUNTER.expertDescription")).toContain("refund 1 Energy");
+  });
+
+  test("incoming message 规则保留玩家昵称并只本地化系统术语", () => {
+    i18n.setLocale("en-US", { silent: true });
+    const t = i18n.t.bind(i18n);
+    expect(incoming.localize("玩家 同花王 连接中断", t, "en-US"))
+      .toBe("Player 同花王 disconnected");
+    expect(incoming.localize("同花王 发动「深呼吸」", t, "en-US"))
+      .toBe("同花王 launched Deep Breath");
+    expect(incoming.localize("同花王 宣告「公平」：清除未完成技能状态，并封锁后续技能与结束恢复", t, "en-US"))
+      .toBe("同花王 declared Fairness: unfinished skill states cleared; later skills and end-of-hand recovery locked");
+    expect(incoming.localize("同花王 发动「深呼吸」", t, "zh-CN"))
+      .toBe("同花王 发动「深呼吸」");
   });
 
   test("浏览器首选语言检测", () => {

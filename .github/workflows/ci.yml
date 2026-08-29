@@ -54,5 +54,6 @@ jobs:
           npm run verify:ui
           npm run verify:interactions
           npm run verify:online
+          npm run verify:i18n
       - run: node scripts/simulate-chip-economy.js 80
       - run: node scripts/simulate-overdrive.js 100

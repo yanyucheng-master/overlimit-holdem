@@ -7,6 +7,11 @@ const BASE = process.env.BASE_URL || "http://127.0.0.1:3002";
 const CAPTURE_DIR = process.env.SKILL_FX_CAPTURE_DIR || "";
 const EXPECTED_SKILLS = 23;
 const EXPECTED_OPTIONS = EXPECTED_SKILLS + 1;
+const MOBILE_GALLERY_VIEWPORTS = [
+  { width: 320, height: 700 },
+  { width: 390, height: 844 },
+  { width: 430, height: 932 },
+];
 const REPRESENTATIVE_CAPTURES = [
   "DEEP_BREATH", "PROBE", "RECYCLE", "ALERT", "FAIRNESS", "INTIMIDATION",
   "BLOOD_BATTLE", "CHEAT", "NULLIFICATION", "DESTINY", "RESTART", "DISGUISE", "DEAD_END",
@@ -107,6 +112,74 @@ function auditMatchesAnchors(audit) {
     && isNear(audit.stageY, audit.expectedStageY)
     && isNear(audit.targetX, audit.expectedTargetX)
     && isNear(audit.targetY, audit.expectedTargetY);
+}
+
+async function auditMobileGallery(page, viewport) {
+  await page.setViewportSize(viewport);
+  await page.waitForTimeout(120);
+  await page.evaluate(() => {
+    const panel = document.querySelector(".skill-fx-gallery-panel");
+    const controls = document.getElementById("skill-fx-gallery-controls");
+    if (panel) panel.scrollTop = 0;
+    if (controls) controls.scrollTop = 0;
+  });
+  const instance = await selectAndReplay(page, "DESTINY");
+  return instance.evaluate((node, expectedViewport) => {
+    const modalNode = document.getElementById("skill-fx-gallery-modal");
+    const panelNode = document.querySelector(".skill-fx-gallery-panel");
+    const workspaceNode = document.querySelector(".skill-fx-gallery-workspace");
+    const stageNode = document.getElementById("skill-fx-gallery-stage");
+    const controlsNode = document.getElementById("skill-fx-gallery-controls");
+    const replayNode = document.getElementById("btn-replay-skill-fx");
+    const captionNode = node.querySelector(".skill-effect-caption");
+    const coreNode = node.querySelector(".skill-effect-core");
+    const panel = panelNode.getBoundingClientRect();
+    const stage = stageNode.getBoundingClientRect();
+    const controls = controlsNode.getBoundingClientRect();
+    const replay = replayNode.getBoundingClientRect();
+    const caption = captionNode?.getBoundingClientRect();
+    const stageAnchor = document.querySelector('[data-fx-gallery-anchor="stageCenter"]').getBoundingClientRect();
+    const stageY = Number.parseFloat(node.style.getPropertyValue("--fx-stage-y"));
+    const layer = node.parentElement.getBoundingClientRect();
+    const visibleTop = Math.max(0, panel.top);
+    const visibleBottom = Math.min(innerHeight, panel.bottom);
+    const rect = (value) => ({
+      top: value.top,
+      right: value.right,
+      bottom: value.bottom,
+      left: value.left,
+      width: value.width,
+      height: value.height,
+    });
+    const visibleStageHeight = Math.max(0, Math.min(stage.bottom, visibleBottom) - Math.max(stage.top, visibleTop));
+    return {
+      viewport: { width: innerWidth, height: innerHeight, expected: expectedViewport },
+      panelInsideViewport: panel.left >= -1 && panel.right <= innerWidth + 1 && panel.top >= -1 && panel.bottom <= innerHeight + 1,
+      stageInsidePanel: stage.left >= panel.left - 1 && stage.right <= panel.right + 1,
+      stageVerticallyVisible: stage.top >= visibleTop - 1 && stage.bottom <= visibleBottom + 1,
+      stageVisibleRatio: stage.height > 0 ? visibleStageHeight / stage.height : 0,
+      captionVerticallyVisible: !caption || (caption.top >= visibleTop - 1 && caption.bottom <= visibleBottom + 1),
+      pageHorizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+      modalOverflowX: getComputedStyle(modalNode).overflowX,
+      panelOverflowX: getComputedStyle(panelNode).overflowX,
+      panelOverflowY: getComputedStyle(panelNode).overflowY,
+      replayUsable: replay.height >= 40 && replay.top >= controls.top - 1 && replay.bottom <= controls.bottom + 1,
+      stageCentral: Number.isFinite(stageY) && Math.abs(stageY - (stageAnchor.top + stageAnchor.height / 2 - layer.top)) <= 3,
+      coreWidth: coreNode.getBoundingClientRect().width,
+      documentScrollTop: document.documentElement.scrollTop,
+      modalScrollTop: modalNode.scrollTop,
+      panelScrollTop: panelNode.scrollTop,
+      controlsScrollTop: controlsNode.scrollTop,
+      rects: {
+        panel: rect(panel),
+        workspace: rect(workspaceNode.getBoundingClientRect()),
+        stage: rect(stage),
+        controls: rect(controls),
+        replay: rect(replay),
+        caption: caption ? rect(caption) : null,
+      },
+    };
+  }, viewport);
 }
 
 async function main() {
@@ -451,30 +524,13 @@ async function main() {
     captures.push(refundCapturePath);
   }
 
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.waitForTimeout(120);
-  const mobileInstance = await selectAndReplay(page, "DESTINY");
-  const mobile = await mobileInstance.evaluate((node) => {
-    const modalNode = document.getElementById("skill-fx-gallery-modal");
-    const panelNode = document.querySelector(".skill-fx-gallery-panel");
-    const panel = panelNode.getBoundingClientRect();
-    const stage = document.getElementById("skill-fx-gallery-stage").getBoundingClientRect();
-    const stageAnchor = document.querySelector('[data-fx-gallery-anchor="stageCenter"]').getBoundingClientRect();
-    const stageY = Number.parseFloat(node.style.getPropertyValue("--fx-stage-y"));
-    const layer = node.parentElement.getBoundingClientRect();
-    return {
-      panelInsideViewport: panel.left >= -1 && panel.right <= innerWidth + 1 && panel.top >= -1 && panel.bottom <= innerHeight + 1,
-      stageInsidePanel: stage.left >= panel.left - 1 && stage.right <= panel.right + 1,
-      stageVerticallyVisible: stage.top >= panel.top - 1 && stage.bottom <= panel.bottom + 1,
-      pageHorizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
-      modalOverflowX: getComputedStyle(modalNode).overflowX,
-      panelOverflowX: getComputedStyle(panelNode).overflowX,
-      replayUsable: document.getElementById("btn-replay-skill-fx").getBoundingClientRect().height >= 40,
-      stageCentral: Number.isFinite(stageY) && Math.abs(stageY - (stageAnchor.top + stageAnchor.height / 2 - layer.top)) <= 3,
-      coreWidth: node.querySelector(".skill-effect-core").getBoundingClientRect().width,
-    };
-  });
+  const mobileViewports = [];
+  for (const viewport of MOBILE_GALLERY_VIEWPORTS) {
+    mobileViewports.push(await auditMobileGallery(page, viewport));
+  }
+  const mobile = mobileViewports.find((entry) => entry.viewport.width === 390) || mobileViewports[0];
   if (CAPTURE_DIR) {
+    await page.setViewportSize({ width: 390, height: 844 });
     const mobilePath = path.join(CAPTURE_DIR, "mobile-gallery.png");
     await page.locator("#skill-fx-gallery-stage").scrollIntoViewIfNeeded();
     await page.evaluate(() => window.OverlimitSkillFxGallery.replay());
@@ -545,10 +601,14 @@ async function main() {
   if (!guides.stageControl || !guides.targetControl || Number(guides.stageVisible) < .5 || Number(guides.targetVisible) < .5) failures.push("Gallery stage/target guides are unavailable");
   if (Object.values(pointerSafety).some((value) => value !== "none")) failures.push("an FX layer blocks pointer input");
   if (orphanCleanup.effects || orphanCleanup.states) failures.push("manager clear left orphan FX nodes");
-  if (!mobile.panelInsideViewport || !mobile.stageInsidePanel || !mobile.stageVerticallyVisible
-    || mobile.pageHorizontalOverflow || mobile.modalOverflowX !== "hidden" || mobile.panelOverflowX !== "hidden"
-    || !mobile.replayUsable || !mobile.stageCentral
-    || mobile.coreWidth > 390 * .89) failures.push("mobile gallery or central stage contract failed");
+  const invalidMobileViewports = mobileViewports.filter((entry) => (
+    !entry.panelInsideViewport || !entry.stageInsidePanel || !entry.stageVerticallyVisible
+    || entry.stageVisibleRatio < .999 || !entry.captionVerticallyVisible
+    || entry.pageHorizontalOverflow || entry.modalOverflowX !== "hidden" || entry.panelOverflowX !== "hidden"
+    || !entry.replayUsable || !entry.stageCentral || entry.panelScrollTop > 1
+    || entry.coreWidth > entry.viewport.width * .89
+  ));
+  if (invalidMobileViewports.length) failures.push(`mobile gallery or central stage contract failed: ${invalidMobileViewports.map((entry) => `${entry.viewport.width}x${entry.viewport.height}`).join(", ")}`);
   if (consoleErrors.length) failures.push("browser console errors");
   if (requestErrors.length) failures.push("same-origin resource requests failed");
 
@@ -565,7 +625,7 @@ async function main() {
       optionCount: optionIds.length, effects, stageAudits, alertPulse, deepBreathRefund,
       secrecy, resultOnly, dedupeAndPriority, eventAdmission, directorInteractions,
       stateMarkers, lowPerformance, reducedMotion, captionless, graphicalSignatures, guides,
-      pointerSafety, orphanCleanup, mobile, captures,
+      pointerSafety, orphanCleanup, mobile, mobileViewports, captures,
     },
   }, null, 2));
   if (failures.length) process.exit(1);
