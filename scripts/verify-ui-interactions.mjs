@@ -1213,65 +1213,185 @@ async function competitiveTableAudit(page, viewport) {
   return audit;
 }
 
+function auditButtonHitTargetsInPage({ scopeSelector = null, targetSelector = null, containerSelector = null }) {
+  const scope = scopeSelector ? document.querySelector(scopeSelector) : document;
+  const target = targetSelector ? document.querySelector(targetSelector) : null;
+  const buttons = targetSelector ? (target ? [target] : []) : [...(scope || document).querySelectorAll("button")];
+  const container = containerSelector ? document.querySelector(containerSelector) : null;
+  const failures = [];
+  let checked = 0;
+  let targetAudit = targetSelector ? { found: false, selector: targetSelector } : null;
+  const clipsAxis = (value) => /^(?:auto|scroll|hidden|clip|overlay)$/.test(value);
+  const round = (value) => Math.round(Number(value || 0) * 10) / 10;
+  const serializeRect = (rect) => rect ? {
+    left: round(rect.left),
+    right: round(rect.right),
+    top: round(rect.top),
+    bottom: round(rect.bottom),
+    width: round(rect.width),
+    height: round(rect.height),
+  } : null;
+
+  buttons.forEach((button) => {
+    const rect = button.getBoundingClientRect();
+    const style = getComputedStyle(button);
+    const eligible = !button.disabled &&
+      style.display !== "none" &&
+      style.visibility !== "hidden" &&
+      rect.width >= 1 &&
+      rect.height >= 1;
+    let left = Math.max(0, rect.left);
+    let right = Math.min(innerWidth, rect.right);
+    let top = Math.max(0, rect.top);
+    let bottom = Math.min(innerHeight, rect.bottom);
+    let ancestor = button.parentElement;
+    while (ancestor) {
+      const ancestorStyle = getComputedStyle(ancestor);
+      const ancestorRect = ancestor.getBoundingClientRect();
+      if (clipsAxis(ancestorStyle.overflowX)) {
+        left = Math.max(left, ancestorRect.left);
+        right = Math.min(right, ancestorRect.right);
+      }
+      if (clipsAxis(ancestorStyle.overflowY)) {
+        top = Math.max(top, ancestorRect.top);
+        bottom = Math.min(bottom, ancestorRect.bottom);
+      }
+      ancestor = ancestor.parentElement;
+    }
+    const visibleWidth = Math.max(0, right - left);
+    const visibleHeight = Math.max(0, bottom - top);
+    const visible = eligible && visibleWidth >= 1 && visibleHeight >= 1;
+    const x = Math.max(0, Math.min(innerWidth - 1, left + visibleWidth / 2));
+    const y = Math.max(0, Math.min(innerHeight - 1, top + visibleHeight / 2));
+    const hit = visible ? document.elementFromPoint(x, y) : null;
+    const centered = Boolean(hit && hit.closest("button") === button);
+    const containerRect = container?.getBoundingClientRect() || null;
+    const insideContainer = !containerSelector || Boolean(container && container.contains(button));
+    const fullyInsideContainer = !containerSelector || Boolean(
+      insideContainer &&
+      containerRect &&
+      rect.left >= containerRect.left - 1 &&
+      rect.right <= containerRect.right + 1 &&
+      rect.top >= containerRect.top - 1 &&
+      rect.bottom <= containerRect.bottom + 1
+    );
+    const audit = {
+      found: true,
+      selector: targetSelector || null,
+      id: button.id || null,
+      label: button.getAttribute("aria-label") || button.textContent.trim().replace(/\s+/g, " "),
+      visible,
+      centered,
+      insideContainer,
+      fullyInsideContainer,
+      rect: serializeRect(rect),
+      visibleRect: {
+        left: round(left),
+        right: round(right),
+        top: round(top),
+        bottom: round(bottom),
+        width: round(visibleWidth),
+        height: round(visibleHeight),
+      },
+      containerRect: serializeRect(containerRect),
+      scrollTop: container ? round(container.scrollTop) : null,
+      hit: hit ? hit.id || String(hit.className || "") || hit.tagName : null,
+      x: round(x),
+      y: round(y),
+    };
+    if (targetSelector) targetAudit = audit;
+    if (!visible) return;
+    checked += 1;
+    if (!centered) failures.push(audit);
+  });
+  return { checked, failures, target: targetAudit };
+}
+
 async function buttonHitAudit(page, scopeSelector) {
-  return page.evaluate((scopeSelector) => {
-    const scope = document.querySelector(scopeSelector) || document;
-    const failures = [];
-    let checked = 0;
-    const clipsAxis = (value) => /^(?:auto|scroll|hidden|clip|overlay)$/.test(value);
-    [...scope.querySelectorAll("button")].forEach((button) => {
+  const result = await page.evaluate(auditButtonHitTargetsInPage, { scopeSelector });
+  return { checked: result.checked, failures: result.failures };
+}
+
+async function readButtonHitTarget(page, targetSelector, containerSelector) {
+  const result = await page.evaluate(auditButtonHitTargetsInPage, { targetSelector, containerSelector });
+  return result.target;
+}
+
+async function waitForTargetGeometryStable(page, targetSelector, containerSelector) {
+  const locator = page.locator(targetSelector);
+  await locator.waitFor({ state: "visible" });
+  await locator.scrollIntoViewIfNeeded();
+  const stability = await locator.evaluate((button, requiredContainerSelector) => new Promise((resolve) => {
+    const container = requiredContainerSelector ? document.querySelector(requiredContainerSelector) : null;
+    const sample = () => {
       const rect = button.getBoundingClientRect();
-      const style = getComputedStyle(button);
-      if (
-        button.disabled ||
-        style.display === "none" ||
-        style.visibility === "hidden" ||
-        rect.width < 1 ||
-        rect.height < 1 ||
-        rect.bottom <= 0 ||
-        rect.top >= innerHeight ||
-        rect.right <= 0 ||
-        rect.left >= innerWidth
-      ) {
-        return;
-      }
-      let left = Math.max(0, rect.left);
-      let right = Math.min(innerWidth, rect.right);
-      let top = Math.max(0, rect.top);
-      let bottom = Math.min(innerHeight, rect.bottom);
-      let ancestor = button.parentElement;
-      while (ancestor) {
-        const ancestorStyle = getComputedStyle(ancestor);
-        const ancestorRect = ancestor.getBoundingClientRect();
-        if (clipsAxis(ancestorStyle.overflowX)) {
-          left = Math.max(left, ancestorRect.left);
-          right = Math.min(right, ancestorRect.right);
+      const containerRect = container?.getBoundingClientRect();
+      return [
+        rect.left, rect.top, rect.width, rect.height,
+        containerRect?.left || 0, containerRect?.top || 0,
+        containerRect?.width || 0, containerRect?.height || 0,
+        container?.scrollTop || 0,
+      ];
+    };
+    const close = (left, right) => Math.abs(left - right) <= 0.25;
+    let previous = sample();
+    let stableFrames = 0;
+    let frameCount = 0;
+    const onFrame = () => {
+      requestAnimationFrame(() => {
+        const current = sample();
+        stableFrames = current.every((value, index) => close(value, previous[index]))
+          ? stableFrames + 1
+          : 0;
+        previous = current;
+        frameCount += 1;
+        if (stableFrames >= 2 || frameCount >= 90) {
+          resolve({ stable: stableFrames >= 2, frameCount });
+          return;
         }
-        if (clipsAxis(ancestorStyle.overflowY)) {
-          top = Math.max(top, ancestorRect.top);
-          bottom = Math.min(bottom, ancestorRect.bottom);
-        }
-        ancestor = ancestor.parentElement;
-      }
-      // A button outside a scroll/clip viewport is not currently interactive;
-      // auditing its unclipped center creates false obstruction reports.
-      if (right - left < 1 || bottom - top < 1) return;
-      checked += 1;
-      const x = Math.max(0, Math.min(innerWidth - 1, left + (right - left) / 2));
-      const y = Math.max(0, Math.min(innerHeight - 1, top + (bottom - top) / 2));
-      const hit = document.elementFromPoint(x, y);
-      if (!hit || hit.closest("button") !== button) {
-        failures.push({
-          id: button.id || null,
-          label: button.getAttribute("aria-label") || button.textContent.trim().replace(/\s+/g, " "),
-          hit: hit ? hit.id || hit.className || hit.tagName : null,
-          x: Math.round(x),
-          y: Math.round(y),
-        });
-      }
-    });
-    return { checked, failures };
-  }, scopeSelector);
+        onFrame();
+      });
+    };
+    onFrame();
+  }), containerSelector);
+  const hitTarget = await readButtonHitTarget(page, targetSelector, containerSelector);
+  if (
+    !stability.stable ||
+    !hitTarget?.visible ||
+    !hitTarget.centered ||
+    !hitTarget.insideContainer ||
+    !hitTarget.fullyInsideContainer
+  ) {
+    throw new Error(`Target is not user-clickable after scrolling: ${targetSelector} ${JSON.stringify({ stability, hitTarget })}`);
+  }
+  return { ...hitTarget, stability };
+}
+
+async function scrollContainerToEnd(page, containerSelector) {
+  await page.evaluate((selector) => {
+    const container = document.querySelector(selector);
+    if (container) container.scrollTop = container.scrollHeight;
+  }, containerSelector);
+  await page.waitForFunction((selector) => {
+    const container = document.querySelector(selector);
+    return Boolean(
+      container &&
+      container.scrollTop > 0 &&
+      Math.abs(container.scrollTop - (container.scrollHeight - container.clientHeight)) <= 1
+    );
+  }, containerSelector);
+}
+
+async function clickUserTarget(page, targetSelector, containerSelector, expectedPressed = null) {
+  const before = await readButtonHitTarget(page, targetSelector, containerSelector);
+  const after = await waitForTargetGeometryStable(page, targetSelector, containerSelector);
+  await page.locator(targetSelector).click();
+  if (expectedPressed !== null) {
+    await page.waitForFunction(({ selector, pressed }) => (
+      document.querySelector(selector)?.getAttribute("aria-pressed") === pressed
+    ), { selector: targetSelector, pressed: expectedPressed });
+  }
+  return { before, after };
 }
 
 async function skillLabSelectionState(page) {
@@ -1713,6 +1833,35 @@ async function main() {
   }));
   await page.click("#btn-open-skill-lab");
   await page.waitForSelector("#screen-skill-lab.active");
+  const recycleSelectSelector = '#skill-lab-catalog .skill-card[data-skill-id="RECYCLE"] .skill-card-select';
+  const intimidationDetailSelector = '#skill-lab-catalog .skill-card[data-skill-id="INTIMIDATION"] .skill-zoom-button';
+  await scrollContainerToEnd(page, "#skill-lab-catalog");
+  const recycleHit = await clickUserTarget(
+    page, recycleSelectSelector, "#skill-lab-catalog", "true"
+  );
+  await scrollContainerToEnd(page, "#skill-lab-catalog");
+  const detailHit = await clickUserTarget(page, intimidationDetailSelector, "#skill-lab-catalog");
+  await page.waitForSelector("#skill-preview-modal:not(.hidden)");
+  const detailPreview = await page.evaluate(() => ({
+    visible: !document.getElementById("skill-preview-modal")?.classList.contains("hidden"),
+    title: document.getElementById("skill-preview-title")?.textContent?.trim() || "",
+    recycleSelected: document.querySelector(
+      '#skill-lab-catalog .skill-card[data-skill-id="RECYCLE"] .skill-card-select'
+    )?.getAttribute("aria-pressed") === "true",
+  }));
+  await page.click("#btn-skill-preview-done");
+  await page.waitForSelector("#skill-preview-modal", { state: "hidden" });
+  report.lab.scrolledHitTargets = {
+    recycle: {
+      ...recycleHit,
+      selected: detailPreview.recycleSelected,
+    },
+    detail: {
+      ...detailHit,
+      clicked: detailPreview.visible,
+      title: detailPreview.title,
+    },
+  };
   report.lab.hitAudit = await buttonHitAudit(page, "#screen-skill-lab");
   report.lab.settingsHidden = await page.evaluate(() => {
     const settings = document.getElementById("btn-settings");
@@ -1849,6 +1998,38 @@ async function main() {
       initialRemaining: document.getElementById("skill-choice-selection")?.textContent.trim() || "",
     };
   });
+  const readSuspectSelection = () => page.evaluate(() => ({
+    selectedIds: [...document.querySelectorAll(".dossier-skill-choice.selected")]
+      .map((choice) => choice.dataset.skillId)
+      .filter(Boolean)
+      .sort(),
+    remaining: document.getElementById("skill-choice-selection")?.textContent?.trim() || "",
+  }));
+  const readSuspectSummary = (skillId) => page.evaluate((expectedSkillId) => {
+    const tags = [...document.querySelectorAll("#opponent-intel-slots .opponent-intel-tag")]
+      .map((tag) => ({
+        id: tag.dataset.skillId || "",
+        certainty: tag.dataset.certainty || "",
+        mark: tag.querySelector(".opponent-intel-tag-mark")?.textContent?.trim() || "",
+        name: tag.querySelector(".opponent-intel-tag-name")?.textContent?.trim() || "",
+      }));
+    let persistedIds = [];
+    try {
+      const profiles = JSON.parse(localStorage.getItem("abyss_suspected_skills_v1") || "{}");
+      persistedIds = [...new Set(Object.values(profiles).flat().filter((id) => typeof id === "string"))].sort();
+    } catch (_error) {
+      persistedIds = [];
+    }
+    return {
+      tags,
+      expected: tags.find((tag) => tag.id === expectedSkillId) || null,
+      ariaLabel: document.getElementById("btn-toggle-opponent-intel")?.getAttribute("aria-label") || "",
+      countText: document.getElementById("opponent-intel-count")?.textContent?.trim() || "",
+      persistedIds,
+    };
+  }, skillId);
+
+  await page.setViewportSize({ width: 1280, height: 720 });
   await page.click('#skill-choice-filters [data-skill-filter="resource"]');
   await page.waitForFunction(() => (
     document.querySelector('#skill-choice-filters [data-skill-filter="resource"]')?.getAttribute("aria-pressed") === "true"
@@ -1856,49 +2037,92 @@ async function main() {
   const resourceVisible = await page.locator(
     ".dossier-skill-choice:not(.is-filtered-out)"
   ).count();
-  const firstResourceChoice = page.locator(
-    ".dossier-skill-choice:not(.is-filtered-out):not(:disabled)"
-  ).first();
-  const selectedSkillId = await firstResourceChoice.getAttribute("data-skill-id");
-  await firstResourceChoice.click();
   await page.click('#skill-choice-filters [data-skill-filter="all"]');
-  report.game.suspectPicker.afterFilter = await page.evaluate(({ skillId, resourceCount }) => ({
+  await page.waitForFunction(() => (
+    document.querySelector('#skill-choice-filters [data-skill-filter="all"]')?.getAttribute("aria-pressed") === "true"
+  ));
+  const probeChoiceSelector = '.dossier-skill-choice[data-skill-id="PROBE"]';
+  const probeHit = await clickUserTarget(page, probeChoiceSelector, "#skill-choice-body", "true");
+  await page.click('#skill-choice-filters [data-skill-filter="resource"]');
+  await page.waitForFunction(() => (
+    document.querySelector('#skill-choice-filters [data-skill-filter="resource"]')?.getAttribute("aria-pressed") === "true"
+  ));
+  await page.click('#skill-choice-filters [data-skill-filter="all"]');
+  await page.waitForFunction(() => (
+    document.querySelector('#skill-choice-filters [data-skill-filter="all"]')?.getAttribute("aria-pressed") === "true"
+  ));
+  const probeBeforeSave = await readSuspectSelection();
+  report.game.suspectPicker.afterFilter = await page.evaluate((resourceCount) => ({
     resourceVisible: resourceCount,
     selectedPersisted: document.querySelector(
-      `.dossier-skill-choice[data-skill-id="${skillId}"]`
-    )?.classList.contains("selected") || false,
+      '.dossier-skill-choice[data-skill-id="PROBE"]'
+    )?.getAttribute("aria-pressed") === "true",
     remaining: document.getElementById("skill-choice-selection")?.textContent.trim() || "",
     allActive: document.querySelector(
       '#skill-choice-filters [data-skill-filter="all"]'
     )?.getAttribute("aria-pressed") === "true",
-  }), { skillId: selectedSkillId, resourceCount: resourceVisible });
+  }), resourceVisible);
+  report.game.suspectPicker.afterFilter.hitTarget = probeHit.after;
   await page.click("#btn-skill-choice-confirm");
   await page.waitForSelector("#skill-choice-modal", { state: "hidden" });
-  report.game.suspectPicker.savedSummary = await page.evaluate((skillId) => {
-    const tag = document.querySelector(
-      `#opponent-intel-slots .opponent-intel-tag[data-skill-id="${skillId}"]`
-    );
-    return {
-      foundImmediately: Boolean(tag),
-      certainty: tag?.dataset.certainty || "",
-      name: tag?.querySelector(".opponent-intel-tag-name")?.textContent.trim() || "",
-      mark: tag?.querySelector(".opponent-intel-tag-mark")?.textContent.trim() || "",
-      ariaLabel: document.getElementById("btn-toggle-opponent-intel")?.getAttribute("aria-label") || "",
-    };
-  }, selectedSkillId);
+  const probeSavedSummary = await readSuspectSummary("PROBE");
+
   await page.click("#btn-mark-opponent-skills");
   await page.waitForSelector('#skill-choice-modal[data-variant="dossier"]:not(.hidden)');
-  const savedChoice = page.locator(`.dossier-skill-choice[data-skill-id="${selectedSkillId}"]`);
-  await savedChoice.click();
+  await clickUserTarget(page, probeChoiceSelector, "#skill-choice-body", "false");
+  const counterChoiceSelector = '.dossier-skill-choice[data-skill-id="COUNTER"]';
+  await scrollContainerToEnd(page, "#skill-choice-body");
+  const counterHit = await clickUserTarget(page, counterChoiceSelector, "#skill-choice-body", "true");
+  const counterBeforeSave = await page.evaluate(() => ({
+    selectedIds: [...document.querySelectorAll(".dossier-skill-choice.selected")]
+      .map((choice) => choice.dataset.skillId)
+      .filter(Boolean)
+      .sort(),
+    counterPressed: document.querySelector(
+      '.dossier-skill-choice[data-skill-id="COUNTER"]'
+    )?.getAttribute("aria-pressed") || "",
+    probePressed: document.querySelector(
+      '.dossier-skill-choice[data-skill-id="PROBE"]'
+    )?.getAttribute("aria-pressed") || "",
+    remaining: document.getElementById("skill-choice-selection")?.textContent?.trim() || "",
+  }));
   await page.click("#btn-skill-choice-confirm");
   await page.waitForSelector("#skill-choice-modal", { state: "hidden" });
-  report.game.suspectPicker.deletedSummary = await page.evaluate((skillId) => ({
-    removedImmediately: !document.querySelector(
-      `#opponent-intel-slots .opponent-intel-tag[data-skill-id="${skillId}"]`
-    ),
-    countText: document.getElementById("opponent-intel-count")?.textContent.trim() || "",
-    ariaLabel: document.getElementById("btn-toggle-opponent-intel")?.getAttribute("aria-label") || "",
-  }), selectedSkillId);
+  const counterSavedSummary = await readSuspectSummary("COUNTER");
+
+  await page.click("#btn-mark-opponent-skills");
+  await page.waitForSelector('#skill-choice-modal[data-variant="dossier"]:not(.hidden)');
+  await clickUserTarget(page, counterChoiceSelector, "#skill-choice-body", "false");
+  await page.click("#btn-skill-choice-confirm");
+  await page.waitForSelector("#skill-choice-modal", { state: "hidden" });
+  const replacementCleanup = await readSuspectSummary("COUNTER");
+  report.game.suspectPicker.savedSummary = {
+    foundImmediately: Boolean(probeSavedSummary.expected),
+    certainty: probeSavedSummary.expected?.certainty || "",
+    name: probeSavedSummary.expected?.name || "",
+    mark: probeSavedSummary.expected?.mark || "",
+    ariaLabel: probeSavedSummary.ariaLabel,
+  };
+  report.game.suspectPicker.deletedSummary = {
+    removedImmediately: replacementCleanup.expected === null,
+    countText: replacementCleanup.countText,
+    ariaLabel: replacementCleanup.ariaLabel,
+  };
+  report.game.suspectPicker.userFlow = {
+    probe: {
+      before: probeHit.before,
+      hitTarget: probeHit.after,
+      beforeSave: probeBeforeSave,
+      savedSummary: probeSavedSummary,
+    },
+    replacement: {
+      counterBeforeScroll: counterHit.before,
+      counterAfterScroll: counterHit.after,
+      beforeSave: counterBeforeSave,
+      savedSummary: counterSavedSummary,
+    },
+    cleanup: replacementCleanup,
+  };
   await page.click("#btn-close-opponent-intel");
 
   await page.setViewportSize({ width: 390, height: 844 });
@@ -2249,6 +2473,23 @@ async function main() {
     failures.push("skill lab Escape navigation or modal priority failed");
   }
   if (report.lab.hitAudit.failures.length) failures.push("skill lab button hit targets blocked");
+  if (
+    report.lab.scrolledHitTargets.recycle.before.visible ||
+    !report.lab.scrolledHitTargets.recycle.after.visible ||
+    !report.lab.scrolledHitTargets.recycle.after.centered ||
+    !report.lab.scrolledHitTargets.recycle.after.fullyInsideContainer ||
+    !report.lab.scrolledHitTargets.recycle.after.stability?.stable ||
+    !report.lab.scrolledHitTargets.recycle.selected ||
+    report.lab.scrolledHitTargets.detail.before.visible ||
+    !report.lab.scrolledHitTargets.detail.after.visible ||
+    !report.lab.scrolledHitTargets.detail.after.centered ||
+    !report.lab.scrolledHitTargets.detail.after.fullyInsideContainer ||
+    !report.lab.scrolledHitTargets.detail.after.stability?.stable ||
+    !report.lab.scrolledHitTargets.detail.clicked ||
+    report.lab.scrolledHitTargets.detail.title !== "恐吓"
+  ) {
+    failures.push("skill lab scrolled hit-target verification failed");
+  }
   if (!report.lab.settingsHidden) failures.push("global settings control remains visible in the skill lab");
   if (
     report.lab.filterReset.active !== "resource" ||
@@ -2381,6 +2622,10 @@ async function main() {
     !report.game.suspectPicker.initialRemaining.startsWith("剩余可用 ") ||
     report.game.suspectPicker.afterFilter.resourceVisible <= 0 ||
     report.game.suspectPicker.afterFilter.resourceVisible >= report.game.suspectPicker.initialVisible ||
+    !report.game.suspectPicker.afterFilter.hitTarget.visible ||
+    !report.game.suspectPicker.afterFilter.hitTarget.centered ||
+    !report.game.suspectPicker.afterFilter.hitTarget.fullyInsideContainer ||
+    !report.game.suspectPicker.afterFilter.hitTarget.stability?.stable ||
     !report.game.suspectPicker.afterFilter.selectedPersisted ||
     !report.game.suspectPicker.afterFilter.allActive ||
     remainingAfterSelection !== initialRemaining - 1 ||
@@ -2394,6 +2639,40 @@ async function main() {
     !report.game.suspectPicker.deletedSummary.ariaLabel.includes("完全未知")
   ) {
     failures.push("opponent skill tag filtering, immediate save, or immediate delete failed");
+  }
+  const suspectUserFlow = report.game.suspectPicker.userFlow;
+  if (
+    !suspectUserFlow.probe.hitTarget.visible ||
+    !suspectUserFlow.probe.hitTarget.centered ||
+    !suspectUserFlow.probe.hitTarget.fullyInsideContainer ||
+    !suspectUserFlow.probe.hitTarget.stability?.stable ||
+    JSON.stringify(suspectUserFlow.probe.beforeSave.selectedIds) !== JSON.stringify(["PROBE"]) ||
+    suspectUserFlow.probe.savedSummary.expected?.certainty !== "suspected" ||
+    suspectUserFlow.probe.savedSummary.expected?.mark !== "?" ||
+    suspectUserFlow.probe.savedSummary.expected?.name !== "试探" ||
+    !suspectUserFlow.probe.savedSummary.ariaLabel.includes("推测：试探") ||
+    JSON.stringify(suspectUserFlow.probe.savedSummary.persistedIds) !== JSON.stringify(["PROBE"]) ||
+    suspectUserFlow.replacement.counterBeforeScroll.visible ||
+    !suspectUserFlow.replacement.counterAfterScroll.visible ||
+    !suspectUserFlow.replacement.counterAfterScroll.centered ||
+    !suspectUserFlow.replacement.counterAfterScroll.fullyInsideContainer ||
+    !suspectUserFlow.replacement.counterAfterScroll.stability?.stable ||
+    JSON.stringify(suspectUserFlow.replacement.beforeSave.selectedIds) !== JSON.stringify(["COUNTER"]) ||
+    suspectUserFlow.replacement.beforeSave.counterPressed !== "true" ||
+    suspectUserFlow.replacement.beforeSave.probePressed !== "false" ||
+    suspectUserFlow.replacement.savedSummary.expected?.certainty !== "suspected" ||
+    suspectUserFlow.replacement.savedSummary.expected?.mark !== "?" ||
+    suspectUserFlow.replacement.savedSummary.expected?.name !== "反制" ||
+    suspectUserFlow.replacement.savedSummary.tags.some((tag) => tag.id === "PROBE") ||
+    !suspectUserFlow.replacement.savedSummary.ariaLabel.includes("推测：反制") ||
+    JSON.stringify(suspectUserFlow.replacement.savedSummary.persistedIds) !== JSON.stringify(["COUNTER"]) ||
+    suspectUserFlow.cleanup.expected !== null ||
+    suspectUserFlow.cleanup.tags.length !== 0 ||
+    suspectUserFlow.cleanup.countText !== "完全未知" ||
+    !suspectUserFlow.cleanup.ariaLabel.includes("完全未知") ||
+    suspectUserFlow.cleanup.persistedIds.length !== 0
+  ) {
+    failures.push("opponent intel PROBE-to-COUNTER user-flow verification failed");
   }
   const expectedDossierSequence = "all|intel|attack|defense|resource|edit|protocol|all";
   for (const [surface, audit] of [
