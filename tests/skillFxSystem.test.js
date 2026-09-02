@@ -31,7 +31,8 @@ describe("launch skill FX system contract", () => {
       expect(tier.defaultMs).toBeLessThanOrEqual(tier.max);
       expect(profiles.fxDuration(entry, "high", false)).toBeLessThanOrEqual(tier.max);
       expect(profiles.fxDuration(entry, "low", false)).toBeGreaterThanOrEqual(tier.min);
-      expect(profiles.fxDuration(entry, "high", true)).toBeLessThanOrEqual(360);
+      expect(profiles.fxDuration(entry, "high", true)).toBeGreaterThanOrEqual(300);
+      expect(profiles.fxDuration(entry, "high", true)).toBeLessThanOrEqual(420);
     });
   });
 
@@ -40,18 +41,50 @@ describe("launch skill FX system contract", () => {
     const recycle = profiles.getSkillFxProfile("RECYCLE");
     const probe = profiles.getSkillFxProfile("PROBE");
     const alert = profiles.getSkillFxProfile("ALERT");
-    expect(deepBreath).toMatchObject({ tier: "FX2", durationMs: 680, presentation: "journey" });
-    expect(recycle).toMatchObject({ tier: "FX2", durationMs: 650, presentation: "journey" });
-    expect(probe).toMatchObject({ tier: "FX2", durationMs: 680, presentation: "journey" });
+    expect(deepBreath).toMatchObject({ tier: "FX2", durationMs: 1060, presentation: "journey" });
+    expect(recycle).toMatchObject({ tier: "FX2", durationMs: 1000, presentation: "journey" });
+    expect(probe).toMatchObject({ tier: "FX2", durationMs: 960, presentation: "journey" });
     expect(alert).toMatchObject({ tier: "FX1", presentation: "pulse" });
     [deepBreath, recycle, probe].forEach((profile) => {
       expect(profiles.fxDuration(profile, "high", false)).toBeGreaterThanOrEqual(profiles.JOURNEY_MIN_MS);
       expect(profiles.fxDuration(profile, "low", false)).toBeGreaterThanOrEqual(profiles.JOURNEY_MIN_MS);
     });
-    expect(profiles.fxDuration(deepBreath, "high", false, "refund")).toBe(820);
-    expect(profiles.fxDuration(deepBreath, "low", false, "refund")).toBeGreaterThanOrEqual(750);
-    expect(profiles.fxDuration(deepBreath, "high", true, "refund")).toBeLessThanOrEqual(360);
-    expect(profiles.fxDuration(alert, "high", false)).toBe(460);
+    expect(profiles.fxDuration(deepBreath, "high", false, "refund")).toBe(1100);
+    expect(profiles.fxDuration(deepBreath, "low", false, "refund")).toBeGreaterThanOrEqual(1000);
+    expect(profiles.fxDuration(deepBreath, "high", true, "refund")).toBeLessThanOrEqual(420);
+    expect(profiles.fxDuration(alert, "high", false)).toBe(560);
+  });
+
+  test("FX 3.0 five-beat timelines are monotonic and keep a readable resolve hold", () => {
+    const samples = [
+      ["DEEP_BREATH", 120, 180],
+      ["BLOOD_BATTLE", 170, 240],
+      ["FAIRNESS", 220, 320],
+    ];
+    samples.forEach(([skillId, minHold, maxHold]) => {
+      const timeline = profiles.fxTimeline(profiles.getSkillFxProfile(skillId), "high", false);
+      expect([
+        0,
+        timeline.anticipationEndMs,
+        timeline.manifestEndMs,
+        timeline.routeEndMs,
+        timeline.impactEndMs,
+        timeline.holdEndMs,
+        timeline.exitEndMs,
+      ]).toEqual([...[
+        0,
+        timeline.anticipationEndMs,
+        timeline.manifestEndMs,
+        timeline.routeEndMs,
+        timeline.impactEndMs,
+        timeline.holdEndMs,
+        timeline.exitEndMs,
+      ]].sort((a, b) => a - b));
+      expect(timeline.holdMs).toBeGreaterThanOrEqual(minHold);
+      expect(timeline.holdMs).toBeLessThanOrEqual(maxHold);
+    });
+    expect(profiles.resolveFxRhythm(profiles.getSkillFxProfile("ALERT"))).toBe("pulse");
+    expect(profiles.resolveFxRhythm(profiles.getSkillFxProfile("DEEP_BREATH"), "refund")).toBe("result");
   });
 
   test("approved launch hierarchy uses the intended tiers and physical anchors", () => {
@@ -240,6 +273,57 @@ describe("launch skill FX system contract", () => {
     expect(fx.dedupeKeys.has(rejectedKey)).toBe(true);
   });
 
+  test("Counter enters ahead of ordinary queued work and cuts the active stage", () => {
+    const fx = createQueuedFxManager();
+    fx.activeJob = { profile: profiles.getSkillFxProfile("CHEAT"), event: { casterId: "P1" } };
+    fx.activeDeadline = Date.now() + 1000;
+    fx.activeNode = {
+      dataset: { identity: "revealed" },
+      classList: { add: jest.fn() },
+      remove: jest.fn(),
+      querySelector: jest.fn(() => null),
+    };
+    expect(fx.play({
+      eventId: "queued-probe", skillId: "PROBE", casterId: "P1",
+      audience: "self", disclosure: "self",
+    })).toBe(true);
+    expect(fx.play({
+      eventId: "priority-counter", skillId: "COUNTER", casterId: "P2",
+      audience: "self", disclosure: "self",
+    })).toBe(true);
+    expect(fx.queue.map((job) => job.profile.id)).toEqual(["COUNTER", "PROBE"]);
+    expect(fx.activeNode.classList.add).toHaveBeenCalledWith("is-counter-cut");
+    fx.clear();
+  });
+
+  test("dual Blood Battle upgrades one stage and grants a stable x4 hold", () => {
+    const fx = createQueuedFxManager();
+    const textNodes = {
+      ".skill-effect-glyph": { textContent: "×2" },
+      ".skill-impact-glyph": { textContent: "×2" },
+      ".skill-effect-result": { textContent: "STAKES DOUBLED" },
+    };
+    fx.activeJob = {
+      profile: profiles.getSkillFxProfile("BLOOD_BATTLE"),
+      event: { casterId: "P1", handNo: 20, context: "table" },
+    };
+    fx.activeDeadline = Date.now() + 20;
+    fx.activeNode = {
+      dataset: { identity: "revealed" },
+      classList: { add: jest.fn() },
+      remove: jest.fn(),
+      querySelector: jest.fn((selector) => textNodes[selector] || null),
+    };
+    expect(fx.play({
+      eventId: "blood-upgrade", skillId: "BLOOD_BATTLE", casterId: "P2",
+      handNo: 20, context: "table", audience: "public", disclosure: "public",
+    })).toBe(true);
+    expect(fx.activeNode.dataset.variant).toBe("dual");
+    expect(textNodes[".skill-effect-glyph"].textContent).toBe("×4");
+    expect(fx.activeDeadline - Date.now()).toBeGreaterThanOrEqual(manager.BLOOD_UPGRADE_HOLD_MS - 25);
+    fx.clear();
+  });
+
   test("CSS implements every registered effect family and reduced-motion fallback", () => {
     const css = fs.readFileSync(path.join(publicDir, "skill-effects.css"), "utf8");
     const families = new Set(Object.values(profiles.SKILL_FX_PROFILES).map((entry) => entry.family));
@@ -322,8 +406,14 @@ describe("launch skill FX system contract", () => {
   test("FX-STAGE-08 result-only captions use safe results unless identity is explicitly revealed", () => {
     const source = fs.readFileSync(path.join(publicDir, "skill-fx-manager.js"), "utf8");
     expect(source).toContain('node.dataset.identity = revealIdentity ? "revealed" : "result-only"');
-    expect(source).toContain('revealIdentity ? localizedSkillName(profile) : cleanToken(event.resultTitle || profile.resultLabel)');
+    expect(source).toContain('resultTitle: cleanToken(event.publicResultTitle || "RESULT CONFIRMED")');
+    expect(source).toContain('effectLabel: cleanToken(event.publicResultLabel || "RESOLUTION APPLIED")');
+    expect(source).toContain('targetElement: publicTargetElement');
+    expect(source).toContain('compositeSkills: []');
+    expect(source).toContain('const profile = neutralResult ? neutralResultProfile(selectedProfile) : selectedProfile');
     expect(source).toContain('event.revealIdentity === true');
+    expect(source).toContain('node.dataset.skill = neutralResult ? "RESULT" : profile.id');
+    expect(source).toContain('node.dataset.effect = neutralResult ? "result" : profile.family');
   });
 
   test("FX-STAGE-09 persistent state markers remain target-positioned", () => {

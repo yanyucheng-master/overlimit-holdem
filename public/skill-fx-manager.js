@@ -11,6 +11,8 @@
   const MAX_DEDUPE_KEYS = 192;
   const MAX_QUEUE_LENGTH = 8;
   const RECENT_FINGERPRINT_MS = 760;
+  const COUNTER_CUT_MS = 180;
+  const BLOOD_UPGRADE_HOLD_MS = 520;
 
   function normalizeQuality(value) {
     const next = String(value || "high").toLowerCase();
@@ -31,8 +33,62 @@
   }
 
   function localizedSkillKicker(profile) {
-    const name = localizedSkillName(profile);
-    return name ? String(name).toUpperCase() : cleanToken(profile && profile.english);
+    const localizedName = cleanToken(localizedSkillName(profile));
+    const englishName = cleanToken(profile && profile.english);
+    if (englishName && englishName.toLocaleUpperCase() !== localizedName.toLocaleUpperCase()) {
+      return englishName.toLocaleUpperCase();
+    }
+    return cleanToken(profile && profile.tier ? `${profile.tier} // SKILL EVENT` : "SKILL EVENT");
+  }
+
+  function revealsSkillIdentity(event = {}) {
+    const disclosure = String(event.disclosure || "public").toLowerCase();
+    return event.revealIdentity === true
+      || (!event.resultOnly && (event.audience === "self" || disclosure === "public"));
+  }
+
+  function neutralResultEvent(event = {}) {
+    const publicTargetElement = isElement(event.publicTargetElement) ? event.publicTargetElement : null;
+    return {
+      ...event,
+      targetElement: publicTargetElement,
+      anchor: cleanToken(event.publicAnchor || "board"),
+      glyph: cleanToken(event.publicGlyph || "✓"),
+      impactGlyph: cleanToken(event.publicImpactGlyph || event.publicGlyph || "✓"),
+      resultTitle: cleanToken(event.publicResultTitle || "RESULT CONFIRMED"),
+      effectLabel: cleanToken(event.publicResultLabel || "RESOLUTION APPLIED"),
+      safeMessage: "",
+      stageLines: [],
+      compositeSkills: [],
+      compositeLabels: [],
+      variant: "result",
+      mode: "result",
+      interruptedVisual: "",
+    };
+  }
+
+  function neutralResultProfile(profile = {}) {
+    return Object.freeze({
+      ...profile,
+      family: "result",
+      tier: "FX2",
+      presentation: "result",
+      rhythm: "result",
+      durationMs: 1050,
+      resultDurations: null,
+      resultRhythms: null,
+      accent: "#d8e8f0",
+      secondary: "#79b9c9",
+      glyph: "✓",
+      sound: "signal",
+      haptics: null,
+      shake: null,
+      persistent: null,
+      stageLines: [],
+      resultLabel: "RESOLUTION APPLIED",
+      verb: "public-result",
+      anchor: "board",
+    });
   }
 
   function explicitSkillFxKey(event) {
@@ -124,6 +180,7 @@
       this.queue = [];
       this.busy = false;
       this.timer = 0;
+      this.activeDeadline = 0;
       this.pauseUntil = 0;
       this.activeNode = null;
       this.activeJob = null;
@@ -183,31 +240,37 @@
     }
 
     play(rawEvent = {}) {
-      const event = { ...rawEvent, skillId: cleanToken(rawEvent.skillId).toUpperCase() };
-      const baseProfile = profilesApi?.getSkillFxProfile?.(event.skillId);
-      if (!baseProfile || event.skillId === "ENDGAME" || event.restored || event.replay) return false;
-      if (!profilesApi?.canRenderSkillFx?.(event, baseProfile)) {
-        this.onSuppressed(event, baseProfile);
+      const receivedEvent = { ...rawEvent, skillId: cleanToken(rawEvent.skillId).toUpperCase() };
+      const baseProfile = profilesApi?.getSkillFxProfile?.(receivedEvent.skillId);
+      if (!baseProfile || receivedEvent.skillId === "ENDGAME" || receivedEvent.restored || receivedEvent.replay) return false;
+      if (!profilesApi?.canRenderSkillFx?.(receivedEvent, baseProfile)) {
+        this.onSuppressed(receivedEvent, baseProfile);
         return false;
       }
+      const identityRevealed = revealsSkillIdentity(receivedEvent);
+      const neutralResult = receivedEvent.resultOnly === true && !identityRevealed;
+      const event = neutralResult ? neutralResultEvent(receivedEvent) : receivedEvent;
       const requestedTier = cleanToken(event.tier).toUpperCase();
       const requestedPresentation = cleanToken(event.presentation).toLowerCase();
       const presentation = Object.values(profilesApi?.FX_PRESENTATION || {}).includes(requestedPresentation)
         ? requestedPresentation
         : baseProfile.presentation;
-      const profile = /^FX[1-4]$/.test(requestedTier) || presentation !== baseProfile.presentation
+      const selectedProfile = /^FX[1-5]$/.test(requestedTier) || presentation !== baseProfile.presentation
         ? Object.freeze({
             ...baseProfile,
-            ...(/^FX[1-4]$/.test(requestedTier) ? { tier: requestedTier } : {}),
+            ...(/^FX[1-5]$/.test(requestedTier) ? { tier: requestedTier } : {}),
             presentation,
           })
         : baseProfile;
-      const key = semanticSkillFxKey(event);
-      if (!event.force && (this.dedupeKeys.has(key) || this.isRecentDuplicate(event))) return false;
+      const profile = neutralResult ? neutralResultProfile(selectedProfile) : selectedProfile;
+      const key = semanticSkillFxKey(receivedEvent);
+      if (!event.force && (this.dedupeKeys.has(key) || this.isRecentDuplicate(receivedEvent))) return false;
       const settings = this.settings();
       const duration = profilesApi.fxDuration(profile, settings.quality, settings.reduceMotion, event.variant);
-      const job = { event, profile, settings, duration, key };
-      if (profile.id === "BLOOD_BATTLE") {
+      const timeline = profilesApi.fxTimeline?.(profile, settings.quality, settings.reduceMotion, event.variant)
+        || { rhythm: profile.rhythm || "standard", durationMs: duration };
+      const job = { event, profile, settings, duration, timeline, key };
+      if (profile.id === "BLOOD_BATTLE" && !neutralResult) {
         const existingBlood = this.activeJob?.profile?.id === "BLOOD_BATTLE"
           ? this.activeJob
           : this.queue.find((queued) => queued.profile.id === "BLOOD_BATTLE");
@@ -230,19 +293,31 @@
             if (glyph) glyph.textContent = "×4";
             if (impactGlyph) impactGlyph.textContent = "×4";
             if (result) result.textContent = "STAKES ×4";
+            this.extendActiveHold(settings.reduceMotion ? 300 : BLOOD_UPGRADE_HOLD_MS);
           }
-          if (!event.force) this.rememberAcceptedEvent(event, key);
+          if (!event.force) this.rememberAcceptedEvent(receivedEvent, key);
           return true;
         }
       }
       if (this.queue.length >= MAX_QUEUE_LENGTH) return false;
-      this.queue.push(job);
-      if (!event.force) this.rememberAcceptedEvent(event, key);
-      if (profile.id === "COUNTER" && profile.tier === "FX3" && this.activeNode
-        && this.activeJob?.profile?.id !== "COUNTER") {
+      const interruptsActive = profile.id === "COUNTER" && profile.tier === "FX3" && this.activeNode
+        && this.activeJob?.profile?.id !== "COUNTER";
+      if (interruptsActive) {
+        const activeIdentityRevealed = this.activeNode.dataset.identity === "revealed";
+        event.interruptedVisual = activeIdentityRevealed ? this.activeJob.profile.family : "hidden-signal";
+        event.targetElement = isElement(this.activeJob.event.targetElement)
+          ? this.activeJob.event.targetElement
+          : this.resolveTarget(this.activeJob);
+        this.queue.unshift(job);
+      } else {
+        this.queue.push(job);
+      }
+      if (!event.force) this.rememberAcceptedEvent(receivedEvent, key);
+      if (interruptsActive) {
         this.activeNode.classList.add("is-counter-cut");
-        if (this.timer) clearTimeout(this.timer);
-        this.timer = setTimeout(() => this.finishActive(), settings.reduceMotion ? 70 : 150);
+        this.activeNode.dataset.interrupted = "true";
+        this.activeDeadline = Date.now() + (settings.reduceMotion ? 90 : COUNTER_CUT_MS);
+        this.scheduleActiveFinish();
       }
       this.pump();
       return true;
@@ -261,18 +336,34 @@
       const job = this.queue.shift();
       this.busy = true;
       this.activeJob = job;
+      job.startedAt = Date.now();
+      this.activeDeadline = job.startedAt + job.duration + 100;
       this.render(job);
-      this.timer = setTimeout(() => this.finishActive(), job.duration + 100);
+      this.scheduleActiveFinish();
+    }
+
+    scheduleActiveFinish() {
+      if (this.timer) clearTimeout(this.timer);
+      const remaining = Math.max(0, this.activeDeadline - Date.now());
+      this.timer = setTimeout(() => this.finishActive(), remaining);
+    }
+
+    extendActiveHold(ms) {
+      if (!this.activeJob) return;
+      this.activeDeadline = Math.max(this.activeDeadline, Date.now() + Math.max(0, Number(ms) || 0));
+      this.scheduleActiveFinish();
     }
 
     finishActive() {
       if (this.timer) clearTimeout(this.timer);
       this.timer = 0;
+      this.activeDeadline = 0;
       this.activeNode?.remove();
       this.activeNode = null;
       this.hideBroadcasts();
       if (typeof document !== "undefined") {
         document.body?.classList.remove("skill-fx-shake-soft");
+        document.body?.style.removeProperty("--skill-fx-shake-delay");
       }
       if (this.effectLayer) this.effectLayer.classList.remove("is-settlement-active");
       this.activeJob = null;
@@ -358,15 +449,21 @@
       node.style.setProperty("--fx-to-y", `${targetY}px`);
       node.style.setProperty("--fx-route-length", `${Math.max(24, routeLength)}px`);
       node.style.setProperty("--fx-route-angle", `${Math.atan2(routeY, routeX) * 180 / Math.PI}deg`);
+      node.style.setProperty("--fx-route-dx", `${routeX}px`);
+      node.style.setProperty("--fx-route-dy", `${routeY}px`);
     }
 
     buildEffectNode(job) {
-      const { event, profile, settings, duration } = job;
+      const { event, profile, settings, duration, timeline } = job;
       const node = makeAtom("article", "skill-effect-instance");
-      const impactType = cleanToken(event.impact || event.impactType
-        || (profile.id === "LOAN" && String(event.variant).toLowerCase() === "energy" ? "energy" : profile.impact || "board")).toLowerCase();
-      node.dataset.skill = profile.id;
-      node.dataset.effect = profile.family;
+      const revealIdentity = revealsSkillIdentity(event);
+      const neutralResult = event.resultOnly === true && !revealIdentity;
+      const impactType = cleanToken(neutralResult
+        ? (event.publicImpact || "hud")
+        : (event.impact || event.impactType
+          || (profile.id === "LOAN" && String(event.variant).toLowerCase() === "energy" ? "energy" : profile.impact || "board"))).toLowerCase();
+      node.dataset.skill = neutralResult ? "RESULT" : profile.id;
+      node.dataset.effect = neutralResult ? "result" : profile.family;
       node.dataset.impact = impactType;
       node.dataset.tier = profile.tier;
       node.dataset.quality = settings.quality;
@@ -376,14 +473,34 @@
       node.dataset.variant = cleanToken(event.variant || event.mode || "default").toLowerCase();
       node.dataset.context = cleanToken(event.context || "table").toLowerCase();
       node.dataset.presentation = cleanToken(profile.presentation || "journey").toLowerCase();
+      node.dataset.rhythm = cleanToken(timeline?.rhythm || profile.rhythm || "standard").toLowerCase();
+      node.dataset.verb = neutralResult ? "public-result" : cleanToken(profile.verb || profile.family).toLowerCase();
+      if (event.interruptedVisual) node.dataset.interruptedVisual = cleanToken(event.interruptedVisual).toLowerCase();
       const compositeSkills = Array.isArray(event.compositeSkills)
         ? event.compositeSkills.map((value) => cleanToken(value).toUpperCase()).filter(Boolean).slice(0, 6)
         : [];
       if (compositeSkills.length > 1) node.dataset.composite = compositeSkills.join(" ");
       node.style.setProperty("--fx-duration", `${duration}ms`);
-      node.style.setProperty("--fx-accent", profile.accent);
-      node.style.setProperty("--fx-secondary", profile.secondary);
+      node.style.setProperty("--fx-accent", neutralResult ? "#d8e8f0" : profile.accent);
+      node.style.setProperty("--fx-secondary", neutralResult ? "#79b9c9" : profile.secondary);
+      const anticipationEnd = Number(timeline?.anticipationEndMs || Math.round(duration * .15));
+      const manifestEnd = Number(timeline?.manifestEndMs || Math.round(duration * .38));
+      const routeEnd = Number(timeline?.routeEndMs || Math.round(duration * .62));
+      const impactEnd = Number(timeline?.impactEndMs || Math.round(duration * .82));
+      const holdEnd = Number(timeline?.holdEndMs || Math.round(duration * .95));
+      node.style.setProperty("--fx-anticipation-ms", `${anticipationEnd}ms`);
+      node.style.setProperty("--fx-manifest-ms", `${Math.max(1, holdEnd - anticipationEnd)}ms`);
+      node.style.setProperty("--fx-route-delay", `${manifestEnd}ms`);
+      node.style.setProperty("--fx-route-ms", `${Math.max(1, routeEnd - manifestEnd)}ms`);
+      node.style.setProperty("--fx-impact-delay", `${routeEnd}ms`);
+      node.style.setProperty("--fx-impact-ms", `${Math.max(1, duration - routeEnd)}ms`);
+      node.style.setProperty("--fx-title-delay", `${anticipationEnd}ms`);
+      node.style.setProperty("--fx-title-ms", `${Math.max(1, holdEnd - anticipationEnd)}ms`);
+      node.style.setProperty("--fx-result-delay", `${routeEnd}ms`);
+      node.style.setProperty("--fx-result-ms", `${Math.max(1, duration - routeEnd)}ms`);
+      node.style.setProperty("--fx-hold-ms", `${Math.max(1, holdEnd - impactEnd)}ms`);
 
+      const atmosphere = makeAtom("div", "skill-effect-atmosphere");
       const stage = makeAtom("div", "skill-effect-stage");
       const core = makeAtom("div", "skill-effect-core");
       core.append(
@@ -395,7 +512,7 @@
         makeAtom("i", "skill-effect-card card-a"),
         makeAtom("i", "skill-effect-card card-b"),
         makeAtom("i", "skill-effect-card card-c"),
-        makeAtom("strong", "skill-effect-glyph", event.glyph || profile.glyph)
+        makeAtom("strong", "skill-effect-glyph", neutralResult ? "✓" : (event.glyph || profile.glyph))
       );
       const particles = makeAtom("div", "skill-effect-particles");
       for (let index = 0; index < 8; index += 1) {
@@ -404,7 +521,9 @@
       }
       core.appendChild(particles);
 
-      const configuredStageLines = Array.isArray(event.stageLines)
+      const configuredStageLines = neutralResult
+        ? []
+        : Array.isArray(event.stageLines)
         ? event.stageLines
         : Array.isArray(profile.stageLines)
           ? profile.stageLines
@@ -428,13 +547,10 @@
         makeAtom("i", "skill-impact-outline"),
         makeAtom("i", "skill-impact-ring"),
         makeAtom("i", "skill-impact-flash"),
-        makeAtom("strong", "skill-impact-glyph", impactGlyphFor({ ...profile, impact: impactType }, event))
+        makeAtom("strong", "skill-impact-glyph", neutralResult ? "✓" : impactGlyphFor({ ...profile, impact: impactType }, event))
       );
 
       const caption = makeAtom("div", "skill-effect-caption");
-      const disclosure = String(event.disclosure || "public").toLowerCase();
-      const revealIdentity = event.revealIdentity === true
-        || (!event.resultOnly && (event.audience === "self" || disclosure === "public"));
       node.dataset.identity = revealIdentity ? "revealed" : "result-only";
       node.dataset.caption = event.stageCaption === false ? "hidden" : "visible";
       caption.append(
@@ -448,7 +564,7 @@
         labels.slice(0, 4).forEach((label) => modifiers.appendChild(makeAtom("i", "skill-effect-modifier", cleanToken(label))));
         caption.appendChild(modifiers);
       }
-      node.append(stage, route, impact, caption);
+      node.append(atmosphere, stage, route, impact, caption);
       return node;
     }
 
@@ -476,13 +592,14 @@
         return;
       }
       if (!this.broadcastLayer) return;
-      this.broadcastLayer.dataset.skill = profile.id;
-      this.broadcastLayer.dataset.family = profile.family;
+      const neutralResult = event.resultOnly === true && !revealsSkillIdentity(event);
+      this.broadcastLayer.dataset.skill = neutralResult ? "RESULT" : profile.id;
+      this.broadcastLayer.dataset.family = neutralResult ? "result" : profile.family;
       this.broadcastLayer.dataset.tier = profile.tier;
-      this.broadcastLayer.dataset.side = event.casterId === event.viewerId ? "self" : "opponent";
+      this.broadcastLayer.dataset.side = neutralResult ? "public" : (event.casterId === event.viewerId ? "self" : "opponent");
       this.broadcastLayer.style.setProperty("--skfx-dur", `${broadcastMs}ms`);
-      this.broadcastLayer.style.setProperty("--fx-accent", profile.accent);
-      this.broadcastLayer.style.setProperty("--fx-secondary", profile.secondary);
+      this.broadcastLayer.style.setProperty("--fx-accent", neutralResult ? "#d8e8f0" : profile.accent);
+      this.broadcastLayer.style.setProperty("--fx-secondary", neutralResult ? "#79b9c9" : profile.secondary);
       const who = this.broadcastLayer.querySelector(".skfx-who");
       const name = this.broadcastLayer.querySelector(".skfx-name");
       const tag = this.broadcastLayer.querySelector(".skfx-tag");
@@ -492,9 +609,11 @@
           ? (window.OverlimitI18n ? window.OverlimitI18n.t("fx.you") : "YOU")
           : (window.OverlimitI18n ? window.OverlimitI18n.t("fx.opponent") : "OPPONENT")));
       if (name) name.textContent = event.resultOnly
-        ? profile.resultLabel
+        ? (neutralResult ? event.resultTitle : profile.resultLabel)
         : (event.executedLabel || (window.OverlimitI18n ? window.OverlimitI18n.t("fx.executed") : "TACTICAL EXECUTED"));
-      if (tag) tag.textContent = cleanToken(event.effectLabel || event.safeMessage || profile.resultLabel);
+      if (tag) tag.textContent = neutralResult
+        ? cleanToken(event.effectLabel || "RESOLUTION APPLIED")
+        : cleanToken(event.effectLabel || event.safeMessage || profile.resultLabel);
       this.broadcastLayer.classList.remove("hidden");
       if (typeof document !== "undefined") document.body?.classList.add("skill-fx-public-on");
     }
@@ -520,6 +639,7 @@
         || ["REVEALED", "RESULT"].includes(cleanToken(job.event.status).toUpperCase());
       if (!job.settings.reduceMotion && !job.settings.lowPerformance && bloodSettlement
         && job.profile.shake === "soft" && SHAKE_ALLOWLIST.has(job.profile.id)) {
+        document.body?.style.setProperty("--skill-fx-shake-delay", `${Math.max(0, Number(job.timeline?.routeEndMs) || 0)}ms`);
         document.body?.classList.add("skill-fx-shake-soft");
       }
       this.playSound(job.profile.sound, job);
@@ -593,10 +713,14 @@
       this.activeNode = null;
       this.activeJob = null;
       this.busy = false;
+      this.activeDeadline = 0;
       this.pauseUntil = 0;
       this.hideBroadcasts();
       this.effectLayer?.classList.remove("is-settlement-active");
-      if (typeof document !== "undefined") document.body?.classList.remove("skill-fx-shake-soft");
+      if (typeof document !== "undefined") {
+        document.body?.classList.remove("skill-fx-shake-soft");
+        document.body?.style.removeProperty("--skill-fx-shake-delay");
+      }
       if (!keepStates) this.syncStates([]);
     }
 
@@ -620,6 +744,8 @@
     normalizeQuality,
     fallbackSkillFxFingerprint,
     MAX_QUEUE_LENGTH,
+    COUNTER_CUT_MS,
+    BLOOD_UPGRADE_HOLD_MS,
     SHAKE_ALLOWLIST,
   });
 });

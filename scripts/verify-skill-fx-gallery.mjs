@@ -9,13 +9,30 @@ const EXPECTED_SKILLS = 23;
 const EXPECTED_OPTIONS = EXPECTED_SKILLS + 1;
 const MOBILE_GALLERY_VIEWPORTS = [
   { width: 320, height: 700 },
+  { width: 360, height: 800 },
+  { width: 375, height: 812 },
   { width: 390, height: 844 },
+  { width: 393, height: 852 },
+  { width: 412, height: 915 },
   { width: 430, height: 932 },
+];
+const DESKTOP_GALLERY_VIEWPORTS = [
+  { width: 1366, height: 768 },
+  { width: 1440, height: 900 },
+  { width: 1600, height: 900 },
+  { width: 1920, height: 1080 },
 ];
 const REPRESENTATIVE_CAPTURES = [
   "DEEP_BREATH", "PROBE", "RECYCLE", "ALERT", "FAIRNESS", "INTIMIDATION",
-  "BLOOD_BATTLE", "CHEAT", "NULLIFICATION", "DESTINY", "RESTART", "DISGUISE", "DEAD_END",
+  "BLOOD_BATTLE", "CHEAT", "COUNTER", "NULLIFICATION", "FORTUNE", "DESTINY",
+  "RESTART", "DISGUISE", "DEAD_END", "PROTOCOL_PAIR",
 ];
+const HERO_CAPTURES = [
+  "DEEP_BREATH", "CHEAT", "COUNTER", "NULLIFICATION", "FAIRNESS",
+  "BLOOD_BATTLE", "INTIMIDATION", "DESTINY", "DEAD_END", "RESTART",
+];
+const MOBILE_HERO_CAPTURES = ["CHEAT", "FAIRNESS", "NULLIFICATION", "DEAD_END", "RESTART"];
+const CAPTURE_PHASES = [20, 45, 65, 82];
 
 const profileIdFor = (skillId) => skillId.startsWith("PROTOCOL_") ? "PROTOCOL_SHOWDOWN" : skillId;
 
@@ -27,8 +44,7 @@ async function selectAndReplay(page, skillId, options = {}) {
   if (options.disclosure) await page.locator("#skill-fx-gallery-disclosure").selectOption(options.disclosure);
   if (options.status) await page.locator("#skill-fx-gallery-status").selectOption(options.status);
   await page.locator("#btn-replay-skill-fx").click();
-  const profileId = profileIdFor(skillId);
-  const instance = page.locator(`#skill-fx-gallery-effect-layer .skill-effect-instance[data-skill="${profileId}"]`);
+  const instance = page.locator("#skill-fx-gallery-effect-layer .skill-effect-instance");
   await instance.waitFor({ state: "attached", timeout: 1800 });
   return instance;
 }
@@ -53,6 +69,15 @@ async function inspectInstance(instance) {
       presentation: node.dataset.presentation,
       context: node.dataset.context,
       durationMs: numberVar("--fx-duration"),
+      rhythm: node.dataset.rhythm,
+      verb: node.dataset.verb,
+      anticipationMs: numberVar("--fx-anticipation-ms"),
+      manifestMs: numberVar("--fx-manifest-ms"),
+      routeDelayMs: numberVar("--fx-route-delay"),
+      routeMs: numberVar("--fx-route-ms"),
+      impactDelayMs: numberVar("--fx-impact-delay"),
+      impactMs: numberVar("--fx-impact-ms"),
+      holdMs: numberVar("--fx-hold-ms"),
       hasRoute: node.dataset.hasRoute,
       stageX: numberVar("--fx-stage-x"),
       stageY: numberVar("--fx-stage-y"),
@@ -66,6 +91,7 @@ async function inspectInstance(instance) {
       coreDisplay: core ? getComputedStyle(core).display : "none",
       impactDisplay: impact ? getComputedStyle(impact).display : "none",
       routeDisplay: route ? getComputedStyle(route).display : "none",
+      atmosphereDisplay: getComputedStyle(node.querySelector(".skill-effect-atmosphere")).display,
       captionDisplay: caption ? getComputedStyle(caption).display : "none",
       captionText: caption?.textContent || "",
       captionInsideLayer: !captionRect
@@ -114,7 +140,7 @@ function auditMatchesAnchors(audit) {
     && isNear(audit.targetY, audit.expectedTargetY);
 }
 
-async function auditMobileGallery(page, viewport) {
+async function auditGalleryViewport(page, viewport) {
   await page.setViewportSize(viewport);
   await page.waitForTimeout(120);
   await page.evaluate(() => {
@@ -248,9 +274,37 @@ async function main() {
     perspective: "opponent", disclosure: "result", status: "REVEALED",
   });
   const resultOnly = await resultInstance.evaluate((node) => ({
+    skill: node.dataset.skill,
+    family: node.dataset.effect,
+    tier: node.dataset.tier,
+    impact: node.dataset.impact,
     identity: node.dataset.identity,
+    durationMs: Number.parseFloat(node.style.getPropertyValue("--fx-duration")),
     caption: node.querySelector(".skill-effect-caption")?.textContent || "",
     title: node.querySelector(".skill-effect-title")?.textContent || "",
+    result: node.querySelector(".skill-effect-result")?.textContent || "",
+    glyph: node.querySelector(".skill-effect-glyph")?.textContent || "",
+    impactGlyph: node.querySelector(".skill-impact-glyph")?.textContent || "",
+    stageData: node.querySelectorAll(".skill-effect-stage-data").length,
+    modifiers: node.querySelectorAll(".skill-effect-modifier").length,
+  }));
+  const protocolResultInstance = await selectAndReplay(page, "PROTOCOL_PAIR", {
+    perspective: "opponent", disclosure: "result", status: "REVEALED",
+  });
+  const protocolResultOnly = await protocolResultInstance.evaluate((node) => ({
+    skill: node.dataset.skill,
+    family: node.dataset.effect,
+    tier: node.dataset.tier,
+    impact: node.dataset.impact,
+    identity: node.dataset.identity,
+    durationMs: Number.parseFloat(node.style.getPropertyValue("--fx-duration")),
+    caption: node.querySelector(".skill-effect-caption")?.textContent || "",
+    title: node.querySelector(".skill-effect-title")?.textContent || "",
+    result: node.querySelector(".skill-effect-result")?.textContent || "",
+    glyph: node.querySelector(".skill-effect-glyph")?.textContent || "",
+    impactGlyph: node.querySelector(".skill-impact-glyph")?.textContent || "",
+    stageData: node.querySelectorAll(".skill-effect-stage-data").length,
+    modifiers: node.querySelectorAll(".skill-effect-modifier").length,
   }));
 
   const dedupeAndPriority = await page.evaluate(() => {
@@ -395,17 +449,20 @@ async function main() {
       variant: bloodNode?.dataset.variant || "",
       upgraded: bloodNode?.classList.contains("is-upgraded") || false,
       glyph: bloodNode?.querySelector(".skill-effect-glyph")?.textContent || "",
+      remainingHoldMs: Math.max(0, gallery.manager.activeDeadline - Date.now()),
     };
 
     gallery.manager.clear();
     const cheat = gallery.manager.play({ ...common, audience: "self", disclosure: "self", eventId: "verify:counter:target", skillId: "CHEAT", casterId: "A" });
+    const probe = gallery.manager.play({ ...common, audience: "self", disclosure: "self", eventId: "verify:counter:queued", skillId: "PROBE", casterId: "A" });
     const counter = gallery.manager.play({ ...common, audience: "self", disclosure: "self", eventId: "verify:counter:cut", skillId: "COUNTER", casterId: "B", tier: "FX3" });
     const active = document.querySelector("#skill-fx-gallery-effect-layer .skill-effect-instance");
     const counterCut = {
-      accepted: [cheat, counter],
+      accepted: [cheat, probe, counter],
       targetFamily: active?.dataset.effect || "",
       cut: active?.classList.contains("is-counter-cut") || false,
-      queuedCounter: gallery.manager.queue.some((job) => job.profile.id === "COUNTER"),
+      queueOrder: gallery.manager.queue.map((job) => job.profile.id),
+      interrupted: active?.dataset.interrupted || "",
     };
     gallery.manager.clear();
     return { blood, counterCut };
@@ -507,26 +564,71 @@ async function main() {
     await page.locator("#skill-fx-gallery-show-stage").uncheck();
     await page.locator("#skill-fx-gallery-show-target").uncheck();
     for (const skillId of REPRESENTATIVE_CAPTURES) {
-      const instance = await selectAndReplay(page, skillId);
-      const duration = await instance.evaluate((node) => Number.parseFloat(node.style.getPropertyValue("--fx-duration")) || 650);
-      await page.waitForTimeout(Math.max(280, Math.min(680, Math.round(duration * .55))));
-      const capturePath = path.join(CAPTURE_DIR, `${skillId.toLowerCase()}.png`);
-      await page.locator("#skill-fx-gallery-stage").screenshot({ path: capturePath });
-      captures.push(capturePath);
+      for (const phase of CAPTURE_PHASES) {
+        const instance = await selectAndReplay(page, skillId);
+        const duration = await instance.evaluate((node) => Number.parseFloat(node.style.getPropertyValue("--fx-duration")) || 1050);
+        await page.waitForTimeout(Math.max(60, Math.round(duration * phase / 100)));
+        const capturePath = path.join(CAPTURE_DIR, `${skillId.toLowerCase()}-${String(phase).padStart(2, "0")}.png`);
+        await page.locator("#skill-fx-gallery-stage").screenshot({ path: capturePath });
+        captures.push(capturePath);
+      }
     }
     const refundInstance = await selectAndReplay(page, "DEEP_BREATH", {
       variant: "refund", status: "REFUNDED", disclosure: "self",
     });
-    const refundDuration = await refundInstance.evaluate((node) => Number.parseFloat(node.style.getPropertyValue("--fx-duration")) || 820);
-    await page.waitForTimeout(Math.round(refundDuration * .5));
+    const refundDuration = await refundInstance.evaluate((node) => Number.parseFloat(node.style.getPropertyValue("--fx-duration")) || 1100);
+    await page.waitForTimeout(Math.round(refundDuration * .7));
     const refundCapturePath = path.join(CAPTURE_DIR, "deep_breath_refund.png");
     await page.locator("#skill-fx-gallery-stage").screenshot({ path: refundCapturePath });
     captures.push(refundCapturePath);
+
+    await page.setViewportSize({ width: 1920, height: 1080 });
+    for (const skillId of HERO_CAPTURES) {
+      const instance = await selectAndReplay(page, skillId);
+      const duration = await instance.evaluate((node) => Number.parseFloat(node.style.getPropertyValue("--fx-duration")) || 1050);
+      await page.waitForTimeout(Math.round(duration * .65));
+      const capturePath = path.join(CAPTURE_DIR, `desktop-1920x1080-${skillId.toLowerCase()}-65.png`);
+      await page.locator("#skill-fx-gallery-stage").screenshot({ path: capturePath });
+      captures.push(capturePath);
+    }
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    for (const skillId of MOBILE_HERO_CAPTURES) {
+      const instance = await selectAndReplay(page, skillId);
+      const duration = await instance.evaluate((node) => Number.parseFloat(node.style.getPropertyValue("--fx-duration")) || 1050);
+      await page.waitForTimeout(Math.round(duration * .65));
+      const capturePath = path.join(CAPTURE_DIR, `mobile-390x844-${skillId.toLowerCase()}-65.png`);
+      await page.locator("#skill-fx-gallery-stage").screenshot({ path: capturePath });
+      captures.push(capturePath);
+    }
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.locator("#skill-fx-gallery-quality").selectOption("low");
+    let degradedCapture = await selectAndReplay(page, "FAIRNESS");
+    let degradedDuration = await degradedCapture.evaluate((node) => Number.parseFloat(node.style.getPropertyValue("--fx-duration")) || 1050);
+    await page.waitForTimeout(Math.round(degradedDuration * .65));
+    const lowCapturePath = path.join(CAPTURE_DIR, "quality-low-fairness-65.png");
+    await page.locator("#skill-fx-gallery-stage").screenshot({ path: lowCapturePath });
+    captures.push(lowCapturePath);
+
+    await page.locator("#skill-fx-gallery-quality").selectOption("high");
+    await page.locator("#skill-fx-gallery-reduced").check();
+    degradedCapture = await selectAndReplay(page, "FAIRNESS");
+    degradedDuration = await degradedCapture.evaluate((node) => Number.parseFloat(node.style.getPropertyValue("--fx-duration")) || 420);
+    await page.waitForTimeout(Math.round(degradedDuration * .65));
+    const reducedCapturePath = path.join(CAPTURE_DIR, "reduced-motion-fairness-65.png");
+    await page.locator("#skill-fx-gallery-stage").screenshot({ path: reducedCapturePath });
+    captures.push(reducedCapturePath);
+    await page.locator("#skill-fx-gallery-reduced").uncheck();
   }
 
+  const desktopViewports = [];
+  for (const viewport of DESKTOP_GALLERY_VIEWPORTS) {
+    desktopViewports.push(await auditGalleryViewport(page, viewport));
+  }
   const mobileViewports = [];
   for (const viewport of MOBILE_GALLERY_VIEWPORTS) {
-    mobileViewports.push(await auditMobileGallery(page, viewport));
+    mobileViewports.push(await auditGalleryViewport(page, viewport));
   }
   const mobile = mobileViewports.find((entry) => entry.viewport.width === 390) || mobileViewports[0];
   if (CAPTURE_DIR) {
@@ -547,10 +649,17 @@ async function main() {
   if (optionIds.includes("ENDGAME")) failures.push("protected Endgame leaked into gallery");
   if (effects.length !== EXPECTED_OPTIONS) failures.push("not every skill/profile rendered");
   effects.forEach((effect) => {
-    if (!effect.family || !effect.tier || !effect.impactType) failures.push(`incomplete director metadata: ${effect.skill}`);
+    if (!effect.family || !effect.tier || !effect.impactType || !effect.rhythm || !effect.verb) failures.push(`incomplete director metadata: ${effect.skill}`);
     if (effect.heroNodes > 20 || effect.particleNodes > 12 || effect.impactNodes > 12 || effect.routeNodes > 4) failures.push(`DOM budget exceeded: ${effect.skill}`);
     if (effect.stageDisplay === "none" || effect.coreDisplay === "none" || effect.impactDisplay === "none") failures.push(`stage/impact missing: ${effect.skill}`);
-    if (effect.presentation === "journey" && effect.durationMs < 650) failures.push(`journey readability budget too short: ${effect.skill}`);
+    if (effect.presentation === "journey" && effect.durationMs < 900) failures.push(`journey readability budget too short: ${effect.skill}`);
+    const orderedTimeline = effect.presentation === "pulse"
+      ? effect.anticipationMs > 0 && effect.impactDelayMs >= effect.routeDelayMs
+      : effect.anticipationMs > 0 && effect.routeDelayMs > effect.anticipationMs
+        && effect.impactDelayMs > effect.routeDelayMs;
+    if (!(orderedTimeline && effect.impactDelayMs < effect.durationMs && effect.holdMs > 0)) {
+      failures.push(`five-beat timeline contract failed: ${effect.skill}`);
+    }
   });
   Object.entries(stageAudits).forEach(([name, audit]) => {
     if (!auditMatchesAnchors(audit)) failures.push(`stage/target anchor mismatch: ${name}`);
@@ -561,16 +670,29 @@ async function main() {
   if (stageAudits.loanEnergy.impactType !== "energy" || stageAudits.loanChip.impactType !== "chip") failures.push("Loan branch impact types are incorrect");
   if (stageAudits.fairness.impactType !== "board") failures.push("Fairness lost board impact");
   const timingBySkill = Object.fromEntries(effects.map((effect) => [effect.skill, effect]));
-  if (timingBySkill.DEEP_BREATH?.tier !== "FX2" || timingBySkill.DEEP_BREATH?.durationMs !== 680) failures.push("Deep Breath launch timing is not 680ms FX2");
-  if (timingBySkill.PROBE?.tier !== "FX2" || timingBySkill.PROBE?.durationMs !== 680) failures.push("Probe launch timing is not 680ms FX2");
-  if (timingBySkill.RECYCLE?.tier !== "FX2" || timingBySkill.RECYCLE?.durationMs !== 650) failures.push("Recycle launch timing is not 650ms FX2");
+  if (timingBySkill.DEEP_BREATH?.tier !== "FX2" || timingBySkill.DEEP_BREATH?.durationMs < 1000 || timingBySkill.DEEP_BREATH?.durationMs > 1100) failures.push("Deep Breath launch timing left its 1000-1100ms FX2 range");
+  if (timingBySkill.PROBE?.tier !== "FX2" || timingBySkill.PROBE?.durationMs < 900 || timingBySkill.PROBE?.durationMs > 1000) failures.push("Probe launch timing left its 900-1000ms FX2 range");
+  if (timingBySkill.RECYCLE?.tier !== "FX2" || timingBySkill.RECYCLE?.durationMs < 950 || timingBySkill.RECYCLE?.durationMs > 1050) failures.push("Recycle launch timing left its 950-1050ms FX2 range");
   if (alertPulse.tier !== "FX1" || alertPulse.presentation !== "pulse" || alertPulse.hasRoute !== "false"
     || alertPulse.routeDisplay !== "none" || !alertPulse.captionInsideLayer
-    || alertPulse.durationMs !== 460) failures.push("Alert no longer behaves as a contained 460ms single-point FX1 pulse");
-  if (deepBreathRefund.durationMs !== 820 || deepBreathRefund.context !== "settlement"
+    || alertPulse.durationMs < 520 || alertPulse.durationMs > 580) failures.push("Alert left its contained 520-580ms single-point FX1 pulse range");
+  if (deepBreathRefund.durationMs < 1000 || deepBreathRefund.durationMs > 1150 || deepBreathRefund.context !== "settlement"
     || deepBreathRefund.captionText.indexOf("ENERGY RETURN +2") < 0) failures.push("Deep Breath private refund result timing/caption failed");
   if (secrecy.accepted || secrecy.after !== secrecy.before || secrecy.publicVisible || secrecy.privateVisible) failures.push("opponent secret event produced a visual side channel");
-  if (resultOnly.identity !== "result-only" || /绝密|TOP SECRET/i.test(resultOnly.caption) || resultOnly.title !== "ACCESS DENIED") failures.push("result-only stage leaked a secret skill identity");
+  if (resultOnly.identity !== "result-only" || resultOnly.skill !== "RESULT" || resultOnly.family !== "result"
+    || resultOnly.impact !== "hud" || /绝密|TOP SECRET|ACCESS DENIED|PROTOCOL|×2/i.test(resultOnly.caption)
+    || resultOnly.tier !== "FX2" || resultOnly.durationMs !== 1050
+    || resultOnly.title !== "RESULT CONFIRMED" || resultOnly.result !== "RESOLUTION APPLIED"
+    || resultOnly.glyph !== "✓" || resultOnly.impactGlyph !== "✓" || resultOnly.stageData || resultOnly.modifiers) {
+    failures.push("result-only stage leaked a secret skill identity, family silhouette, or skill-specific result copy");
+  }
+  const neutralResultSignature = ({ skill, family, tier, impact, identity, durationMs, title, result, glyph, impactGlyph, stageData, modifiers }) => (
+    JSON.stringify({ skill, family, tier, impact, identity, durationMs, title, result, glyph, impactGlyph, stageData, modifiers })
+  );
+  if (neutralResultSignature(protocolResultOnly) !== neutralResultSignature(resultOnly)
+    || /PROTOCOL|PAIR|×2/i.test(protocolResultOnly.caption)) {
+    failures.push("different hidden result-only skills did not converge on one neutral visual contract");
+  }
   if (dedupeAndPriority.dedupe[0] !== true || dedupeAndPriority.dedupe[1] !== false) failures.push("duplicate eventId was not suppressed");
   if (eventAdmission.duplicateCopies[0] !== true || eventAdmission.duplicateCopies[1] !== false || eventAdmission.copyQueue !== 1) failures.push("public/private event copies were not merged by eventId");
   if (eventAdmission.duplicateRequestCopies[0] !== true || eventAdmission.duplicateRequestCopies[1] !== false
@@ -588,11 +710,13 @@ async function main() {
     || directorInteractions.blood.instances !== 1
     || directorInteractions.blood.variant !== "dual"
     || !directorInteractions.blood.upgraded
-    || directorInteractions.blood.glyph !== "×4") failures.push("dual Blood Battle did not merge into one ×4 stage");
+    || directorInteractions.blood.glyph !== "×4"
+    || directorInteractions.blood.remainingHoldMs < 480) failures.push("dual Blood Battle did not merge into one ×4 stage with a stable upgrade hold");
   if (directorInteractions.counterCut.accepted.some((value) => !value)
     || directorInteractions.counterCut.targetFamily !== "cheat"
     || !directorInteractions.counterCut.cut
-    || !directorInteractions.counterCut.queuedCounter) failures.push("Counter did not cut the active target stage before resolving");
+    || directorInteractions.counterCut.interrupted !== "true"
+    || directorInteractions.counterCut.queueOrder.join(",") !== "COUNTER,PROBE") failures.push("Counter did not cut the active target stage and take priority before resolving");
   if (stateMarkers.length !== 2 || stateMarkers.some((marker) => marker.distanceFromStage < 55)) failures.push("persistent state markers drifted to the stage center");
   if (lowPerformance.quality !== "low" || lowPerformance.stageDisplay === "none" || lowPerformance.impactDisplay === "none" || lowPerformance.packetDisplay !== "none") failures.push("Low Performance did not preserve the reduced central director");
   if (reducedMotion.motion !== "reduced" || reducedMotion.stageDisplay === "none" || reducedMotion.impactDisplay === "none" || reducedMotion.routeDisplay !== "none" || reducedMotion.bodyShakes) failures.push("Reduced Motion central stage/impact contract failed");
@@ -609,6 +733,13 @@ async function main() {
     || entry.coreWidth > entry.viewport.width * .89
   ));
   if (invalidMobileViewports.length) failures.push(`mobile gallery or central stage contract failed: ${invalidMobileViewports.map((entry) => `${entry.viewport.width}x${entry.viewport.height}`).join(", ")}`);
+  const invalidDesktopViewports = desktopViewports.filter((entry) => (
+    !entry.panelInsideViewport || !entry.stageInsidePanel || !entry.stageVerticallyVisible
+    || entry.stageVisibleRatio < .999 || !entry.captionVerticallyVisible
+    || entry.pageHorizontalOverflow || entry.modalOverflowX !== "hidden" || entry.panelOverflowX !== "hidden"
+    || !entry.replayUsable || !entry.stageCentral || entry.panelScrollTop > 1
+  ));
+  if (invalidDesktopViewports.length) failures.push(`desktop gallery or central stage contract failed: ${invalidDesktopViewports.map((entry) => `${entry.viewport.width}x${entry.viewport.height}`).join(", ")}`);
   if (consoleErrors.length) failures.push("browser console errors");
   if (requestErrors.length) failures.push("same-origin resource requests failed");
 
@@ -623,9 +754,9 @@ async function main() {
     requestErrors,
     report: {
       optionCount: optionIds.length, effects, stageAudits, alertPulse, deepBreathRefund,
-      secrecy, resultOnly, dedupeAndPriority, eventAdmission, directorInteractions,
+      secrecy, resultOnly, protocolResultOnly, dedupeAndPriority, eventAdmission, directorInteractions,
       stateMarkers, lowPerformance, reducedMotion, captionless, graphicalSignatures, guides,
-      pointerSafety, orphanCleanup, mobile, mobileViewports, captures,
+      pointerSafety, orphanCleanup, mobile, mobileViewports, desktopViewports, captures,
     },
   }, null, 2));
   if (failures.length) process.exit(1);
