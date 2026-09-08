@@ -113,6 +113,10 @@ class RoomManager {
       privateHandAuditHistory: [],
       hadAllInActionThisHand: false,
       allInPresentationEndsAt: 0,
+      presentationBarrier: null,
+      presentationBarrierTimer: null,
+      presentationBarrierRelease: null,
+      presentationBarrierSeq: 0,
     };
     const fixedGameMode = normalizeGameMode(gameMode);
     const fixedSkillMode = normalizeSkillMode(skillMode);
@@ -320,12 +324,14 @@ class RoomManager {
       clearTimeout(room.rematch.timer);
       room.rematch.timer = null;
     }
-    for (const timerKey of ["actionTimer", "botActionTimer", "nextHandTimer"]) {
+    for (const timerKey of ["actionTimer", "botActionTimer", "nextHandTimer", "presentationBarrierTimer"]) {
       if (room[timerKey]) {
         clearTimeout(room[timerKey]);
         room[timerKey] = null;
       }
     }
+    room.presentationBarrier = null;
+    room.presentationBarrierRelease = null;
     room.players.forEach((player) => {
       this.clearPlayerDisconnectTimer(player);
     });

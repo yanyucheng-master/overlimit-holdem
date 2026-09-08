@@ -296,6 +296,8 @@ describe("Retreat 同窗后悔按钮", () => {
     keep.room.currentPlayerIndex = 1;
     expect(use(keep.engine, keep.room, keep.b, "DEAD_END", {}, "dead")).toMatchObject({ status: "SUCCESS" });
     expect(keep.a.skillRuntime.retreatActive).toBe(true);
+    expect(keep.room.presentationBarrier).toMatchObject({ kind: "DEAD_END_COMMIT" });
+    expect(keep.engine.releasePresentationBarrier(keep.room, keep.room.presentationBarrier.id)).toBe(true);
     keep.room.skillState.bettingClosed = false;
     keep.a.status = "active";
     keep.a.isAllIn = false;
@@ -408,6 +410,8 @@ describe("Disguise 筹码信息裁剪", () => {
     expect(use(dead.engine, dead.room, dead.a, "DISGUISE", {}, "d14a")).toMatchObject({ status: "SUCCESS" });
     dead.a.isAllIn = false;
     expect(use(dead.engine, dead.room, dead.a, "DEAD_END", {}, "d14b")).toMatchObject({ status: "SUCCESS" });
+    expect(dead.room.presentationBarrier).toMatchObject({ kind: "DEAD_END_COMMIT" });
+    expect(dead.engine.releasePresentationBarrier(dead.room, dead.room.presentationBarrier.id)).toBe(true);
     const forced = dead.engine.getViewPlayers(dead.room, dead.b).find((player) => player.playerId === dead.a.playerId);
     expect(forced.isAllIn).toBe(true);
   });
@@ -612,6 +616,10 @@ describe("Endgame 结算顺序与处决", () => {
     expect(a.skillRuntime.directChipGainThisHand).toBe(200);
     expect(room.skillState.bettingClosed).toBe(true);
     expect(getValidActions(room, 0).validActions).toEqual([]);
+    expect(room.phase).toBe("pre_flop");
+    expect(room.presentationBarrier).toMatchObject({ kind: "ENDGAME_DECLARE" });
+    expect(room.lastHandResult).toBeNull();
+    expect(engine.releasePresentationBarrier(room, room.presentationBarrier.id)).toBe(true);
     expect(["showdown", "end"]).toContain(room.phase);
     expect(room.communityCards.length).toBe(5);
 
@@ -630,6 +638,12 @@ describe("Endgame 结算顺序与处决", () => {
       ctx.room.phase = "river";
       ctx.room.pot = 100;
       ctx.engine.settleShowdown(ctx.room);
+      if (ctx.room.presentationBarrier) {
+        expect(ctx.room.presentationBarrier).toMatchObject({ kind: "ENDGAME_EXECUTION" });
+        expect(ctx.room.lastHandResult).toBeNull();
+        expect(ctx.room.handResultHistory).toEqual([]);
+        expect(ctx.engine.releasePresentationBarrier(ctx.room, ctx.room.presentationBarrier.id)).toBe(true);
+      }
       return ctx;
     }
 

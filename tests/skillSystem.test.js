@@ -240,6 +240,12 @@ describe("能量、深呼吸、回收与公平", () => {
     expect(use(later.engine, later.room, later.a, "DEEP_BREATH", {}, "first-skill").ok).toBe(true);
     expect(use(later.engine, later.room, later.a, "FAIRNESS", {}, "fair-later")).toMatchObject({ ok: true, status: "SUCCESS" });
     expect(later.room.skillState.fairnessActive).toBe(true);
+    expect(later.engine.getRoomSnapshot(later.room, later.a).skillState.fairnessActive).toBe(true);
+    expect(later.engine.getRoomSnapshot(later.room, later.b).skillState.fairnessActive).toBe(true);
+    const { resetRoomSkillsForHand } = require("../game/skills/skillState");
+    resetRoomSkillsForHand(later.room);
+    expect(later.engine.getRoomSnapshot(later.room, later.a).skillState.fairnessActive).toBe(false);
+    expect(later.engine.getRoomSnapshot(later.room, later.b).skillState.fairnessActive).toBe(false);
 
     const vsCounter = setupRoom({
       loadoutA: ["FAIRNESS", "DEEP_BREATH"],
@@ -397,6 +403,8 @@ describe("反制、恐吓、血战、绝境、防守、绝路", () => {
     expect(use(engine, room, a, "INTIMIDATION", {}, "fear-then-dead").ok).toBe(true);
     expect(use(engine, room, a, "DEAD_END", {}, "dead-under-fear")).toMatchObject({ status: "SUCCESS" });
     expect(a.skillRuntime.deadEndActive).toBe(true);
+    expect(room.presentationBarrier).toMatchObject({ kind: "DEAD_END_COMMIT" });
+    expect(engine.releasePresentationBarrier(room, room.presentationBarrier.id)).toBe(true);
     expect(a.skillRuntime.allInAction).toBe(true);
     expect(getValidActions(room, 1).validActions).not.toContain("fold");
     a.chips = 1300;

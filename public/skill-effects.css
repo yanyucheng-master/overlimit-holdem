@@ -259,6 +259,12 @@
   animation: skill-effect-route-phase var(--fx-route-ms) linear var(--fx-route-delay) both;
 }
 
+.skill-effect-instance[data-has-route="false"] .skill-effect-route {
+  display: none;
+  opacity: 0;
+  animation: none;
+}
+
 .skill-effect-instance[data-presentation="pulse"] .skill-effect-route {
   display: none;
   opacity: 0;
@@ -302,6 +308,13 @@
   color: var(--fx-accent);
   filter: drop-shadow(0 0 13px color-mix(in srgb, var(--fx-accent) 48%, transparent));
   animation: skill-effect-impact-arrive var(--fx-impact-ms) cubic-bezier(.2, .76, .2, 1) var(--fx-impact-delay) both;
+}
+
+.skill-effect-impact-secondary {
+  left: var(--fx-secondary-target-x);
+  top: var(--fx-secondary-target-y);
+  width: clamp(54px, calc(var(--fx-secondary-target-w) + 18px), 240px);
+  height: clamp(48px, calc(var(--fx-secondary-target-h) + 14px), 180px);
 }
 
 .skill-impact-outline,
@@ -419,6 +432,14 @@
 .skill-effect-instance[data-impact="board"] .skill-impact-ring { border-radius: 18px; }
 .skill-effect-instance[data-impact="hud"] .skill-impact-flash { border-radius: 3px; }
 .skill-effect-instance[data-impact="interrupt"] .skill-impact-ring { border-radius: 2px; transform: rotate(45deg); }
+
+.skill-effect-instance .skill-effect-impact.skill-effect-impact-secondary {
+  left: var(--fx-secondary-target-x);
+  top: var(--fx-secondary-target-y);
+  width: min(calc(var(--fx-secondary-target-w) + 18px), min(72vw, 560px));
+  min-width: 92px;
+  height: clamp(62px, calc(var(--fx-secondary-target-h) + 14px), 150px);
+}
 
 .skill-effect-caption {
   position: absolute;
@@ -611,14 +632,15 @@
   animation-name: skill-effect-particle-in;
 }
 
-/* 03 Intimidation: table-wide pressure scan and hard betting perimeter. */
+/* 03 Intimidation: the opponent console is physically compressed by a hard
+   betting perimeter. This is deliberately local, not a table-wide halo. */
 .skill-effect-instance[data-effect="intimidation"] .skill-effect-core {
-  width: min(82vw, 1040px);
-  height: min(44vh, 360px);
+  width: min(calc(var(--fx-target-w) + 64px), min(74vw, 680px));
+  height: clamp(112px, calc(var(--fx-target-h) + 54px), 240px);
 }
 .skill-effect-instance[data-effect="intimidation"] .halo-a {
-  inset: 8% 2%;
-  border-radius: 24px;
+  inset: 8% 3%;
+  border-radius: 18px 18px 42px 42px;
   border-width: 2px;
   animation-name: skill-effect-pressure-frame;
 }
@@ -704,17 +726,61 @@
 .skill-effect-instance[data-effect="defense"] .line-b,
 .skill-effect-instance[data-effect="defense"] .line-c { display: none; }
 
-/* 07 Perception: one restrained radar sweep, deliberately the quietest FX. */
-.skill-effect-instance[data-effect="perception"] .skill-effect-core { width: 180px; height: 180px; }
-.skill-effect-instance[data-effect="perception"] .halo-a {
-  border-left-color: transparent;
-  border-bottom-color: transparent;
-  animation-name: skill-effect-radar-sweep;
+/* 07 Perception: the public board becomes a shallow information field. The
+   decorative values are neutral and never derive from hidden card data. */
+.skill-effect-instance[data-effect="perception"] .skill-effect-core {
+  width: min(calc(var(--fx-target-w) + 86px), min(82vw, 700px));
+  height: clamp(132px, calc(var(--fx-target-h) + 72px), 238px);
+  filter: drop-shadow(0 0 12px color-mix(in srgb, var(--fx-accent) 32%, transparent));
 }
-.skill-effect-instance[data-effect="perception"] .halo-b { inset: 34%; border-style: solid; }
-.skill-effect-instance[data-effect="perception"] .skill-effect-line,
+.skill-effect-instance[data-effect="perception"] .halo-a {
+  inset: 6% 2%;
+  border: 1px solid color-mix(in srgb, var(--fx-accent) 58%, transparent);
+  border-radius: 14px;
+  clip-path: polygon(0 0, 22% 0, 22% 3%, 3% 3%, 3% 28%, 0 28%, 0 0, 100% 0, 100% 28%, 97% 28%, 97% 3%, 78% 3%, 78% 0, 100% 0, 100% 100%, 78% 100%, 78% 97%, 97% 97%, 97% 72%, 100% 72%, 100% 100%, 0 100%, 0 72%, 3% 72%, 3% 97%, 22% 97%, 22% 100%, 0 100%);
+  background: repeating-linear-gradient(90deg, transparent 0 12%, color-mix(in srgb, var(--fx-accent) 7%, transparent) 12% 12.4%);
+  animation-name: skill-effect-information-frame;
+}
+.skill-effect-instance[data-effect="perception"] .halo-b {
+  inset: 14% 4%;
+  border: 0;
+  border-radius: 0;
+  background: linear-gradient(180deg, transparent 0 45%, color-mix(in srgb, var(--fx-secondary) 58%, #fff) 49% 51%, transparent 55%);
+  animation: skill-effect-information-scan var(--fx-manifest-ms) cubic-bezier(.18,.76,.2,1) var(--fx-anticipation-ms) both;
+}
+.skill-effect-instance[data-effect="perception"] .skill-effect-glyph,
 .skill-effect-instance[data-effect="perception"] .skill-effect-card,
-.skill-effect-instance[data-effect="perception"] .particle:nth-child(n+4) { display: none; }
+.skill-effect-instance[data-effect="perception"] .line-b,
+.skill-effect-instance[data-effect="perception"] .line-c { display: none; }
+.skill-effect-instance[data-effect="perception"] .line-a {
+  left: 7%;
+  right: 7%;
+  top: 50%;
+  background: linear-gradient(90deg, transparent, var(--fx-secondary), #fff 48% 52%, var(--fx-accent), transparent);
+  animation: skill-effect-information-read var(--fx-manifest-ms) ease-out var(--fx-anticipation-ms) both;
+}
+.skill-effect-instance[data-effect="perception"] .skill-effect-stage-data {
+  inset: 12% 7%;
+  display: block;
+  min-width: 0;
+  transform: none;
+  text-align: left;
+}
+.skill-effect-instance[data-effect="perception"] .skill-effect-data-line {
+  position: absolute;
+  font-size: clamp(8px, 1vw, 12px);
+  opacity: .86;
+}
+.skill-effect-instance[data-effect="perception"] .skill-effect-data-line:nth-child(1) { top: 4%; left: 3%; }
+.skill-effect-instance[data-effect="perception"] .skill-effect-data-line:nth-child(2) { top: 10%; right: 2%; }
+.skill-effect-instance[data-effect="perception"] .skill-effect-data-line:nth-child(3) { bottom: 7%; left: 14%; }
+.skill-effect-instance[data-effect="perception"] .skill-effect-data-line:nth-child(4) { right: 12%; bottom: 3%; }
+.skill-effect-instance[data-effect="perception"] .skill-effect-particles .particle {
+  width: 3px;
+  height: 10px;
+  border-radius: 1px;
+  background: var(--fx-accent);
+}
 
 /* 08 Intel: scan brackets close around the exact selected card/slot. */
 .skill-effect-instance[data-effect="intel"] .halo-a {
@@ -751,23 +817,34 @@
 .skill-effect-instance[data-effect="counter"] .line-b { transform: rotate(-34deg); height: 4px; }
 .skill-effect-instance[data-effect="counter"] .line-c { display: none; }
 
-/* 11 Fairness: a neutral white/gold reset wave removes colored state noise. */
+/* 11 Fairness: a bilateral judicial seal closes over both tactical zones. */
 .skill-effect-instance[data-effect="fairness"] .skill-effect-core {
   width: min(88vw, 1180px);
-  height: min(72vh, 760px);
+  height: min(60vh, 560px);
 }
 .skill-effect-instance[data-effect="fairness"] .halo-a {
-  inset: 4%;
-  border-width: 4px;
-  animation-name: skill-effect-reset-wave;
+  inset: 10% 2%;
+  border-width: 2px 4px;
+  border-radius: 16px;
+  clip-path: polygon(0 0, 42% 0, 42% 5%, 5% 5%, 5% 95%, 42% 95%, 42% 100%, 0 100%, 0 0, 100% 0, 100% 100%, 58% 100%, 58% 95%, 95% 95%, 95% 5%, 58% 5%, 58% 0);
+  animation-name: skill-effect-judicial-close;
 }
 .skill-effect-instance[data-effect="fairness"] .halo-b {
-  inset: 34%;
-  border-style: solid;
+  inset: 29% 43%;
+  border: 3px double color-mix(in srgb, var(--fx-accent) 84%, #fff);
+  border-radius: 8px;
   animation-name: skill-effect-reset-core;
 }
 .skill-effect-instance[data-effect="fairness"] .skill-effect-card { display: none; }
-.skill-effect-instance[data-effect="fairness"] .skill-effect-line { background: linear-gradient(90deg, transparent, #fff, var(--fx-accent), #fff, transparent); }
+.skill-effect-instance[data-effect="fairness"] .skill-effect-line {
+  left: 5%;
+  right: 5%;
+  transform: none;
+  background: linear-gradient(90deg, transparent, #fff, var(--fx-accent), #fff, transparent);
+}
+.skill-effect-instance[data-effect="fairness"] .line-a { top: 26%; }
+.skill-effect-instance[data-effect="fairness"] .line-b { top: 74%; }
+.skill-effect-instance[data-effect="fairness"] .line-c { top: 50%; opacity: .55; }
 .skill-effect-instance[data-effect="fairness"] .skill-effect-atmosphere {
   background:
     linear-gradient(180deg, transparent 0 32%, rgb(255 247 214 / .08) 48%, transparent 66%),
@@ -777,6 +854,15 @@
   height: 3px;
   background: linear-gradient(90deg, transparent, #fff, #ffe6a3, #fff, transparent);
   animation-name: skill-effect-reset-scan;
+}
+.skill-effect-instance[data-effect="fairness"] .skill-effect-impact,
+.skill-effect-instance[data-effect="fairness"] .skill-effect-impact-secondary {
+  min-width: 92px;
+  border-radius: 10px;
+}
+.skill-effect-instance[data-effect="fairness"] .skill-impact-outline {
+  border: 2px double color-mix(in srgb, var(--fx-accent) 82%, #fff);
+  background: linear-gradient(180deg, rgb(255 246 211 / .08), rgb(213 235 248 / .03));
 }
 
 /* 12 Cheat: two physical card planes cross on cyan/magenta swap tracks. */
@@ -1016,10 +1102,19 @@
    family geometry controls the physical verb. */
 .skill-effect-instance[data-effect="breath"][data-tier="FX2"] .skill-effect-core { width: 172px; height: 158px; }
 .skill-effect-instance[data-effect="probe"][data-tier="FX2"] .skill-effect-core { width: 190px; height: 150px; }
-.skill-effect-instance[data-effect="perception"][data-tier="FX2"] .skill-effect-core { width: 180px; height: 180px; }
+.skill-effect-instance[data-effect="perception"][data-tier="FX2"] .skill-effect-core {
+  width: min(calc(var(--fx-target-w) + 86px), min(82vw, 700px));
+  height: clamp(132px, calc(var(--fx-target-h) + 72px), 238px);
+}
 .skill-effect-instance[data-effect="blood"][data-tier="FX3"] .skill-effect-core { width: min(70vw, 840px); height: min(42vh, 390px); }
-.skill-effect-instance[data-effect="intimidation"][data-tier="FX4"] .skill-effect-core { width: min(82vw, 1040px); height: min(44vh, 360px); }
-.skill-effect-instance[data-effect="fairness"][data-tier="FX4"] .skill-effect-core { width: min(88vw, 1180px); height: min(72vh, 760px); }
+.skill-effect-instance[data-effect="intimidation"][data-tier="FX4"] .skill-effect-core {
+  width: min(calc(var(--fx-target-w) + 64px), min(74vw, 680px));
+  height: clamp(112px, calc(var(--fx-target-h) + 54px), 240px);
+}
+.skill-effect-instance[data-effect="fairness"][data-tier="FX4"] .skill-effect-core {
+  width: min(88vw, 1180px);
+  height: min(60vh, 560px);
+}
 .skill-effect-instance[data-effect="dead-end"][data-tier="FX4"] .skill-effect-core { width: min(84vw, 1080px); height: min(58vh, 560px); }
 .skill-effect-instance[data-effect="disguise"][data-tier="FX3"] .skill-effect-core { width: min(84vw, 1080px); height: min(58vh, 620px); }
 .skill-effect-instance[data-effect="protocol"][data-tier="FX3"] .skill-effect-core { width: min(76vw, 820px); height: min(42vh, 380px); }
@@ -1105,6 +1200,56 @@
 .skill-state-marker[data-tone="gold"] { border-color: rgb(244 203 102 / .48); color: #f3d67f; }
 .skill-state-marker[data-tone="red"] { border-color: rgb(255 61 102 / .48); color: #ff6988; }
 .skill-state-marker[data-tone="violet"] { border-color: rgb(171 100 255 / .48); color: #c793ff; }
+
+/* Fairness is a public, state-backed lock. These badges are ordinary HUD
+   nodes, not animation-layer state, so reconnect/snapshot sync restores them
+   without replaying the Fairness event. */
+.fairness-lock-badge {
+  position: relative;
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px double rgb(255 226 146 / .66);
+  border-radius: 8px;
+  color: #ffe39a;
+  background: linear-gradient(145deg, rgb(37 31 20 / .9), rgb(8 15 25 / .94));
+  box-shadow: inset 0 0 12px rgb(255 226 146 / .08), 0 0 16px rgb(255 226 146 / .12);
+  pointer-events: auto;
+  animation: fairness-lock-enter 160ms cubic-bezier(.2,.78,.2,1) both;
+}
+
+.fairness-lock-badge.hidden { display: none; }
+.fairness-lock-badge svg {
+  width: 17px;
+  height: 17px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.65;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.salon-ui #screen-game .opponent-zone .player-console:has(.fairness-lock-opponent:not(.hidden)) {
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+}
+
+.salon-ui #screen-game .fairness-lock-self {
+  position: absolute;
+  z-index: 5;
+  top: 4px;
+  left: 50%;
+  width: 26px;
+  height: 26px;
+  transform: translateX(-50%);
+}
+
+@keyframes fairness-lock-enter {
+  0% { opacity: 0; scale: .82; }
+  62% { opacity: 1; scale: 1.06; }
+  100% { opacity: 1; scale: 1; }
+}
 
 /* Broadcast layer remains a short identity confirmation and is visually
    subordinate to the anchored effect. */
@@ -1206,9 +1351,14 @@
   box-shadow: 0 12px 34px rgb(0 0 0 / .38), 0 0 22px color-mix(in srgb, var(--fx-accent, #55e8df) 12%, transparent);
 }
 
-body.skill-fx-shake-soft #screen-game.active {
-  animation: skill-effect-table-shake 120ms cubic-bezier(.2,.75,.25,1) both;
-  animation-delay: var(--skill-fx-shake-delay, 0ms);
+.skill-effect-instance[data-shake="soft"] .skill-effect-impact::after {
+  position: absolute;
+  inset: -8px;
+  content: "";
+  border: 2px solid color-mix(in srgb, var(--fx-accent) 70%, transparent);
+  border-radius: inherit;
+  opacity: 0;
+  animation: skill-effect-local-impact 180ms cubic-bezier(.2,.75,.25,1) var(--fx-impact-delay) both;
 }
 
 /* Quality gates. */
@@ -1263,12 +1413,18 @@ body.skill-fx-shake-soft #screen-game.active {
   display: none !important;
 }
 
-body.reduce-motion.skill-fx-shake-soft #screen-game.active,
-body.low-performance.skill-fx-shake-soft #screen-game.active {
-  animation: none;
-}
-
 @media (max-width: 720px) {
+  .fairness-lock-badge {
+    width: 24px;
+    height: 24px;
+    border-radius: 7px;
+  }
+  .fairness-lock-badge svg { width: 14px; height: 14px; }
+  .salon-ui #screen-game .fairness-lock-self {
+    top: 3px;
+    width: 22px;
+    height: 22px;
+  }
   .skill-fx-public[data-family] {
     top: max(62px, calc(env(safe-area-inset-top) + 48px));
     width: min(390px, calc(100vw - 20px));
@@ -1291,6 +1447,11 @@ body.low-performance.skill-fx-shake-soft #screen-game.active {
     width: min(88vw, 430px);
     height: min(26vh, 220px);
   }
+  .skill-effect-instance[data-effect="perception"] .skill-effect-core,
+  .skill-effect-instance[data-effect="perception"][data-tier="FX2"] .skill-effect-core {
+    width: min(90vw, calc(var(--fx-target-w) + 36px));
+    height: clamp(118px, calc(var(--fx-target-h) + 42px), 180px);
+  }
   .skill-effect-instance[data-tier="FX1"] .skill-effect-core { width: 124px; height: 104px; }
   .skill-effect-instance[data-tier="FX2"] .skill-effect-core { width: 184px; height: 142px; }
   .skill-effect-instance[data-tier="FX3"] .skill-effect-core { width: min(272px, 78vw); height: 190px; }
@@ -1301,6 +1462,11 @@ body.low-performance.skill-fx-shake-soft #screen-game.active {
   .skill-effect-instance[data-tier="FX4"] .skill-effect-caption { top: calc(var(--fx-stage-y) + min(100px, 12vh)); }
   .skill-effect-instance[data-impact="board"] .skill-effect-impact { min-width: min(88vw, 300px); }
   .skill-state-marker { padding: 2px 5px; font-size: 8px; }
+}
+
+body.reduce-motion .fairness-lock-badge,
+body.low-performance .fairness-lock-badge {
+  animation: none;
 }
 
 /* Development-only Skill FX Gallery. The launcher is removed by JavaScript on
@@ -2104,6 +2270,34 @@ body[data-screen="game"] .skill-fx-gallery-launcher {
   0% { opacity: 0; translate: 0 28px; }
   40%, 78% { opacity: 1; translate: 0 0; }
   100% { opacity: 0; translate: 0 -8px; }
+}
+@keyframes skill-effect-information-frame {
+  0%, 10% { opacity: 0; transform: scaleX(.72) scaleY(.9); }
+  32%, 78% { opacity: .92; transform: scale(1); }
+  100% { opacity: 0; transform: scaleX(1.03) scaleY(.96); }
+}
+@keyframes skill-effect-information-scan {
+  0%, 12% { opacity: 0; transform: translateY(-36%); }
+  24% { opacity: .82; }
+  72% { opacity: .62; transform: translateY(38%); }
+  100% { opacity: 0; transform: translateY(48%); }
+}
+@keyframes skill-effect-information-read {
+  0%, 14% { opacity: 0; scale: .15 1; }
+  38%, 72% { opacity: 1; scale: 1 1; }
+  100% { opacity: 0; scale: .72 1; }
+}
+@keyframes skill-effect-judicial-close {
+  0%, 8% { opacity: 0; transform: scaleX(1.16) scaleY(.82); }
+  38% { opacity: 1; transform: scaleX(.98) scaleY(1.03); }
+  54%, 86% { opacity: .92; transform: scale(1); }
+  100% { opacity: 0; transform: scale(.995); }
+}
+@keyframes skill-effect-local-impact {
+  0% { opacity: 0; transform: scale(.9); }
+  28% { opacity: .95; transform: scale(1.02); }
+  58% { opacity: .42; transform: scale(.985); }
+  100% { opacity: 0; transform: scale(1.04); }
 }
 @keyframes skill-effect-table-shake {
   0%, 100% { transform: translate3d(0, 0, 0); }

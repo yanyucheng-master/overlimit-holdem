@@ -51,7 +51,14 @@
     const publicTargetElement = isElement(event.publicTargetElement) ? event.publicTargetElement : null;
     return {
       ...event,
+      // Result-only presentation must not inherit private geometry, including
+      // the source/destination and bilateral impacts added by the director.
+      stageElement: isElement(event.publicStageElement) ? event.publicStageElement : null,
       targetElement: publicTargetElement,
+      fromElement: null,
+      toElement: publicTargetElement,
+      secondaryTargetElement: null,
+      route: false,
       anchor: cleanToken(event.publicAnchor || "board"),
       glyph: cleanToken(event.publicGlyph || "✓"),
       impactGlyph: cleanToken(event.publicImpactGlyph || event.publicGlyph || "✓"),
@@ -73,6 +80,7 @@
       family: "result",
       tier: "FX2",
       presentation: "result",
+      route: false,
       rhythm: "result",
       durationMs: 1050,
       resultDurations: null,
@@ -184,6 +192,7 @@
       this.pauseUntil = 0;
       this.activeNode = null;
       this.activeJob = null;
+      this.activeToken = 0;
       this.dedupeKeys = new Set();
       this.dedupeOrder = [];
       this.recentFingerprints = new Map();
@@ -336,39 +345,43 @@
       const job = this.queue.shift();
       this.busy = true;
       this.activeJob = job;
+      this.activeToken += 1;
+      job.token = this.activeToken;
+      job.finished = false;
       job.startedAt = Date.now();
       this.activeDeadline = job.startedAt + job.duration + 100;
       this.render(job);
-      this.scheduleActiveFinish();
+      this.scheduleActiveFinish(job.token);
     }
 
-    scheduleActiveFinish() {
+    scheduleActiveFinish(expectedToken = this.activeToken) {
       if (this.timer) clearTimeout(this.timer);
       const remaining = Math.max(0, this.activeDeadline - Date.now());
-      this.timer = setTimeout(() => this.finishActive(), remaining);
+      this.timer = setTimeout(() => this.finishActive(expectedToken), remaining);
     }
 
     extendActiveHold(ms) {
       if (!this.activeJob) return;
       this.activeDeadline = Math.max(this.activeDeadline, Date.now() + Math.max(0, Number(ms) || 0));
-      this.scheduleActiveFinish();
+      this.scheduleActiveFinish(this.activeToken);
     }
 
-    finishActive() {
+    finishActive(expectedToken = this.activeToken) {
+      const job = this.activeJob;
+      if (!job || job.finished || expectedToken !== this.activeToken || job.token !== expectedToken) return false;
+      job.finished = true;
       if (this.timer) clearTimeout(this.timer);
       this.timer = 0;
       this.activeDeadline = 0;
       this.activeNode?.remove();
       this.activeNode = null;
       this.hideBroadcasts();
-      if (typeof document !== "undefined") {
-        document.body?.classList.remove("skill-fx-shake-soft");
-        document.body?.style.removeProperty("--skill-fx-shake-delay");
-      }
       if (this.effectLayer) this.effectLayer.classList.remove("is-settlement-active");
       this.activeJob = null;
       this.busy = false;
+      if (typeof job.event?.onComplete === "function") job.event.onComplete(job);
       this.pump();
+      return true;
     }
 
     hideBroadcasts() {
@@ -420,6 +433,9 @@
       };
       const stageBox = centerOf(stage, fallback);
       const targetBox = centerOf(target, stageBox);
+      const sourceBox = centerOf(job.event.fromElement, stageBox);
+      const destinationBox = centerOf(job.event.toElement, targetBox);
+      const secondaryTargetBox = centerOf(job.event.secondaryTargetElement, targetBox);
       const stageX = stageBox.x - layerRect.left;
       const stageY = stageBox.y - layerRect.top;
       const targetX = targetBox.x - layerRect.left;
@@ -432,6 +448,10 @@
       node.style.setProperty("--fx-target-y", `${targetY}px`);
       node.style.setProperty("--fx-target-w", `${targetBox.width}px`);
       node.style.setProperty("--fx-target-h", `${targetBox.height}px`);
+      node.style.setProperty("--fx-secondary-target-x", `${secondaryTargetBox.x - layerRect.left}px`);
+      node.style.setProperty("--fx-secondary-target-y", `${secondaryTargetBox.y - layerRect.top}px`);
+      node.style.setProperty("--fx-secondary-target-w", `${secondaryTargetBox.width}px`);
+      node.style.setProperty("--fx-secondary-target-h", `${secondaryTargetBox.height}px`);
       // Compatibility aliases keep the existing family artwork centered on the
       // new hero stage while impact/route use the target variables below.
       node.style.setProperty("--fx-x", `${stageX}px`);
@@ -439,14 +459,15 @@
       node.style.setProperty("--fx-w", `${stageBox.width}px`);
       node.style.setProperty("--fx-h", `${stageBox.height}px`);
 
-      const routeX = targetBox.x - stageBox.x;
-      const routeY = targetBox.y - stageBox.y;
+      const routeX = destinationBox.x - sourceBox.x;
+      const routeY = destinationBox.y - sourceBox.y;
       const routeLength = Math.max(0, Math.hypot(routeX, routeY));
-      node.dataset.hasRoute = routeLength > 28 ? "true" : "false";
-      node.style.setProperty("--fx-from-x", `${stageX}px`);
-      node.style.setProperty("--fx-from-y", `${stageY}px`);
-      node.style.setProperty("--fx-to-x", `${targetX}px`);
-      node.style.setProperty("--fx-to-y", `${targetY}px`);
+      const routeEnabled = job.event.route !== false && job.profile.route !== false;
+      node.dataset.hasRoute = routeEnabled && routeLength > 28 ? "true" : "false";
+      node.style.setProperty("--fx-from-x", `${sourceBox.x - layerRect.left}px`);
+      node.style.setProperty("--fx-from-y", `${sourceBox.y - layerRect.top}px`);
+      node.style.setProperty("--fx-to-x", `${destinationBox.x - layerRect.left}px`);
+      node.style.setProperty("--fx-to-y", `${destinationBox.y - layerRect.top}px`);
       node.style.setProperty("--fx-route-length", `${Math.max(24, routeLength)}px`);
       node.style.setProperty("--fx-route-angle", `${Math.atan2(routeY, routeX) * 180 / Math.PI}deg`);
       node.style.setProperty("--fx-route-dx", `${routeX}px`);
@@ -475,6 +496,14 @@
       node.dataset.presentation = cleanToken(profile.presentation || "journey").toLowerCase();
       node.dataset.rhythm = cleanToken(timeline?.rhythm || profile.rhythm || "standard").toLowerCase();
       node.dataset.verb = neutralResult ? "public-result" : cleanToken(profile.verb || profile.family).toLowerCase();
+      const shakeEligible = profile.id !== "BLOOD_BATTLE"
+        || event.context === "settlement"
+        || event.resultOnly === true
+        || ["REVEALED", "RESULT"].includes(cleanToken(event.status).toUpperCase());
+      node.dataset.shake = !settings.reduceMotion && !settings.lowPerformance && shakeEligible
+        && profile.shake === "soft" && SHAKE_ALLOWLIST.has(profile.id)
+        ? "soft"
+        : "none";
       if (event.interruptedVisual) node.dataset.interruptedVisual = cleanToken(event.interruptedVisual).toLowerCase();
       const compositeSkills = Array.isArray(event.compositeSkills)
         ? event.compositeSkills.map((value) => cleanToken(value).toUpperCase()).filter(Boolean).slice(0, 6)
@@ -549,6 +578,12 @@
         makeAtom("i", "skill-impact-flash"),
         makeAtom("strong", "skill-impact-glyph", neutralResult ? "✓" : impactGlyphFor({ ...profile, impact: impactType }, event))
       );
+      if (isElement(event.secondaryTargetElement)) {
+        node.dataset.dualTarget = "true";
+        const secondaryImpact = impact.cloneNode(true);
+        secondaryImpact.classList.add("skill-effect-impact-secondary");
+        node.appendChild(secondaryImpact);
+      }
 
       const caption = makeAtom("div", "skill-effect-caption");
       node.dataset.identity = revealIdentity ? "revealed" : "result-only";
@@ -633,15 +668,6 @@
       this.activeNode = node;
       this.positionNode(node, this.resolveStage(job), this.resolveTarget(job), job);
       this.renderBroadcast(job);
-      const bloodSettlement = job.profile.id !== "BLOOD_BATTLE"
-        || job.event.context === "settlement"
-        || job.event.resultOnly === true
-        || ["REVEALED", "RESULT"].includes(cleanToken(job.event.status).toUpperCase());
-      if (!job.settings.reduceMotion && !job.settings.lowPerformance && bloodSettlement
-        && job.profile.shake === "soft" && SHAKE_ALLOWLIST.has(job.profile.id)) {
-        document.body?.style.setProperty("--skill-fx-shake-delay", `${Math.max(0, Number(job.timeline?.routeEndMs) || 0)}ms`);
-        document.body?.classList.add("skill-fx-shake-soft");
-      }
       this.playSound(job.profile.sound, job);
       if (job.profile.haptics) this.playHaptics(job.profile.haptics, job);
     }
@@ -713,14 +739,11 @@
       this.activeNode = null;
       this.activeJob = null;
       this.busy = false;
+      this.activeToken += 1;
       this.activeDeadline = 0;
       this.pauseUntil = 0;
       this.hideBroadcasts();
       this.effectLayer?.classList.remove("is-settlement-active");
-      if (typeof document !== "undefined") {
-        document.body?.classList.remove("skill-fx-shake-soft");
-        document.body?.style.removeProperty("--skill-fx-shake-delay");
-      }
       if (!keepStates) this.syncStates([]);
     }
 

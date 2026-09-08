@@ -88,6 +88,7 @@
     resultLabel: "RESOLVED",
     presentation: FX_PRESENTATION.JOURNEY,
     rhythm: "standard",
+    route: true,
     resultRhythms: null,
     verb: value.family || "signal",
     durationMs: null,
@@ -116,21 +117,21 @@
     INTIMIDATION: profile({
       id: "INTIMIDATION", name: "恐吓", english: "INTIMIDATION",
       tier: "FX4", durationMs: 1950, rhythm: "hero", verb: "pressure-lock",
-      family: "intimidation", anchor: "board", impact: "board", accent: "#ff5f76",
+      family: "intimidation", anchor: "opponent", impact: "player", route: false, accent: "#ff5f76",
       secondary: "#ffad55", glyph: "!", sound: "pressure", persistent: "NO_FOLD",
       resultLabel: "NO FOLD // CAP 500",
     }),
     DESPERATION: profile({
       id: "DESPERATION", name: "绝境", english: "DESPERATION",
       tier: "FX2", durationMs: 1050, verb: "critical-escalate",
-      family: "desperation", anchor: "caster", impact: "player", accent: "#ff456b",
+      family: "desperation", anchor: "caster", impact: "player", route: false, accent: "#ff456b",
       secondary: "#ffd46c", glyph: "×3", sound: "critical", persistent: "CRITICAL",
       resultLabel: "CRITICAL MULTIPLIER",
     }),
     BLOOD_BATTLE: profile({
       id: "BLOOD_BATTLE", name: "血战", english: "BLOOD BATTLE",
       tier: "FX3", durationMs: 1450, rhythm: "hero", verb: "stakes-escalate",
-      family: "blood", anchor: "pot", impact: "chip", accent: "#ff2d5d",
+      family: "blood", anchor: "pot", impact: "chip", route: false, accent: "#ff2d5d",
       secondary: "#d442ff", glyph: "×2", sound: "blood", shake: "soft",
       haptics: Object.freeze([38, 24, 68]), persistent: "BLOOD", resultLabel: "STAKES DOUBLED",
     }),
@@ -143,8 +144,8 @@
     }),
     PERCEPTION: profile({
       id: "PERCEPTION", name: "感知", english: "PERCEPTION",
-      tier: "FX2", durationMs: 1000, verb: "radar-acquire",
-      family: "perception", anchor: "target", impact: "card", visibility: VISIBILITY.SECRET,
+      tier: "FX2", durationMs: 1000, verb: "board-information-read",
+      family: "perception", anchor: "board", impact: "board", route: false, visibility: VISIBILITY.SECRET,
       accent: "#63f4de", secondary: "#4aaeff", glyph: "◉", sound: "whisper",
       resultLabel: "SIGNAL ACQUIRED",
     }),
@@ -172,7 +173,7 @@
     FAIRNESS: profile({
       id: "FAIRNESS", name: "公平", english: "FAIRNESS",
       tier: "FX4", durationMs: 2050, rhythm: "hero", verb: "table-reset",
-      family: "fairness", anchor: "board", impact: "board", accent: "#ffe7a0",
+      family: "fairness", anchor: "players", impact: "hud", route: false, accent: "#ffe7a0",
       secondary: "#e8f7ff", glyph: "0", sound: "reset", shake: "soft",
       haptics: Object.freeze([32, 24, 50]), persistent: "SILENCE", resultLabel: "SYSTEM RESET",
     }),
@@ -186,7 +187,7 @@
     DEAD_END: profile({
       id: "DEAD_END", name: "绝路", english: "DEAD END",
       tier: "FX4", durationMs: 2050, rhythm: "hero", verb: "blast-door-seal",
-      family: "dead-end", anchor: "board", impact: "board", accent: "#ff3c61",
+      family: "dead-end", anchor: "board", impact: "board", route: false, accent: "#ff3c61",
       secondary: "#ffb14c", glyph: "⊠", sound: "lockdown", shake: "soft",
       haptics: Object.freeze([45, 30, 82]), persistent: "NO_EXIT", resultLabel: "NO EXIT",
     }),
@@ -207,7 +208,7 @@
     FORTUNE: profile({
       id: "FORTUNE", name: "强运", english: "FORTUNE",
       tier: "FX3", durationMs: 1420, verb: "branch-converge",
-      family: "fortune", anchor: "cards", impact: "card", visibility: VISIBILITY.SECRET,
+      family: "fortune", anchor: "cards", impact: "card", route: false, visibility: VISIBILITY.SECRET,
       accent: "#ffd66b", secondary: "#54f0c4", glyph: "✦", sound: "fortune",
       resultLabel: "FAVORABLE BRANCH",
     }),
@@ -228,7 +229,7 @@
     ALERT: profile({
       id: "ALERT", name: "警觉", english: "ALERT",
       tier: "FX1", durationMs: 560, presentation: FX_PRESENTATION.PULSE,
-      rhythm: "pulse", verb: "hidden-signal-pulse",
+      rhythm: "pulse", verb: "hidden-signal-pulse", route: false,
       family: "alert", anchor: "self", impact: "hud", visibility: VISIBILITY.SECRET,
       accent: "#72f5e3", secondary: "#f1d777", glyph: "⌁", sound: "alert",
       resultLabel: "HIDDEN ACTIVITY",
@@ -243,7 +244,7 @@
     RESTART: profile({
       id: "RESTART", name: "重启", english: "RESTART",
       tier: "FX3", durationMs: 1450, rhythm: "hero", verb: "recall-shuffle-redeal",
-      family: "restart", anchor: "cards", impact: "card", visibility: VISIBILITY.SECRET,
+      family: "restart", anchor: "cards", impact: "card", route: false, visibility: VISIBILITY.SECRET,
       accent: "#55cfff", secondary: "#c56cff", glyph: "⟳", sound: "restart",
       resultLabel: "HAND REBUILT",
     }),
@@ -257,7 +258,7 @@
     DISGUISE: profile({
       id: "DISGUISE", name: "伪装", english: "DISGUISE",
       tier: "FX3", durationMs: 1400, verb: "data-veil",
-      family: "disguise", anchor: "board", impact: "hud", accent: "#9e74ff",
+      family: "disguise", anchor: "board", impact: "hud", route: false, accent: "#9e74ff",
       secondary: "#33d8d0", glyph: "—", sound: "veil", persistent: "MASKED",
       resultLabel: "CHIP DATA MASKED",
     }),

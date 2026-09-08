@@ -12,6 +12,7 @@ const {
 } = require("../chipEconomy");
 const { isSkillEnabled } = require("../skillModes");
 const { SKILL_CONFIG, PERCEPTION_CONFIG } = require("../skillConfig");
+const { PRESENTATION_KIND } = require("../presentationConfig");
 const {
   getSkillDefinition,
   listSkillDefinitions,
@@ -988,6 +989,35 @@ class SkillEngine {
     }
 
     const result = resolution || {};
+    if (result.endgameContinue) {
+      const presentationBarrier = this.gameEngine?.beginEndgamePresentation?.(room) || null;
+      if (presentationBarrier) {
+        result.publicData = {
+          ...(result.publicData || {}),
+          presentationBarrier,
+        };
+      }
+    }
+    if (result.commitAllIn) {
+      const handNo = room.handNo;
+      const handId = room.handId;
+      const playerId = player.playerId;
+      const presentationBarrier = this.gameEngine?.beginPresentationBarrier?.(room, {
+        kind: PRESENTATION_KIND.DEAD_END_COMMIT,
+        onRelease: () => {
+          if (room.handNo !== handNo || room.handId !== handId) return;
+          const currentPlayer = room.players.find((candidate) => candidate.playerId === playerId);
+          if (currentPlayer) this.commitDeclaredAllIn(room, currentPlayer);
+        },
+      }) || null;
+      if (presentationBarrier) {
+        result.publicData = {
+          ...(result.publicData || {}),
+          presentationBarrier,
+        };
+        result.commitAllIn = false;
+      }
+    }
     if (result.status === "FAILED") {
       recordPaidFailure(player, { skillId: skill.id, cost, reason: result.failureReason || "FAILED" });
     }
@@ -1037,7 +1067,6 @@ class SkillEngine {
     this.observeAlert(room, player, skill, target, result);
     if (result.commitAllIn) this.commitDeclaredAllIn(room, player);
     if (result.loanKill) this.gameEngine?.settleLoanKill?.(room, player, opponent);
-    if (result.endgameContinue) this.gameEngine?.continueAfterEndgame?.(room);
     return { ok: true, status: result.status || "SUCCESS" };
   }
 

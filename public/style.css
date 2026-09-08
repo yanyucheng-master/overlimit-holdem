@@ -6298,6 +6298,31 @@ body.low-performance .hand-settle-modal {
   pointer-events: none;
 }
 
+.endgame-fx.is-result-hold {
+  opacity: 1;
+}
+
+.endgame-fx.is-restored-hold,
+.endgame-fx.is-restored-hold * {
+  animation: none !important;
+}
+
+.endgame-fx.is-restored-hold {
+  opacity: 1;
+}
+
+.endgame-declare.is-restored-hold .egd-shock,
+.endgame-declare.is-restored-hold .egd-embers,
+.endgame-declare.is-restored-hold .egd-scan,
+.endgame-kill.is-restored-hold .egk-whiteout,
+.endgame-kill.is-restored-hold .egk-split,
+.endgame-kill.is-restored-hold .egk-slash,
+.endgame-kill.is-restored-hold .egk-slash-trail,
+.endgame-kill.is-restored-hold .egk-ring,
+.endgame-kill.is-restored-hold .egk-sparks {
+  display: none;
+}
+
 /* ---- Declaration: black-gold judgment seal ---- */
 .endgame-declare {
   --egd-dur: 2600ms;
@@ -6753,8 +6778,7 @@ body.low-performance .hand-settle-modal {
 /* ---- ENDGAME keyframes ---- */
 @keyframes egd-root {
   0% { opacity: 0; }
-  5%, 88% { opacity: 1; }
-  100% { opacity: 0; }
+  5%, 100% { opacity: 1; }
 }
 
 @keyframes egd-fade-in {
@@ -6831,8 +6855,7 @@ body.low-performance .hand-settle-modal {
 
 @keyframes egk-root {
   0% { opacity: 0; }
-  2%, 90% { opacity: 1; }
-  100% { opacity: 0; }
+  2%, 100% { opacity: 1; }
 }
 
 @keyframes egk-whiteout {
@@ -6912,7 +6935,7 @@ body.low-performance .hand-settle-modal {
   100% { opacity: 0; transform: translateX(0); }
 }
 
-@keyframes screen-shake-hard {
+@keyframes endgame-impact-shake {
   0%, 100% { transform: translate(0); }
   8% { transform: translate(-14px, 8px) rotate(-0.5deg); }
   20% { transform: translate(12px, -9px) rotate(0.45deg); }
@@ -6922,8 +6945,12 @@ body.low-performance .hand-settle-modal {
   84% { transform: translate(3px, -2px); }
 }
 
-body.shake-hard .app-shell {
-  animation: screen-shake-hard 1000ms linear;
+.endgame-declare.is-impact-shake .egd-lockup {
+  animation: endgame-impact-shake 520ms 300ms linear both;
+}
+
+.endgame-kill.is-impact-shake .egk-lockup {
+  animation: endgame-impact-shake 760ms 360ms linear both;
 }
 
 /* ---- ENDGAME fx: motion / performance adaptations ---- */

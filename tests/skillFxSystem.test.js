@@ -44,7 +44,7 @@ describe("launch skill FX system contract", () => {
     expect(deepBreath).toMatchObject({ tier: "FX2", durationMs: 1060, presentation: "journey" });
     expect(recycle).toMatchObject({ tier: "FX2", durationMs: 1000, presentation: "journey" });
     expect(probe).toMatchObject({ tier: "FX2", durationMs: 960, presentation: "journey" });
-    expect(alert).toMatchObject({ tier: "FX1", presentation: "pulse" });
+    expect(alert).toMatchObject({ tier: "FX1", presentation: "pulse", route: false });
     [deepBreath, recycle, probe].forEach((profile) => {
       expect(profiles.fxDuration(profile, "high", false)).toBeGreaterThanOrEqual(profiles.JOURNEY_MIN_MS);
       expect(profiles.fxDuration(profile, "low", false)).toBeGreaterThanOrEqual(profiles.JOURNEY_MIN_MS);
@@ -89,13 +89,13 @@ describe("launch skill FX system contract", () => {
 
   test("approved launch hierarchy uses the intended tiers and physical anchors", () => {
     expect(profiles.getSkillFxProfile("DEEP_BREATH")).toMatchObject({ tier: "FX2", anchor: "energy", impact: "energy" });
-    expect(profiles.getSkillFxProfile("PERCEPTION")).toMatchObject({ tier: "FX2", anchor: "target" });
+    expect(profiles.getSkillFxProfile("PERCEPTION")).toMatchObject({ tier: "FX2", anchor: "board", impact: "board", route: false });
     expect(profiles.getSkillFxProfile("INTEL_ONE")).toMatchObject({ tier: "FX3", anchor: "target" });
     expect(profiles.getSkillFxProfile("BLOOD_BATTLE")).toMatchObject({ tier: "FX3", anchor: "pot" });
     expect(profiles.getSkillFxProfile("DESTINY")).toMatchObject({ tier: "FX4", anchor: "river" });
     expect(profiles.getSkillFxProfile("RETREAT")).toMatchObject({ tier: "FX3", anchor: "pot" });
-    expect(profiles.getSkillFxProfile("INTIMIDATION")).toMatchObject({ tier: "FX4", impact: "board" });
-    expect(profiles.getSkillFxProfile("FAIRNESS")).toMatchObject({ tier: "FX4", impact: "board" });
+    expect(profiles.getSkillFxProfile("INTIMIDATION")).toMatchObject({ tier: "FX4", anchor: "opponent", impact: "player", route: false });
+    expect(profiles.getSkillFxProfile("FAIRNESS")).toMatchObject({ tier: "FX4", anchor: "players", impact: "hud", route: false });
     expect(profiles.getSkillFxProfile("DEAD_END")).toMatchObject({ tier: "FX4", impact: "board" });
   });
 
@@ -229,6 +229,29 @@ describe("launch skill FX system contract", () => {
     expect(fx.queue.map((job) => job.event.requestId)).toEqual(["loan-v2-a", "loan-v2-b"]);
   });
 
+  test("result-only jobs discard private stage, route and secondary target geometry", () => {
+    const fx = createQueuedFxManager();
+    const privateAnchor = { nodeType: 1, getBoundingClientRect: jest.fn() };
+    ["CHEAT", "PERCEPTION", "FAIRNESS"].forEach((skillId) => {
+      expect(fx.play({
+        eventId: `neutral-geometry-${skillId}`,
+        skillId, casterId: "P1", viewerId: "P2", audience: "opponent",
+        disclosure: "result", resultOnly: true,
+        stageElement: privateAnchor, targetElement: privateAnchor,
+        fromElement: privateAnchor, toElement: privateAnchor,
+        secondaryTargetElement: privateAnchor, route: true,
+      })).toBe(true);
+    });
+    fx.queue.forEach((job) => {
+      expect(job.event).toMatchObject({
+        stageElement: null, targetElement: null, fromElement: null,
+        toElement: null, secondaryTargetElement: null, route: false,
+      });
+      expect(job.profile).toMatchObject({ family: "result", anchor: "board", route: false });
+    });
+    expect(privateAnchor.getBoundingClientRect).not.toHaveBeenCalled();
+  });
+
   test("FX-ID-07 identical fallback copies merge while different hands remain distinct", () => {
     const fx = createQueuedFxManager();
     const base = {
@@ -294,6 +317,27 @@ describe("launch skill FX system contract", () => {
     expect(fx.queue.map((job) => job.profile.id)).toEqual(["COUNTER", "PROBE"]);
     expect(fx.activeNode.classList.add).toHaveBeenCalledWith("is-counter-cut");
     fx.clear();
+  });
+
+  test("an active Fairness instance completes and cleans up exactly once", () => {
+    const fx = new manager.SkillFxManager();
+    const onComplete = jest.fn();
+    const remove = jest.fn();
+    fx.busy = true;
+    fx.activeToken = 7;
+    fx.activeJob = {
+      token: 7,
+      finished: false,
+      profile: profiles.getSkillFxProfile("FAIRNESS"),
+      event: { onComplete },
+    };
+    fx.activeNode = { remove };
+    expect(fx.finishActive(7)).toBe(true);
+    expect(fx.finishActive(7)).toBe(false);
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(onComplete).toHaveBeenCalledTimes(1);
+    expect(fx.activeNode).toBeNull();
+    expect(fx.activeJob).toBeNull();
   });
 
   test("dual Blood Battle upgrades one stage and grants a stable x4 hold", () => {
@@ -371,7 +415,8 @@ describe("launch skill FX system contract", () => {
   test("FX-STAGE-03 Cheat retains an exact card target after the central stage", () => {
     const client = fs.readFileSync(path.join(publicDir, "client.js"), "utf8");
     expect(client).toContain('if (id === "CHEAT")');
-    expect(client).toContain('el.opponentCards?.children?.[Number(target.index)]');
+    expect(client).toContain('opposingCards?.children?.[Number(target.index)]');
+    expect(client).toContain("Never resolve hidden card detail");
     expect(profiles.getSkillFxProfile("CHEAT")).toMatchObject({ tier: "FX3", impact: "card" });
   });
 
@@ -389,11 +434,26 @@ describe("launch skill FX system contract", () => {
     expect(profiles.getSkillFxProfile("LOAN")).toMatchObject({ impact: "chip" });
   });
 
-  test("FX-STAGE-06 Fairness uses a major central stage and board impact", () => {
-    expect(profiles.getSkillFxProfile("FAIRNESS")).toMatchObject({ tier: "FX4", anchor: "board", impact: "board" });
+  test("FX-STAGE-06 Fairness uses a bilateral player HUD impact", () => {
+    expect(profiles.getSkillFxProfile("FAIRNESS")).toMatchObject({ tier: "FX4", anchor: "players", impact: "hud", route: false });
     const css = fs.readFileSync(path.join(publicDir, "skill-effects.css"), "utf8");
     expect(css).toContain('[data-effect="fairness"]');
-    expect(css).toContain('[data-impact="board"] .skill-effect-impact');
+    expect(css).toContain(".skill-effect-impact-secondary");
+    expect(css).toContain('[data-effect="fairness"] .skill-effect-impact-secondary');
+  });
+
+  test("FX-STAGE-06B Perception reads only the public board information field", () => {
+    const client = fs.readFileSync(path.join(publicDir, "client.js"), "utf8");
+    expect(client).toContain('if (id === "PERCEPTION")');
+    expect(client).toContain("targetElement = boardField");
+    expect(client).toContain("stageElement = boardField");
+    expect(client).toContain("route = false");
+    expect(profiles.getSkillFxProfile("PERCEPTION")).toMatchObject({
+      anchor: "board",
+      impact: "board",
+      route: false,
+      visibility: "SECRET",
+    });
   });
 
   test("FX-STAGE-07 ordinary opponents receive no secret stage side channel", () => {

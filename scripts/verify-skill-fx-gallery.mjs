@@ -33,6 +33,7 @@ const HERO_CAPTURES = [
 ];
 const MOBILE_HERO_CAPTURES = ["CHEAT", "FAIRNESS", "NULLIFICATION", "DEAD_END", "RESTART"];
 const CAPTURE_PHASES = [20, 45, 65, 82];
+const FAIRNESS_FINISH_CAPTURE_OFFSETS = [-200, 0, 50, 150, 350];
 
 const profileIdFor = (skillId) => skillId.startsWith("PROTOCOL_") ? "PROTOCOL_SHOWDOWN" : skillId;
 
@@ -101,18 +102,43 @@ async function inspectInstance(instance) {
 }
 
 async function anchorAudit(page, skillId, expectedSelector, options = {}) {
-  const instance = await selectAndReplay(page, skillId, options);
-  return instance.evaluate((node, selector) => {
+  const {
+    expectedStageSelector = '[data-fx-gallery-anchor="stageCenter"]',
+    expectedSecondarySelector = null,
+    expectedSourceSelector = null,
+    expectedDestinationSelector = null,
+    ...replayOptions
+  } = options;
+  const instance = await selectAndReplay(page, skillId, replayOptions);
+  return instance.evaluate((node, selectors) => {
     const layer = node.parentElement;
-    const stageAnchor = document.querySelector('[data-fx-gallery-anchor="stageCenter"]');
-    const targetAnchor = document.querySelector(selector);
+    const stageAnchor = document.querySelector(selectors.stage);
+    const targetAnchor = document.querySelector(selectors.target);
+    const secondaryTargetAnchor = selectors.secondary
+      ? document.querySelector(selectors.secondary)
+      : null;
+    const sourceAnchor = selectors.source
+      ? document.querySelector(selectors.source)
+      : null;
+    const destinationAnchor = selectors.destination
+      ? document.querySelector(selectors.destination)
+      : null;
     const layerRect = layer.getBoundingClientRect();
     const stageRect = stageAnchor.getBoundingClientRect();
     const targetRect = targetAnchor.getBoundingClientRect();
+    const secondaryTargetRect = secondaryTargetAnchor?.getBoundingClientRect();
     const stageX = Number.parseFloat(node.style.getPropertyValue("--fx-stage-x"));
     const stageY = Number.parseFloat(node.style.getPropertyValue("--fx-stage-y"));
     const targetX = Number.parseFloat(node.style.getPropertyValue("--fx-target-x"));
     const targetY = Number.parseFloat(node.style.getPropertyValue("--fx-target-y"));
+    const secondaryTargetX = Number.parseFloat(node.style.getPropertyValue("--fx-secondary-target-x"));
+    const secondaryTargetY = Number.parseFloat(node.style.getPropertyValue("--fx-secondary-target-y"));
+    const fromX = Number.parseFloat(node.style.getPropertyValue("--fx-from-x"));
+    const fromY = Number.parseFloat(node.style.getPropertyValue("--fx-from-y"));
+    const toX = Number.parseFloat(node.style.getPropertyValue("--fx-to-x"));
+    const toY = Number.parseFloat(node.style.getPropertyValue("--fx-to-y"));
+    const sourceRect = sourceAnchor?.getBoundingClientRect();
+    const destinationRect = destinationAnchor?.getBoundingClientRect();
     return {
       stageX,
       stageY,
@@ -122,11 +148,34 @@ async function anchorAudit(page, skillId, expectedSelector, options = {}) {
       expectedStageY: stageRect.top + stageRect.height / 2 - layerRect.top,
       expectedTargetX: targetRect.left + targetRect.width / 2 - layerRect.left,
       expectedTargetY: targetRect.top + targetRect.height / 2 - layerRect.top,
+      secondaryTargetX,
+      secondaryTargetY,
+      expectedSecondaryTargetX: secondaryTargetRect
+        ? secondaryTargetRect.left + secondaryTargetRect.width / 2 - layerRect.left
+        : null,
+      expectedSecondaryTargetY: secondaryTargetRect
+        ? secondaryTargetRect.top + secondaryTargetRect.height / 2 - layerRect.top
+        : null,
       stageTargetDistance: Math.hypot(stageX - targetX, stageY - targetY),
+      fromX,
+      fromY,
+      toX,
+      toY,
+      expectedFromX: sourceRect ? sourceRect.left + sourceRect.width / 2 - layerRect.left : null,
+      expectedFromY: sourceRect ? sourceRect.top + sourceRect.height / 2 - layerRect.top : null,
+      expectedToX: destinationRect ? destinationRect.left + destinationRect.width / 2 - layerRect.left : null,
+      expectedToY: destinationRect ? destinationRect.top + destinationRect.height / 2 - layerRect.top : null,
+      routeDistance: Math.hypot(fromX - toX, fromY - toY),
       hasRoute: node.dataset.hasRoute,
       impactType: node.dataset.impact,
     };
-  }, expectedSelector);
+  }, {
+    stage: expectedStageSelector,
+    target: expectedSelector,
+    secondary: expectedSecondarySelector,
+    source: expectedSourceSelector,
+    destination: expectedDestinationSelector,
+  });
 }
 
 function isNear(actual, expected, tolerance = 2.5) {
@@ -134,10 +183,294 @@ function isNear(actual, expected, tolerance = 2.5) {
 }
 
 function auditMatchesAnchors(audit) {
-  return isNear(audit.stageX, audit.expectedStageX)
+  const primaryMatches = isNear(audit.stageX, audit.expectedStageX)
     && isNear(audit.stageY, audit.expectedStageY)
     && isNear(audit.targetX, audit.expectedTargetX)
     && isNear(audit.targetY, audit.expectedTargetY);
+  const secondaryMatches = audit.expectedSecondaryTargetX == null
+    || (isNear(audit.secondaryTargetX, audit.expectedSecondaryTargetX)
+      && isNear(audit.secondaryTargetY, audit.expectedSecondaryTargetY));
+  const routeMatches = audit.expectedFromX == null
+    || (isNear(audit.fromX, audit.expectedFromX)
+      && isNear(audit.fromY, audit.expectedFromY)
+      && isNear(audit.toX, audit.expectedToX)
+      && isNear(audit.toY, audit.expectedToY));
+  return primaryMatches && secondaryMatches && routeMatches;
+}
+
+async function auditFairnessCompletion(page) {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.locator("#skill-fx-gallery-quality").selectOption("high");
+  await page.locator("#skill-fx-gallery-reduced").uncheck();
+  return page.evaluate(async () => {
+    const gallery = window.OverlimitSkillFxGallery;
+    const effectLayer = document.getElementById("skill-fx-gallery-effect-layer");
+    const stage = document.querySelector('[data-fx-gallery-anchor="stageCenter"]');
+    const self = document.querySelector('[data-fx-gallery-anchor="self"]');
+    const opponent = document.querySelector('[data-fx-gallery-anchor="opponent"]');
+    const screen = document.getElementById("screen-game");
+    gallery.manager.clear();
+
+    let addedInstances = 0;
+    let removedInstances = 0;
+    let bodyShakeObserved = false;
+    let reappearedAfterFinish = false;
+    let sawFinishedState = false;
+    let maxInstances = 0;
+    let maxAtmospheres = 0;
+    const rootAnimations = new Set();
+    const observer = new MutationObserver((records) => {
+      records.forEach((record) => {
+        [...record.addedNodes].forEach((node) => {
+          if (node.nodeType === Node.ELEMENT_NODE && node.matches?.(".skill-effect-instance")) {
+            addedInstances += 1;
+            if (sawFinishedState) reappearedAfterFinish = true;
+          }
+        });
+        [...record.removedNodes].forEach((node) => {
+          if (node.nodeType === Node.ELEMENT_NODE && node.matches?.(".skill-effect-instance")) {
+            removedInstances += 1;
+            sawFinishedState = true;
+          }
+        });
+      });
+    });
+    observer.observe(effectLayer, { childList: true });
+
+    const accepted = gallery.manager.play({
+      force: true,
+      eventId: "verify:fairness:lifecycle",
+      skillId: "FAIRNESS",
+      audience: "public",
+      disclosure: "public",
+      casterId: "CASTER",
+      viewerId: "VIEWER",
+      stageElement: stage,
+      targetElement: self,
+      secondaryTargetElement: opponent,
+      route: false,
+    });
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+    const instance = effectLayer.querySelector(".skill-effect-instance");
+    const durationMs = Number.parseFloat(instance?.style.getPropertyValue("--fx-duration")) || 2050;
+    const startedAt = performance.now();
+    while (performance.now() - startedAt < durationMs + 420) {
+      const count = effectLayer.querySelectorAll(".skill-effect-instance").length;
+      const atmospheres = effectLayer.querySelectorAll(".skill-effect-atmosphere").length;
+      maxInstances = Math.max(maxInstances, count);
+      maxAtmospheres = Math.max(maxAtmospheres, atmospheres);
+      bodyShakeObserved ||= document.body.classList.contains("skill-fx-shake-soft");
+      if (screen) rootAnimations.add(getComputedStyle(screen).animationName);
+      if (sawFinishedState && count > 0) reappearedAfterFinish = true;
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+    }
+    observer.disconnect();
+    const finalInstances = effectLayer.querySelectorAll(".skill-effect-instance").length;
+    const finalAtmospheres = effectLayer.querySelectorAll(".skill-effect-atmosphere").length;
+    gallery.manager.clear();
+    return {
+      accepted,
+      addedInstances,
+      removedInstances,
+      maxInstances,
+      maxAtmospheres,
+      finalInstances,
+      finalAtmospheres,
+      bodyShakeObserved,
+      reappearedAfterFinish,
+      rootAnimations: [...rootAnimations],
+    };
+  });
+}
+
+async function auditEndgameSettlementOrdering(page) {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  return page.evaluate(async () => {
+    clearPresentationCoordinator();
+    clearHandSettlement();
+    const modal = document.getElementById("hand-settle-modal");
+    const events = [];
+    const onPresentation = (event) => {
+      events.push({
+        stage: event.detail?.stage || "",
+        kind: event.detail?.kind || "",
+        at: performance.now(),
+        settlementHidden: modal.classList.contains("hidden"),
+      });
+    };
+    document.addEventListener("overlimit:presentation", onPresentation);
+    const serverNow = Date.now();
+    const barrier = syncPresentationBarrier({
+      id: "verify:endgame:execution",
+      kind: "ENDGAME_EXECUTION",
+      handNo: 99991,
+      serverNow,
+      until: serverNow + 760,
+      durationMs: 760,
+    }, { restored: false });
+    playEndgameExecution({ barrier });
+    const settlementPromise = queueHandSettlement({
+      reason: "showdown",
+      handNo: 99991,
+      handId: "verify:endgame:execution",
+      settleMs: 3000,
+      endgameExecution: true,
+      endgameExecutionOverride: true,
+      communityCards: [],
+      players: [],
+      winner: null,
+      winnerName: "",
+      tie: true,
+      pot: 0,
+      skillSettlement: null,
+    });
+    await new Promise((resolve) => setTimeout(resolve, 90));
+    const prematureSettlementVisible = !modal.classList.contains("hidden");
+    await settlementPromise;
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const settlementVisibleAfterFx = !modal.classList.contains("hidden");
+    const orderedStages = events.map((entry) => entry.stage);
+    const fxStartedIndex = orderedStages.indexOf("fxStarted");
+    const fxFinishedIndex = orderedStages.indexOf("fxFinished");
+    const settlementIndex = orderedStages.indexOf("settlementUiShown");
+    const hiddenAtFxFinished = fxFinishedIndex >= 0 && events[fxFinishedIndex].settlementHidden;
+    document.removeEventListener("overlimit:presentation", onPresentation);
+    clearHandSettlement();
+    clearPresentationCoordinator();
+    return {
+      prematureSettlementVisible,
+      settlementVisibleAfterFx,
+      hiddenAtFxFinished,
+      orderedStages,
+      ordered: fxStartedIndex >= 0 && fxFinishedIndex > fxStartedIndex && settlementIndex >= fxFinishedIndex,
+    };
+  });
+}
+
+async function auditFairnessStateBadges(page) {
+  return page.evaluate(() => {
+    const previousMode = state.skillMode;
+    const previousSkillState = state.skillState;
+    const self = document.getElementById("self-fairness-lock");
+    const opponent = document.getElementById("opponent-fairness-lock");
+    const effectCount = () => document.querySelectorAll("#skill-effect-layer .skill-effect-instance").length;
+    const before = effectCount();
+    try {
+      state.skillMode = "abyss";
+      state.skillState = { ...previousSkillState, fairnessActive: true };
+      renderSkillHud();
+      const restored = !self.classList.contains("hidden") && !opponent.classList.contains("hidden");
+      const meaningfulLabels = [self, opponent].every((node) => (
+        node.getAttribute("role") === "img" && Boolean(node.getAttribute("aria-label")) && Boolean(node.title)
+      ));
+      const firstAnimation = self.getAnimations()[0];
+      state.skillState = { ...state.skillState };
+      renderSkillHud();
+      const repeatedSyncKeepsNode = document.getElementById("self-fairness-lock") === self
+        && self.getAnimations()[0] === firstAnimation;
+      const noMainAnimationReplay = effectCount() === before;
+      state.skillState = { ...state.skillState, fairnessActive: false };
+      renderSkillHud();
+      const removed = self.classList.contains("hidden") && opponent.classList.contains("hidden");
+      return { restored, meaningfulLabels, repeatedSyncKeepsNode, noMainAnimationReplay, removed };
+    } finally {
+      state.skillMode = previousMode;
+      state.skillState = previousSkillState;
+      renderSkillHud();
+    }
+  });
+}
+
+async function auditReducedEndgameBarrier(page) {
+  await page.setViewportSize({ width: 390, height: 844 });
+  return page.evaluate(async () => {
+    clearPresentationCoordinator();
+    clearHandSettlement();
+    const reduceMotion = document.getElementById("setting-reduce-motion");
+    const modal = document.getElementById("hand-settle-modal");
+    const overlay = document.getElementById("flash-endgame-kill");
+    const game = document.getElementById("screen-game");
+    reduceMotion.checked = true;
+    reduceMotion.dispatchEvent(new Event("change", { bubbles: true }));
+
+    const events = [];
+    let resolveFinished;
+    const finished = new Promise((resolve) => { resolveFinished = resolve; });
+    const onPresentation = (event) => {
+      const entry = {
+        stage: event.detail?.stage || "",
+        at: performance.now(),
+        settlementHidden: modal.classList.contains("hidden"),
+      };
+      events.push(entry);
+      if (entry.stage === "fxFinished") resolveFinished(entry);
+    };
+    document.addEventListener("overlimit:presentation", onPresentation);
+
+    const serverNow = Date.now();
+    const barrier = syncPresentationBarrier({
+      id: "verify:endgame:reduced",
+      kind: "ENDGAME_EXECUTION",
+      handNo: 99992,
+      serverNow,
+      until: serverNow + 900,
+      durationMs: 900,
+    }, { restored: false });
+    playEndgameExecution({ barrier });
+    await Promise.race([
+      finished,
+      new Promise((_, reject) => setTimeout(() => reject(new Error("reduced Endgame did not finish")), 1400)),
+    ]);
+
+    const staticHold = {
+      status: overlay.dataset.presentationStatus,
+      visible: !overlay.classList.contains("hidden"),
+      resultHold: overlay.classList.contains("is-result-hold"),
+      settlementHidden: modal.classList.contains("hidden"),
+      barrierActive: game.classList.contains("presentation-barrier-active"),
+      actionDeadlineCleared: state.actionDeadline == null,
+      countdownRafIdle: state.actionCountdownRaf === 0,
+      countdownText: document.getElementById("action-countdown-value")?.textContent || "",
+    };
+
+    const remaining = Math.max(0, barrier.localUntil - Date.now());
+    await new Promise((resolve) => setTimeout(resolve, remaining + 100));
+    await queueHandSettlement({
+      reason: "showdown",
+      handNo: 99992,
+      handId: "verify:endgame:reduced",
+      settleMs: 3000,
+      endgameExecution: true,
+      endgameExecutionOverride: true,
+      communityCards: [],
+      players: [],
+      winner: null,
+      winnerName: "",
+      tie: true,
+      pot: 0,
+      skillSettlement: null,
+    });
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const settlementVisibleAfterBarrier = !modal.classList.contains("hidden");
+    const fxStarted = events.find((entry) => entry.stage === "fxStarted");
+    const fxFinished = events.find((entry) => entry.stage === "fxFinished");
+    const settlementShown = events.find((entry) => entry.stage === "settlementUiShown");
+
+    document.removeEventListener("overlimit:presentation", onPresentation);
+    clearHandSettlement();
+    clearPresentationCoordinator();
+    reduceMotion.checked = false;
+    reduceMotion.dispatchEvent(new Event("change", { bubbles: true }));
+    return {
+      staticHold,
+      settlementVisibleAfterBarrier,
+      dynamicDurationMs: fxStarted && fxFinished ? fxFinished.at - fxStarted.at : null,
+      revealDelayMs: fxFinished && settlementShown ? settlementShown.at - fxFinished.at : null,
+      ordered: Boolean(fxStarted && fxFinished && settlementShown
+        && fxStarted.at < fxFinished.at && fxFinished.at <= settlementShown.at),
+      events,
+    };
+  });
 }
 
 async function auditGalleryViewport(page, viewport) {
@@ -241,11 +574,22 @@ async function main() {
 
   const stageAudits = {
     deepBreath: await anchorAudit(page, "DEEP_BREATH", '[data-fx-gallery-anchor="energy"]'),
-    cheat: await anchorAudit(page, "CHEAT", '[data-fx-gallery-anchor="selfCards"]'),
+    cheat: await anchorAudit(page, "CHEAT", '[data-fx-gallery-anchor="community"]', {
+      expectedSourceSelector: '[data-fx-gallery-anchor="selfCards"]',
+      expectedDestinationSelector: '[data-fx-gallery-anchor="community"]',
+    }),
     nullification: await anchorAudit(page, "NULLIFICATION", '[data-fx-gallery-anchor="river"]', { target: "river", variant: "board" }),
     loanEnergy: await anchorAudit(page, "LOAN", '[data-fx-gallery-anchor="energy"]', { variant: "energy" }),
     loanChip: await anchorAudit(page, "LOAN", '[data-fx-gallery-anchor="self"]', { variant: "chip" }),
-    fairness: await anchorAudit(page, "FAIRNESS", "#skill-fx-gallery-stage"),
+    perception: await anchorAudit(page, "PERCEPTION", '[data-fx-gallery-anchor="community"]', {
+      expectedStageSelector: '[data-fx-gallery-anchor="community"]',
+    }),
+    intimidation: await anchorAudit(page, "INTIMIDATION", '[data-fx-gallery-anchor="opponent"]', {
+      expectedStageSelector: '[data-fx-gallery-anchor="opponent"]',
+    }),
+    fairness: await anchorAudit(page, "FAIRNESS", '[data-fx-gallery-anchor="self"]', {
+      expectedSecondarySelector: '[data-fx-gallery-anchor="opponent"]',
+    }),
   };
 
   const alertPulse = await inspectInstance(await selectAndReplay(page, "ALERT"));
@@ -306,6 +650,28 @@ async function main() {
     stageData: node.querySelectorAll(".skill-effect-stage-data").length,
     modifiers: node.querySelectorAll(".skill-effect-modifier").length,
   }));
+
+  const neutralGeometry = [];
+  for (const skillId of ["CHEAT", "PERCEPTION", "FAIRNESS"]) {
+    const instance = await selectAndReplay(page, skillId, {
+      perspective: "opponent", disclosure: "result", status: "REVEALED",
+    });
+    neutralGeometry.push(await instance.evaluate((node) => {
+      const layer = node.parentElement.getBoundingClientRect();
+      const stage = document.querySelector('[data-fx-gallery-anchor="stageCenter"]').getBoundingClientRect();
+      return {
+        skill: node.dataset.skill,
+        family: node.dataset.effect,
+        route: node.dataset.hasRoute,
+        routeDisplay: getComputedStyle(node.querySelector(".skill-effect-route")).display,
+        secondaryImpacts: node.querySelectorAll(".skill-effect-impact-secondary").length,
+        stageX: Number.parseFloat(node.style.getPropertyValue("--fx-stage-x")),
+        stageY: Number.parseFloat(node.style.getPropertyValue("--fx-stage-y")),
+        expectedX: stage.left + stage.width / 2 - layer.left,
+        expectedY: stage.top + stage.height / 2 - layer.top,
+      };
+    }));
+  }
 
   const dedupeAndPriority = await page.evaluate(() => {
     const gallery = window.OverlimitSkillFxGallery;
@@ -547,6 +913,11 @@ async function main() {
     galleryStateLayer: getComputedStyle(document.getElementById("skill-fx-gallery-state-layer")).pointerEvents,
   }));
 
+  const fairnessCompletion = await auditFairnessCompletion(page);
+  const fairnessStateBadges = await auditFairnessStateBadges(page);
+  const endgameSettlementOrdering = await auditEndgameSettlementOrdering(page);
+  const reducedEndgameBarrier = await auditReducedEndgameBarrier(page);
+
   const orphanCleanup = await page.evaluate(() => {
     const gallery = window.OverlimitSkillFxGallery;
     gallery.manager.clear();
@@ -581,6 +952,16 @@ async function main() {
     const refundCapturePath = path.join(CAPTURE_DIR, "deep_breath_refund.png");
     await page.locator("#skill-fx-gallery-stage").screenshot({ path: refundCapturePath });
     captures.push(refundCapturePath);
+
+    for (const offset of FAIRNESS_FINISH_CAPTURE_OFFSETS) {
+      const instance = await selectAndReplay(page, "FAIRNESS");
+      const duration = await instance.evaluate((node) => Number.parseFloat(node.style.getPropertyValue("--fx-duration")) || 2050);
+      await page.waitForTimeout(Math.max(0, duration + offset));
+      const suffix = offset < 0 ? `minus-${Math.abs(offset)}` : offset > 0 ? `plus-${offset}` : "exact";
+      const capturePath = path.join(CAPTURE_DIR, `fairness-finish-${suffix}.png`);
+      await page.locator("#skill-fx-gallery-stage").screenshot({ path: capturePath });
+      captures.push(capturePath);
+    }
 
     await page.setViewportSize({ width: 1920, height: 1080 });
     for (const skillId of HERO_CAPTURES) {
@@ -630,6 +1011,24 @@ async function main() {
   for (const viewport of MOBILE_GALLERY_VIEWPORTS) {
     mobileViewports.push(await auditGalleryViewport(page, viewport));
   }
+  await page.setViewportSize({ width: 390, height: 844 });
+  const mobileTargetAudits = {
+    cheat: await anchorAudit(page, "CHEAT", '[data-fx-gallery-anchor="community"]', {
+      expectedSourceSelector: '[data-fx-gallery-anchor="selfCards"]',
+      expectedDestinationSelector: '[data-fx-gallery-anchor="community"]',
+    }),
+    nullification: await anchorAudit(page, "NULLIFICATION", '[data-fx-gallery-anchor="river"]', { target: "river", variant: "board" }),
+    perception: await anchorAudit(page, "PERCEPTION", '[data-fx-gallery-anchor="community"]', {
+      expectedStageSelector: '[data-fx-gallery-anchor="community"]',
+    }),
+    intimidation: await anchorAudit(page, "INTIMIDATION", '[data-fx-gallery-anchor="opponent"]', {
+      expectedStageSelector: '[data-fx-gallery-anchor="opponent"]',
+    }),
+    fairness: await anchorAudit(page, "FAIRNESS", '[data-fx-gallery-anchor="self"]', {
+      expectedSecondarySelector: '[data-fx-gallery-anchor="opponent"]',
+    }),
+    destiny: await anchorAudit(page, "DESTINY", '[data-fx-gallery-anchor="river"]'),
+  };
   const mobile = mobileViewports.find((entry) => entry.viewport.width === 390) || mobileViewports[0];
   if (CAPTURE_DIR) {
     await page.setViewportSize({ width: 390, height: 844 });
@@ -652,6 +1051,7 @@ async function main() {
     if (!effect.family || !effect.tier || !effect.impactType || !effect.rhythm || !effect.verb) failures.push(`incomplete director metadata: ${effect.skill}`);
     if (effect.heroNodes > 20 || effect.particleNodes > 12 || effect.impactNodes > 12 || effect.routeNodes > 4) failures.push(`DOM budget exceeded: ${effect.skill}`);
     if (effect.stageDisplay === "none" || effect.coreDisplay === "none" || effect.impactDisplay === "none") failures.push(`stage/impact missing: ${effect.skill}`);
+    if (effect.hasRoute === "false" && effect.routeDisplay !== "none") failures.push(`route-free profile still renders a route node: ${effect.skill}`);
     if (effect.presentation === "journey" && effect.durationMs < 900) failures.push(`journey readability budget too short: ${effect.skill}`);
     const orderedTimeline = effect.presentation === "pulse"
       ? effect.anticipationMs > 0 && effect.impactDelayMs >= effect.routeDelayMs
@@ -664,11 +1064,18 @@ async function main() {
   Object.entries(stageAudits).forEach(([name, audit]) => {
     if (!auditMatchesAnchors(audit)) failures.push(`stage/target anchor mismatch: ${name}`);
   });
+  Object.entries(mobileTargetAudits).forEach(([name, audit]) => {
+    if (!auditMatchesAnchors(audit)) failures.push(`mobile stage/target anchor mismatch: ${name}`);
+  });
   if (stageAudits.deepBreath.stageTargetDistance < 40 || stageAudits.deepBreath.hasRoute !== "true") failures.push("Deep Breath lacks central-to-energy follow-through");
-  if (stageAudits.cheat.stageTargetDistance < 35 || stageAudits.cheat.impactType !== "card") failures.push("Cheat lacks card follow-through");
+  if (stageAudits.cheat.routeDistance < 35 || stageAudits.cheat.impactType !== "card"
+    || stageAudits.cheat.hasRoute !== "true") failures.push("Cheat lacks a visible source-to-destination card swap route");
   if (stageAudits.nullification.impactType !== "card") failures.push("Nullification lost card-slot impact");
   if (stageAudits.loanEnergy.impactType !== "energy" || stageAudits.loanChip.impactType !== "chip") failures.push("Loan branch impact types are incorrect");
-  if (stageAudits.fairness.impactType !== "board") failures.push("Fairness lost board impact");
+  if (stageAudits.perception.impactType !== "board" || stageAudits.perception.hasRoute !== "false") failures.push("Perception lost its route-free public-board information field");
+  if (stageAudits.intimidation.impactType !== "player" || stageAudits.intimidation.hasRoute !== "false") failures.push("Intimidation lost its localized opponent-player pressure target");
+  if (stageAudits.fairness.impactType !== "hud" || stageAudits.fairness.hasRoute !== "false"
+    || stageAudits.fairness.expectedSecondaryTargetX == null) failures.push("Fairness lost its bilateral tactical-zone impacts");
   const timingBySkill = Object.fromEntries(effects.map((effect) => [effect.skill, effect]));
   if (timingBySkill.DEEP_BREATH?.tier !== "FX2" || timingBySkill.DEEP_BREATH?.durationMs < 1000 || timingBySkill.DEEP_BREATH?.durationMs > 1100) failures.push("Deep Breath launch timing left its 1000-1100ms FX2 range");
   if (timingBySkill.PROBE?.tier !== "FX2" || timingBySkill.PROBE?.durationMs < 900 || timingBySkill.PROBE?.durationMs > 1000) failures.push("Probe launch timing left its 900-1000ms FX2 range");
@@ -692,6 +1099,11 @@ async function main() {
   if (neutralResultSignature(protocolResultOnly) !== neutralResultSignature(resultOnly)
     || /PROTOCOL|PAIR|×2/i.test(protocolResultOnly.caption)) {
     failures.push("different hidden result-only skills did not converge on one neutral visual contract");
+  }
+  if (neutralGeometry.some((entry) => entry.skill !== "RESULT" || entry.family !== "result"
+    || entry.route !== "false" || entry.routeDisplay !== "none" || entry.secondaryImpacts !== 0
+    || !isNear(entry.stageX, entry.expectedX) || !isNear(entry.stageY, entry.expectedY))) {
+    failures.push("result-only presentation inherited a private stage, route or bilateral target");
   }
   if (dedupeAndPriority.dedupe[0] !== true || dedupeAndPriority.dedupe[1] !== false) failures.push("duplicate eventId was not suppressed");
   if (eventAdmission.duplicateCopies[0] !== true || eventAdmission.duplicateCopies[1] !== false || eventAdmission.copyQueue !== 1) failures.push("public/private event copies were not merged by eventId");
@@ -724,6 +1136,30 @@ async function main() {
   if (new Set(graphicalSignatures.map((entry) => `${entry.family}|${entry.glyph}|${entry.haloAnimation}|${entry.cardsVisible}|${entry.stageData}`)).size < 12) failures.push("core skills are not graphically distinct enough without captions");
   if (!guides.stageControl || !guides.targetControl || Number(guides.stageVisible) < .5 || Number(guides.targetVisible) < .5) failures.push("Gallery stage/target guides are unavailable");
   if (Object.values(pointerSafety).some((value) => value !== "none")) failures.push("an FX layer blocks pointer input");
+  if (!fairnessCompletion.accepted || fairnessCompletion.addedInstances !== 1 || fairnessCompletion.removedInstances !== 1
+    || fairnessCompletion.maxInstances !== 1 || fairnessCompletion.maxAtmospheres !== 1
+    || fairnessCompletion.finalInstances !== 0 || fairnessCompletion.finalAtmospheres !== 0
+    || fairnessCompletion.bodyShakeObserved || fairnessCompletion.reappearedAfterFinish
+    || fairnessCompletion.rootAnimations.some((name) => /skill-effect-table-shake/i.test(name))) {
+    failures.push("Fairness lifecycle did not complete as a single local-layer instance without root shake or remount");
+  }
+  if (endgameSettlementOrdering.prematureSettlementVisible || !endgameSettlementOrdering.settlementVisibleAfterFx
+    || !endgameSettlementOrdering.hiddenAtFxFinished || !endgameSettlementOrdering.ordered) {
+    failures.push(`Endgame presentation barrier ordering failed: ${endgameSettlementOrdering.orderedStages.join(" -> ")}`);
+  }
+  if (Object.values(fairnessStateBadges).some((passed) => passed !== true)) {
+    failures.push("Fairness state sync failed to restore/remove both locks without replaying the main animation");
+  }
+  if (reducedEndgameBarrier.staticHold.status !== "finished"
+    || !reducedEndgameBarrier.staticHold.visible || !reducedEndgameBarrier.staticHold.resultHold
+    || !reducedEndgameBarrier.staticHold.settlementHidden || !reducedEndgameBarrier.staticHold.barrierActive
+    || !reducedEndgameBarrier.staticHold.actionDeadlineCleared || !reducedEndgameBarrier.staticHold.countdownRafIdle
+    || reducedEndgameBarrier.staticHold.countdownText !== "—"
+    || !reducedEndgameBarrier.settlementVisibleAfterBarrier || !reducedEndgameBarrier.ordered
+    || reducedEndgameBarrier.dynamicDurationMs < 300 || reducedEndgameBarrier.dynamicDurationMs > 500
+    || reducedEndgameBarrier.revealDelayMs < 350) {
+    failures.push("Reduced Motion Endgame did not switch to a static hold until the shared reveal barrier released");
+  }
   if (orphanCleanup.effects || orphanCleanup.states) failures.push("manager clear left orphan FX nodes");
   const invalidMobileViewports = mobileViewports.filter((entry) => (
     !entry.panelInsideViewport || !entry.stageInsidePanel || !entry.stageVerticallyVisible
@@ -754,9 +1190,10 @@ async function main() {
     requestErrors,
     report: {
       optionCount: optionIds.length, effects, stageAudits, alertPulse, deepBreathRefund,
-      secrecy, resultOnly, protocolResultOnly, dedupeAndPriority, eventAdmission, directorInteractions,
+      secrecy, resultOnly, protocolResultOnly, neutralGeometry, dedupeAndPriority, eventAdmission, directorInteractions,
       stateMarkers, lowPerformance, reducedMotion, captionless, graphicalSignatures, guides,
-      pointerSafety, orphanCleanup, mobile, mobileViewports, desktopViewports, captures,
+      pointerSafety, fairnessCompletion, fairnessStateBadges, endgameSettlementOrdering, reducedEndgameBarrier, orphanCleanup,
+      mobile, mobileViewports, mobileTargetAudits, desktopViewports, captures,
     },
   }, null, 2));
   if (failures.length) process.exit(1);

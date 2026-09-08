@@ -19,6 +19,8 @@ const ALL_IN_BOARD_PULSE_MS = 2000;
 const ALL_IN_VIBRATION_PATTERN = Object.freeze([80, 45, 130, 55, 220]);
 const ENDGAME_DECLARE_MS = 2600;
 const ENDGAME_KILL_MS = 2800;
+const ENDGAME_REDUCED_DYNAMIC_MS = 380;
+const PRESENTATION_FAILSAFE_MS = 6500;
 const ENDGAME_DECLARE_VIBRATION = Object.freeze([60, 40, 110]);
 const ENDGAME_KILL_VIBRATION = Object.freeze([130, 50, 210, 60, 330]);
 const SKILL_FX_STALE_MS = 2500;
@@ -323,6 +325,7 @@ const state = {
   toCall: 0,
   actionDeadline: null,
   turnId: null,
+  presentationBarrier: null,
   actionCountdownRaf: 0,
   handHint: "waitingDeal",
   handCategory: 0,
@@ -564,6 +567,7 @@ const el = {
   btnEnergyPopClose: byId("btn-energy-pop-close"),
   btnEnergyPopConfirm: byId("btn-energy-pop-confirm"),
   opponentState: byId("opponent-state"),
+  opponentFairnessLock: byId("opponent-fairness-lock"),
   opponentCards: byId("opponent-cards"),
   phaseText: byId("phase-text"),
   actionLog: byId("action-log"),
@@ -593,6 +597,8 @@ const el = {
   selfEnergyCap: byId("self-energy-cap"),
   opponentEnergy: byId("opponent-energy"),
   skillSilenceFlag: byId("skill-silence-flag"),
+  selfFairnessLock: byId("self-fairness-lock"),
+  ownSkillArsenal: byId("own-skill-arsenal"),
   skillBar: byId("skill-bar"),
   opponentSkillBar: byId("opponent-skill-bar"),
   opponentSkillField: byId("opponent-skill-field"),
@@ -762,6 +768,10 @@ let allInEffectTimer = 0;
 let allInEffectEndsAt = 0;
 let endgameDeclareTimer = 0;
 let endgameKillTimer = 0;
+let presentationBarrierTimer = 0;
+let endgamePresentationToken = 0;
+let endgamePresentationResolve = null;
+let endgamePresentationPromise = Promise.resolve();
 let skillFxManager = null;
 const skillFxRequestMeta = new Map();
 const latestSkillFxMetaBySkill = new Map();
@@ -1561,6 +1571,26 @@ function setRaiseExpanded(expanded) {
 
 function renderActions() {
   const me = getMe();
+  if (state.presentationBarrier) {
+    el.endgameWindowActions?.classList.add("hidden");
+    if (el.btnEndgameFire) el.btnEndgameFire.disabled = true;
+    if (el.btnEndgameSkip) el.btnEndgameSkip.disabled = true;
+    el.actionButtons.forEach((button) => {
+      button.classList.remove("hidden");
+      button.disabled = true;
+    });
+    if (el.raiseConsole) {
+      el.raiseConsole.classList.remove("hidden");
+      el.raiseConsole.classList.add("collapsed");
+    }
+    el.raiseInput.disabled = true;
+    if (el.btnRaise) el.btnRaise.disabled = true;
+    if (el.btnRaiseOptions) el.btnRaiseOptions.disabled = true;
+    el.raisePresets.forEach((button) => { button.disabled = true; });
+    el.turnKicker.textContent = state.settings.proPlayerMode ? "PRESENTATION" : t("game.hold");
+    el.turnMessage.textContent = state.settings.proPlayerMode ? "RESOLVING..." : t("game.settling");
+    return;
+  }
   const endgameMine = Boolean(
     state.endgameWindow
     && socket.connected
@@ -1689,7 +1719,7 @@ function renderActions() {
 function updateActionCountdown() {
   if (state.actionCountdownRaf) cancelAnimationFrame(state.actionCountdownRaf);
   state.actionCountdownRaf = 0;
-  if (!state.actionDeadline || !ACTIVE_PHASES.has(state.phase)) {
+  if (state.presentationBarrier || !state.actionDeadline || !ACTIVE_PHASES.has(state.phase)) {
     el.actionCountdownValue.textContent = "—";
     el.actionCountdown.style.setProperty("--countdown-progress", "0");
     return;
@@ -2194,7 +2224,14 @@ function resolveSkillFxElements(skillId, meta, payload = {}) {
     : (el.opponentEnergy?.parentElement || el.opponentArea);
   const opposingArea = casterIsSelf ? el.opponentArea : el.selfArea;
   const opposingCards = casterIsSelf ? el.opponentCards : el.selfCards;
+  const boardField = el.community || el.board;
+  const opponentConsole = el.opponentArea?.querySelector(".player-console") || el.opponentArea;
   let targetElement = null;
+  let stageElement = null;
+  let secondaryTargetElement = null;
+  let fromElement = null;
+  let toElement = null;
+  let route;
   if (id === "DESTINY") targetElement = skillFxBoardTarget(4);
   if (["INTEL_ONE", "NULLIFICATION"].includes(id)) {
     const index = target.boardIndex ?? target.index ?? payload.boardIndex;
@@ -2203,21 +2240,54 @@ function resolveSkillFxElements(skillId, meta, payload = {}) {
       : skillFxBoardTarget(index);
   }
   if (id === "CHEAT") {
-    if (["community", "future"].includes(zone)) targetElement = skillFxBoardTarget(target.index);
-    else if (zone === "opponent") targetElement = el.opponentCards?.children?.[Number(target.index)] || el.opponentCards;
-    else targetElement = el.selfCards?.children?.[Number(target.ownIndex)] || el.selfCards;
+    fromElement = casterIsSelf
+      ? (casterCards?.children?.[Number(target.ownIndex)] || casterCards)
+      : casterCards;
+    if (["community", "future"].includes(zone)) targetElement = skillFxBoardTarget(target.index) || boardField;
+    else if (zone === "opponent" && casterIsSelf) {
+      targetElement = opposingCards?.children?.[Number(target.index)] || opposingCards;
+    } else if (["next", "deck_random"].includes(zone) && casterIsSelf) {
+      targetElement = el.deckFxAnchor || el.deckStack || boardField;
+    } else {
+      // A viewer without the caster's authorized private target metadata only
+      // receives a neutral table destination. Never resolve hidden card detail.
+      targetElement = casterIsSelf ? casterCards : boardField;
+    }
+    toElement = targetElement;
   }
   if (["FORTUNE", "RESTART"].includes(id)) targetElement = casterCards;
   if (["DEEP_BREATH", "RECYCLE"].includes(id)) targetElement = casterEnergy;
   if (["DEFENSE", "COUNTER", "ALERT"].includes(id)) targetElement = casterArea;
   if (id === "TOP_SECRET") targetElement = casterCards || casterArea;
-  if (["PERCEPTION", "INTEL_ONE"].includes(id) && !targetElement) targetElement = opposingCards || opposingArea;
+  if (id === "PERCEPTION") {
+    targetElement = boardField;
+    stageElement = boardField;
+    route = false;
+  }
+  if (id === "INTEL_ONE" && !targetElement) targetElement = opposingCards || opposingArea;
   if (id === "CLAIRVOYANCE") targetElement = opposingArea;
   if (id === "PROBE") targetElement = opposingArea;
   if (id === "LOAN") targetElement = zone === "energy" ? casterEnergy : casterArea;
   if (id === "BLOOD_BATTLE") targetElement = el.potCore;
-  if (id === "RETREAT") targetElement = casterArea;
-  if (["INTIMIDATION", "FAIRNESS", "DEAD_END", "DISGUISE"].includes(id)) targetElement = el.board;
+  if (id === "RETREAT") {
+    targetElement = casterArea;
+    fromElement = el.potCore;
+    toElement = casterArea;
+  }
+  if (id === "INTIMIDATION") {
+    targetElement = opposingArea;
+    stageElement = opposingArea;
+    route = false;
+  }
+  if (id === "FAIRNESS") {
+    targetElement = el.ownSkillArsenal || el.selfArea;
+    secondaryTargetElement = opponentConsole;
+    route = false;
+  }
+  if (["DEAD_END", "DISGUISE"].includes(id)) {
+    targetElement = el.board;
+    route = false;
+  }
   if (id === "DESPERATION") targetElement = casterArea;
   const stageLines = id === "DISGUISE"
     ? [
@@ -2225,13 +2295,22 @@ function resolveSkillFxElements(skillId, meta, payload = {}) {
         `POT ${el.pot?.textContent || "—"}`,
         `CALL ${el.currentBet?.textContent || "—"}`,
       ]
-    : id === "LOAN" && payload.publicData?.mode === "chip" && payload.publicData?.take != null
+    : id === "PERCEPTION"
+      ? [t("fx.perceptionField"), "Δ 37% · 62%", t("fx.perceptionRange"), t("fx.perceptionSignal")]
+      : id === "LOAN" && payload.publicData?.mode === "chip" && payload.publicData?.take != null
       ? [`CREDIT +${payload.publicData.take}`]
       : [];
+  if (id === "LOAN") {
+    fromElement = zone === "energy" ? null : (el.potCore || el.board);
+    toElement = targetElement;
+  }
   return {
     targetElement,
-    fromElement: id === "RETREAT" ? el.potCore : opposingArea,
-    toElement: casterArea,
+    stageElement,
+    secondaryTargetElement,
+    fromElement,
+    toElement,
+    route,
     variant: payload.publicData?.mode || target.mode || target.zone || "default",
     targetKey: [zone, target.boardIndex ?? target.index ?? target.ownIndex ?? ""].join(":"),
     stageLines,
@@ -2390,49 +2469,213 @@ function announceNullificationReveals(nextCodes) {
   revealedNullificationFxCodes = codes;
 }
 
-function playEndgameDeclare({ execution = false } = {}) {
-  if (!el.flashEndgameDeclare) return;
-  getSkillFxManager()?.pause(ENDGAME_DECLARE_MS, { clear: true });
-  if (endgameDeclareTimer) clearTimeout(endgameDeclareTimer);
-  el.flashEndgameDeclare.classList.add("hidden");
-  el.flashEndgameDeclare.dataset.mode = execution ? "execution" : "declare";
-  void el.flashEndgameDeclare.offsetWidth;
-  el.flashEndgameDeclare.classList.remove("hidden");
-  if (allowFxShake()) {
-    document.body.classList.remove("shake");
-    void document.body.offsetWidth;
-    document.body.classList.add("shake");
-  }
-  pulseBoard("endgame-declare-pulse", 1800);
-  playFxHaptics(ENDGAME_DECLARE_VIBRATION);
-  playEndgameSfx("declare");
-  endgameDeclareTimer = setTimeout(() => {
-    el.flashEndgameDeclare.classList.add("hidden");
-    document.body.classList.remove("shake");
-    endgameDeclareTimer = 0;
-  }, ENDGAME_DECLARE_MS);
+function normalizePresentationBarrier(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const id = String(raw.id || "").trim();
+  const kind = String(raw.kind || "").trim().toUpperCase();
+  const until = Number(raw.until);
+  const serverNow = Number(raw.serverNow);
+  const durationMs = Math.max(0, Number(raw.durationMs) || 0);
+  if (!id || !["ENDGAME_DECLARE", "ENDGAME_EXECUTION", "DEAD_END_COMMIT"].includes(kind) || !Number.isFinite(until)) return null;
+  const serverRemaining = Number.isFinite(serverNow)
+    ? until - serverNow
+    : durationMs;
+  const remainingMs = Math.max(0, Math.min(PRESENTATION_FAILSAFE_MS, serverRemaining));
+  return {
+    id,
+    kind,
+    handNo: Math.max(0, Number(raw.handNo) || state.handNo || 0),
+    durationMs,
+    localUntil: Date.now() + remainingMs,
+  };
 }
 
-function playEndgameExecution() {
-  if (!el.flashEndgameKill) return;
-  getSkillFxManager()?.pause(ENDGAME_KILL_MS, { clear: true });
-  if (endgameKillTimer) clearTimeout(endgameKillTimer);
-  el.flashEndgameKill.classList.add("hidden");
-  document.body.classList.remove("shake-hard");
-  void el.flashEndgameKill.offsetWidth;
-  el.flashEndgameKill.classList.remove("hidden");
-  if (allowFxShake()) {
-    void document.body.offsetWidth;
-    document.body.classList.add("shake-hard");
+function isEndgamePresentationKind(kind) {
+  return kind === "ENDGAME_DECLARE" || kind === "ENDGAME_EXECUTION";
+}
+
+function presentationBarrierRemaining(barrier = state.presentationBarrier) {
+  if (!barrier) return 0;
+  return Math.max(0, Number(barrier.localUntil || 0) - Date.now());
+}
+
+function endgameOverlayForKind(kind) {
+  return kind === "ENDGAME_EXECUTION" ? el.flashEndgameKill : el.flashEndgameDeclare;
+}
+
+function hideFinishedEndgameOverlay(kind) {
+  const node = endgameOverlayForKind(kind);
+  if (!node || node.dataset.presentationStatus !== "finished") return;
+  node.classList.add("hidden");
+  node.classList.remove("is-impact-shake", "is-result-hold", "is-restored-hold");
+  node.style.removeProperty("--egd-dur");
+  node.style.removeProperty("--egk-dur");
+}
+
+function releaseLocalPresentationBarrier(expectedId = null) {
+  const active = state.presentationBarrier;
+  if (!active || (expectedId && active.id !== expectedId)) return false;
+  if (presentationBarrierTimer) clearTimeout(presentationBarrierTimer);
+  presentationBarrierTimer = 0;
+  state.presentationBarrier = null;
+  el.game?.classList.remove("presentation-barrier-active");
+  if (isEndgamePresentationKind(active.kind)) hideFinishedEndgameOverlay(active.kind);
+  renderActions();
+  updateActionCountdown();
+  return true;
+}
+
+function restoreEndgameBarrierHold(barrier) {
+  const node = endgameOverlayForKind(barrier?.kind);
+  if (!node) return;
+  [el.flashEndgameDeclare, el.flashEndgameKill].forEach((candidate) => {
+    if (!candidate || candidate === node) return;
+    candidate.classList.add("hidden");
+    candidate.classList.remove("is-impact-shake", "is-result-hold", "is-restored-hold");
+  });
+  if (barrier.kind === "ENDGAME_DECLARE") node.dataset.mode = "declare";
+  node.dataset.presentationStatus = "finished";
+  node.dataset.barrierId = barrier.id;
+  node.classList.remove("hidden", "is-impact-shake");
+  node.classList.add("is-result-hold", "is-restored-hold");
+}
+
+function syncPresentationBarrier(raw, { restored = false } = {}) {
+  const next = normalizePresentationBarrier(raw);
+  if (!next) {
+    releaseLocalPresentationBarrier();
+    return null;
   }
-  pulseBoard("endgame-kill-pulse", 2000);
-  playFxHaptics(ENDGAME_KILL_VIBRATION);
-  playEndgameSfx("kill");
-  endgameKillTimer = setTimeout(() => {
-    el.flashEndgameKill.classList.add("hidden");
-    document.body.classList.remove("shake-hard");
-    endgameKillTimer = 0;
-  }, ENDGAME_KILL_MS);
+  if (state.presentationBarrier?.id === next.id) {
+    state.presentationBarrier.localUntil = next.localUntil;
+    state.presentationBarrier.durationMs = next.durationMs;
+  } else {
+    releaseLocalPresentationBarrier();
+    state.presentationBarrier = next;
+    if (restored && isEndgamePresentationKind(next.kind)) restoreEndgameBarrierHold(next);
+  }
+  if (presentationBarrierTimer) clearTimeout(presentationBarrierTimer);
+  presentationBarrierTimer = setTimeout(
+    () => releaseLocalPresentationBarrier(next.id),
+    presentationBarrierRemaining(next) + 80
+  );
+  state.currentTurnPlayerId = null;
+  state.validActions = [];
+  state.endgameWindow = false;
+  state.actionDeadline = null;
+  state.turnId = null;
+  el.game?.classList.add("presentation-barrier-active");
+  renderActions();
+  updateActionCountdown();
+  return state.presentationBarrier;
+}
+
+function resolvePreviousEndgamePresentation() {
+  endgamePresentationResolve?.();
+  endgamePresentationResolve = null;
+  endgamePresentationPromise = Promise.resolve();
+}
+
+function completeEndgamePresentation(token, node, kind) {
+  if (token !== endgamePresentationToken || !node) return false;
+  node.dataset.presentationStatus = "finished";
+  node.classList.remove("is-impact-shake");
+  node.classList.add("is-result-hold");
+  if (state.presentationBarrier?.kind !== kind) hideFinishedEndgameOverlay(kind);
+  resolvePreviousEndgamePresentation();
+  document.dispatchEvent(new CustomEvent("overlimit:presentation", {
+    detail: { stage: "fxFinished", kind, barrierId: node.dataset.barrierId || null },
+  }));
+  return true;
+}
+
+function runEndgamePresentation(kind, { execution = false, barrier = state.presentationBarrier } = {}) {
+  const node = endgameOverlayForKind(kind);
+  if (!node) return Promise.resolve();
+  endgamePresentationToken += 1;
+  const token = endgamePresentationToken;
+  if (endgameDeclareTimer) clearTimeout(endgameDeclareTimer);
+  if (endgameKillTimer) clearTimeout(endgameKillTimer);
+  endgameDeclareTimer = 0;
+  endgameKillTimer = 0;
+  resolvePreviousEndgamePresentation();
+  endgamePresentationPromise = new Promise((resolve) => {
+    endgamePresentationResolve = resolve;
+  });
+  const nominalMs = kind === "ENDGAME_EXECUTION" ? ENDGAME_KILL_MS : ENDGAME_DECLARE_MS;
+  const remainingMs = presentationBarrierRemaining(barrier);
+  const fullMotionMs = Math.max(520, Math.min(nominalMs, remainingMs || nominalMs));
+  const dynamicMs = state.settings.reduceMotion
+    ? Math.min(ENDGAME_REDUCED_DYNAMIC_MS, fullMotionMs)
+    : fullMotionMs;
+  getSkillFxManager()?.pause(Math.max(dynamicMs, remainingMs), { clear: true });
+  [el.flashEndgameDeclare, el.flashEndgameKill].forEach((candidate) => {
+    if (!candidate) return;
+    candidate.classList.add("hidden");
+    candidate.classList.remove("is-impact-shake", "is-result-hold", "is-restored-hold");
+    candidate.dataset.presentationStatus = "idle";
+  });
+  if (kind === "ENDGAME_DECLARE") {
+    node.dataset.mode = execution ? "execution" : "declare";
+    node.style.setProperty("--egd-dur", `${fullMotionMs}ms`);
+  } else {
+    node.style.setProperty("--egk-dur", `${fullMotionMs}ms`);
+  }
+  node.dataset.barrierId = barrier?.id || "";
+  node.dataset.presentationStatus = "playing";
+  void node.offsetWidth;
+  node.classList.remove("hidden");
+  if (allowFxShake()) node.classList.add("is-impact-shake");
+  if (kind === "ENDGAME_EXECUTION") {
+    pulseBoard("endgame-kill-pulse", Math.min(2000, fullMotionMs));
+    playFxHaptics(ENDGAME_KILL_VIBRATION);
+    playEndgameSfx("kill");
+    endgameKillTimer = setTimeout(() => {
+      endgameKillTimer = 0;
+      completeEndgamePresentation(token, node, kind);
+    }, dynamicMs);
+  } else {
+    pulseBoard("endgame-declare-pulse", Math.min(1800, fullMotionMs));
+    playFxHaptics(ENDGAME_DECLARE_VIBRATION);
+    playEndgameSfx("declare");
+    endgameDeclareTimer = setTimeout(() => {
+      endgameDeclareTimer = 0;
+      completeEndgamePresentation(token, node, kind);
+    }, dynamicMs);
+  }
+  document.dispatchEvent(new CustomEvent("overlimit:presentation", {
+    detail: { stage: "fxStarted", kind, barrierId: barrier?.id || null },
+  }));
+  return endgamePresentationPromise;
+}
+
+function playEndgameDeclare({ execution = false, barrier = state.presentationBarrier } = {}) {
+  return runEndgamePresentation("ENDGAME_DECLARE", { execution, barrier });
+}
+
+function playEndgameExecution({ barrier = state.presentationBarrier } = {}) {
+  return runEndgamePresentation("ENDGAME_EXECUTION", { barrier });
+}
+
+function clearPresentationCoordinator() {
+  if (presentationBarrierTimer) clearTimeout(presentationBarrierTimer);
+  if (endgameDeclareTimer) clearTimeout(endgameDeclareTimer);
+  if (endgameKillTimer) clearTimeout(endgameKillTimer);
+  presentationBarrierTimer = 0;
+  endgameDeclareTimer = 0;
+  endgameKillTimer = 0;
+  state.presentationBarrier = null;
+  endgamePresentationToken += 1;
+  resolvePreviousEndgamePresentation();
+  [el.flashEndgameDeclare, el.flashEndgameKill].forEach((node) => {
+    if (!node) return;
+    node.classList.add("hidden");
+    node.classList.remove("is-impact-shake", "is-result-hold", "is-restored-hold");
+    node.dataset.presentationStatus = "idle";
+    node.style.removeProperty("--egd-dur");
+    node.style.removeProperty("--egk-dur");
+  });
+  el.game?.classList.remove("presentation-barrier-active");
 }
 
 function triggerProtocolBurst() {
@@ -2556,10 +2799,7 @@ function resetTransientUi() {
   if (allInEffectTimer) clearTimeout(allInEffectTimer);
   allInEffectTimer = 0;
   allInEffectEndsAt = 0;
-  if (endgameDeclareTimer) clearTimeout(endgameDeclareTimer);
-  endgameDeclareTimer = 0;
-  if (endgameKillTimer) clearTimeout(endgameKillTimer);
-  endgameKillTimer = 0;
+  clearPresentationCoordinator();
   if (delayedHandResultTimer) clearTimeout(delayedHandResultTimer);
   delayedHandResultTimer = 0;
   if (state.actionCountdownRaf) cancelAnimationFrame(state.actionCountdownRaf);
@@ -2572,8 +2812,6 @@ function resetTransientUi() {
   modalLayers.forEach((modal) => modal.classList.add("hidden"));
   el.flash.classList.add("hidden");
   el.flash.classList.remove("is-preview");
-  el.flashEndgameDeclare?.classList.add("hidden");
-  el.flashEndgameKill?.classList.add("hidden");
   clearSkillFxQueue();
   el.riverOverload.classList.add("hidden");
   el.protocolBurst.classList.add("hidden");
@@ -2652,10 +2890,7 @@ function clearHandSettlement() {
   el.handSettleModal.classList.remove("is-history-review");
   state.settleReviewFromHistory = false;
   closeOpponentEnergyPop();
-  if (endgameKillTimer) clearTimeout(endgameKillTimer);
-  endgameKillTimer = 0;
-  el.flashEndgameKill?.classList.add("hidden");
-  document.body.classList.remove("shake-hard");
+  if (!state.presentationBarrier) hideFinishedEndgameOverlay("ENDGAME_EXECUTION");
   el.board.classList.remove("settle-dim");
   el.chipFx.classList.remove("settlement-flow");
   syncHandHistoryButton();
@@ -2977,7 +3212,6 @@ function startHandSettlement(payload, { review = false } = {}) {
   const won = fillHandSettleModal(payload, { review: false });
   const executionKill = Boolean(payload.endgameExecutionOverride);
   el.handSettleModal.classList.toggle("is-endgame-execution", executionKill);
-  if (executionKill) playEndgameExecution();
   el.handSettleModal.classList.remove("hidden");
   if (!executionKill) playSettlementSkillFx(payload);
   el.board.classList.add("settle-dim");
@@ -2993,6 +3227,9 @@ function startHandSettlement(payload, { review = false } = {}) {
   renderState();
   setBanner(payload.tie ? t("settle.split") : won ? t("settle.win") : t("settle.lose"), payload.tie || won);
   playTone(payload.tie || won ? "win" : "lose");
+  document.dispatchEvent(new CustomEvent("overlimit:presentation", {
+    detail: { stage: "settlementUiShown", kind: executionKill ? "ENDGAME_EXECUTION" : "STANDARD" },
+  }));
   state.handSettleTimer = setTimeout(clearHandSettlement, Number(payload.settleMs || HAND_SETTLE_MS) + 700);
 }
 
@@ -3529,11 +3766,39 @@ async function ensureSkillCatalog() {
   return skillCatalogPromise;
 }
 
-function queueHandSettlement(payload) {
+function waitForEndgamePresentation() {
+  const pendingFx = endgamePresentationPromise;
+  let failSafeTimer = 0;
+  let timedOut = false;
+  return Promise.race([
+    pendingFx,
+    new Promise((resolve) => {
+      failSafeTimer = setTimeout(() => {
+        timedOut = true;
+        resolve();
+      }, PRESENTATION_FAILSAFE_MS);
+    }),
+  ]).finally(() => {
+    if (failSafeTimer) clearTimeout(failSafeTimer);
+    if (timedOut) clearPresentationCoordinator();
+  });
+}
+
+async function queueHandSettlement(payload) {
   if (shouldIgnoreSyncEvent(payload)) return;
   // Settlement is authoritative and must never sit underneath an obsolete
-  // target/dossier surface while an ALL IN presentation finishes.
+  // target/dossier surface while a critical presentation finishes.
   closeSkillChoiceModal({ render: false, restoreFocus: false });
+  const waitsForEndgame = Boolean(
+    payload?.endgameExecutionOverride
+    || state.presentationBarrier?.kind === "ENDGAME_EXECUTION"
+    || el.flashEndgameKill?.dataset.presentationStatus === "playing"
+  );
+  // A hand_result is the authoritative release edge. The server never emits it
+  // before its bounded barrier expires; the client only has to finish any
+  // locally-started tail before revealing the settlement surface.
+  releaseLocalPresentationBarrier();
+  if (waitsForEndgame) await waitForEndgamePresentation();
   const remainingEffectMs = Math.max(0, allInEffectEndsAt - Date.now());
   if (remainingEffectMs < 120) {
     startHandSettlement(payload);
@@ -5528,6 +5793,9 @@ function applyRoomJoinedPayload(payload, { fromLobby = false } = {}) {
     state.matchSource = payload.matchSource || null;
   }
   if (Array.isArray(payload.players)) state.players = payload.players;
+  if (Object.prototype.hasOwnProperty.call(payload, "presentationBarrier")) {
+    syncPresentationBarrier(payload.presentationBarrier, { restored: Boolean(payload.presentationBarrier) });
+  }
   persistSession();
   if (state.phase !== "showdown" && state.phase !== "end") {
     restoreConfirmedInferredEnergy();
@@ -5582,6 +5850,11 @@ socket.on("room_joined", (payload) => {
 });
 socket.on("room_state", (payload) => {
   if (shouldIgnoreSyncEvent(payload)) return;
+  if (Object.prototype.hasOwnProperty.call(payload, "presentationBarrier")) {
+    const incomingId = String(payload.presentationBarrier?.id || "");
+    const restored = Boolean(incomingId && incomingId !== state.presentationBarrier?.id);
+    syncPresentationBarrier(payload.presentationBarrier, { restored });
+  }
   state.gameMode = payload.gameMode || state.gameMode;
   state.skillMode = payload.skillMode || state.skillMode;
   state.phase = payload.phase || state.phase;
@@ -5675,6 +5948,7 @@ socket.on("room_state", (payload) => {
 });
 socket.on("game_started", (payload) => {
   if (shouldIgnoreSyncEvent(payload)) return;
+  clearPresentationCoordinator();
   invalidateSkillChoiceIfStale({ force: true, includeDossier: true });
   state.gameMode = payload.gameMode || state.gameMode;
   if (payload.skillMode) state.skillMode = payload.skillMode;
@@ -5691,6 +5965,7 @@ socket.on("your_cards", (payload) => {
   if (shouldIgnoreSyncEvent(payload)) return;
   invalidateSkillChoiceIfStale({ force: true });
   clearHandSettlement();
+  clearPresentationCoordinator();
   getSkillFxManager()?.clear();
   revealedNullificationFxCodes = new Set();
   seenPassiveSkillFxKeys.clear();
@@ -5783,6 +6058,18 @@ socket.on("action_made", (payload) => {
     if (!deadEndOwnsPresentation) playAllInEffect(payload.playerId);
   } else playTone(payload.action);
   renderState();
+});
+socket.on("showdown", (payload) => {
+  if (shouldIgnoreSyncEvent(payload) || !payload?.endgameExecutionOverride) return;
+  const barrier = syncPresentationBarrier(payload.presentationBarrier, { restored: false });
+  state.phase = "showdown";
+  state.currentTurnPlayerId = null;
+  state.validActions = [];
+  state.endgameWindow = false;
+  state.actionDeadline = null;
+  state.turnId = null;
+  renderState();
+  playEndgameExecution({ barrier });
 });
 socket.on("hand_result", queueHandSettlement);
 socket.on("hand_history", (payload) => {
@@ -6434,7 +6721,6 @@ function syncSkillFxStates() {
   addSelf(self.disguiseActive, "disguise-self", "MASK", "violet");
   addSelf(self.energyLoanPending || self.chipLoanPending || Number(self.energyDebt) > 0 || Number(self.chipDebt) > 0,
     "loan", "DEBT", "gold");
-  addTable(room.fairnessActive, "fairness", "SILENCE", "gold");
   addTable(room.noFoldActive, "intimidation", "NO FOLD", "red");
   addTable(room.disguiseActive, "disguise", "MASKED", "violet");
   getSkillFxManager()?.syncStates(descriptors);
@@ -6490,6 +6776,13 @@ function renderSkillFeed() {
 function renderSkillHud() {
   if (!el.skillHud) return;
   const enabled = state.skillMode === "abyss";
+  const fairnessLocked = Boolean(enabled && state.skillState?.fairnessActive);
+  [el.selfFairnessLock, el.opponentFairnessLock].forEach((badge) => {
+    if (!badge) return;
+    badge.classList.toggle("hidden", !fairnessLocked);
+    badge.setAttribute("aria-hidden", fairnessLocked ? "false" : "true");
+  });
+  el.game?.classList.toggle("fairness-lock-active", fairnessLocked);
   el.skillHud.classList.toggle("hidden", !enabled);
   el.board?.classList.toggle("skills-disabled", !enabled);
   if (!enabled) {
@@ -6514,9 +6807,7 @@ function renderSkillHud() {
   el.selfEnergy.textContent = String(selfSkills.abyssEnergy ?? 0);
   if (el.selfEnergyCap) el.selfEnergyCap.textContent = String(selfSkills.energyCap || 8);
   renderOpponentEnergy();
-  const controlLabel = state.skillState?.fairnessActive
-    ? t("intel.silenceFair")
-    : state.skillState?.noFoldActive
+  const controlLabel = state.skillState?.noFoldActive
       ? t("intel.silenceIntimidation")
       : selfSkills.lockedThisHand
         ? t("intel.silenceLock")
@@ -7412,8 +7703,11 @@ socket.on("skill:resolved", (payload) => {
   if (payload.publicData?.nullifiedCommunityCardIds) {
     state.nullifiedCommunityCardIds = payload.publicData.nullifiedCommunityCardIds;
   }
+  const barrier = payload.publicData?.presentationBarrier
+    ? syncPresentationBarrier(payload.publicData.presentationBarrier, { restored: false })
+    : null;
   if (payload.skillId === "ENDGAME" && payload.publicData?.endgame) {
-    playEndgameDeclare({ execution: Boolean(payload.publicData.execution) });
+    playEndgameDeclare({ execution: Boolean(payload.publicData.execution), barrier });
   } else {
     announceSkillResolved(payload);
   }

@@ -498,6 +498,17 @@ describe("frontend DOM contract", () => {
     expect(skillFxManager).toContain("SHAKE_ALLOWLIST");
   });
 
+  test("公平持久锁由权威手牌状态驱动，不由临时动画节点维持", () => {
+    expect(html).toContain('id="self-fairness-lock"');
+    expect(html).toContain('id="opponent-fairness-lock"');
+    expect(html).toContain('data-i18n-attr="aria-label:intel.fairnessLockSelf title:intel.fairnessLockSelf"');
+    expect(html).toContain('data-i18n-attr="aria-label:intel.fairnessLockOpponent title:intel.fairnessLockOpponent"');
+    expect(client).toContain("const fairnessLocked = Boolean(enabled && state.skillState?.fairnessActive)");
+    expect(client).toContain("badge.classList.toggle(\"hidden\", !fairnessLocked)");
+    expect(skillEffects).toContain("not animation-layer state, so reconnect/snapshot sync restores them");
+    expect(client).not.toMatch(/syncStates\([\s\S]{0,400}FAIRNESS/);
+  });
+
   test("技能选择随权威回合失效，移动技能抽屉不会穿透或污染无技能局", () => {
     expect(client).toContain("function invalidateSkillChoiceIfStale");
     expect(client).toContain("context.turnId !== (state.turnId || null)");

@@ -120,14 +120,20 @@
       const skillId = controls.skill.value;
       if (["DEEP_BREATH", "RECYCLE"].includes(skillId)) return anchor("energy");
       if (skillId === "LOAN") return controls.variant.value === "energy" ? anchor("energy") : anchor("self");
-      if (["CHEAT", "FORTUNE", "RESTART"].includes(skillId)) return anchor("selfCards");
+      if (skillId === "CHEAT") {
+        return controls.variant.value === "hole" ? anchor("opponentCards") : anchor("community");
+      }
+      if (["FORTUNE", "RESTART"].includes(skillId)) return anchor("selfCards");
       if (skillId === "TOP_SECRET") return anchor("selfCards");
-      if (["PERCEPTION", "INTEL_ONE"].includes(skillId)) return anchor("opponentCards");
+      if (skillId === "PERCEPTION") return anchor("community");
+      if (skillId === "INTEL_ONE") return anchor("opponentCards");
       if (["CLAIRVOYANCE", "PROBE"].includes(skillId)) return anchor("opponent");
       if (["DEFENSE", "COUNTER", "ALERT", "DESPERATION"].includes(skillId)) return anchor("self");
       if (skillId === "BLOOD_BATTLE") return anchor("pot");
       if (skillId === "RETREAT") return anchor("self");
       if (skillId === "DESTINY") return anchor("river");
+      if (skillId === "FAIRNESS") return anchor("self");
+      if (skillId === "INTIMIDATION") return anchor("opponent");
       if (profilesApi.isProtocolSkillId(skillId)) return anchor("settlement") || anchor("community");
       return stage;
     }
@@ -168,6 +174,19 @@
     const isProtocol = profilesApi.isProtocolSkillId(skillId);
     const profile = profilesApi.getSkillFxProfile(skillId);
     const deepBreathRefund = skillId === "DEEP_BREATH" && controls.variant.value === "refund";
+    const profileTarget = selectedTarget();
+    const routeElements = (() => {
+      if (skillId === "CHEAT") {
+        return { fromElement: anchor("selfCards"), toElement: profileTarget };
+      }
+      if (skillId === "RETREAT") {
+        return { fromElement: anchor("pot"), toElement: anchor("self") };
+      }
+      if (skillId === "LOAN" && controls.variant.value === "chip") {
+        return { fromElement: anchor("pot"), toElement: profileTarget };
+      }
+      return { fromElement: null, toElement: profileTarget };
+    })();
     const event = {
       force: true,
       eventId: `gallery:${Date.now()}:${Math.random().toString(36).slice(2, 7)}`,
@@ -179,10 +198,15 @@
       casterId: "GALLERY_CASTER",
       viewerId: perspective === "self" ? "GALLERY_CASTER" : "GALLERY_VIEWER",
       casterLabel: perspective === "self" ? tt("fx.you") : tt("fx.opponent"),
-      stageElement: anchor("stageCenter"),
-      targetElement: selectedTarget(),
-      fromElement: anchor("opponent"),
-      toElement: anchor("self"),
+      stageElement: skillId === "PERCEPTION"
+        ? anchor("community")
+        : skillId === "INTIMIDATION"
+          ? anchor("opponent")
+          : anchor("stageCenter"),
+      targetElement: profileTarget,
+      secondaryTargetElement: skillId === "FAIRNESS" ? anchor("opponent") : null,
+      fromElement: routeElements.fromElement,
+      toElement: routeElements.toElement,
       variant: controls.variant.value,
       mode: controls.variant.value,
       context: deepBreathRefund || isProtocol || controls.target.value === "settlement" || controls.phase.value === "showdown"
@@ -197,6 +221,8 @@
       impactGlyph: deepBreathRefund ? "+2" : undefined,
       stageLines: skillId === "DISGUISE"
         ? ["1000", "POT 150", "CALL 50"]
+        : skillId === "PERCEPTION"
+          ? [tt("fx.perceptionField"), "Delta 37% / 62%", tt("fx.perceptionRange"), tt("fx.perceptionSignal")]
         : skillId === "LOAN" && controls.variant.value === "chip"
           ? ["CREDIT +100"]
           : [],

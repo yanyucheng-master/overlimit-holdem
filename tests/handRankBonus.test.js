@@ -401,10 +401,15 @@ describe("Endgame / Nullification / Loan / Fairness / Protocol P09", () => {
     b.skillRuntime.handStartChips = 1000;
     room.skillState.endgameActive = { casterId: a.playerId, execution: true, confiscated: 0 };
     engine.settleShowdown(room);
+    const barrierId = room.presentationBarrier?.id;
+    expect(barrierId).toBeTruthy();
+    expect(room.lastHandResult).toBeNull();
+    expect(engine.releasePresentationBarrier(room, barrierId)).toBe(true);
     expect(room.lastHandResult.winner).toBe(a.playerId);
     expect(room.lastHandResult.endgameExecutionOverride).toBe(true);
     expect(room.lastHandResult.skillSettlement.winningHandCategory).toBe(6);
     expect(room.lastHandResult.skillSettlement.handRankBonusValue).toBe(75);
+    engine.abortPendingRoomWork(room);
   });
 
   test("HR26 Endgame confiscation 不得进入牌型奖励基数", () => {

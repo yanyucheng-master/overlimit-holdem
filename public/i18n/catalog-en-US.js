@@ -35,7 +35,10 @@
       executed: "TACTICAL EXECUTED",
       you: "YOU",
       opponent: "OPPONENT",
-      publicResult: "PUBLIC RESULT"
+      publicResult: "PUBLIC RESULT",
+      perceptionField: "PUBLIC INFO FIELD",
+      perceptionRange: "RANGE REBUILD",
+      perceptionSignal: "SIGNAL SAMPLE"
     },
     connection: {
       ok: "Connected",
@@ -364,6 +367,8 @@
       silenceFair: "Fairness lock",
       silenceIntimidation: "Intimidation · no Fold",
       silenceLock: "Skills locked",
+      fairnessLockSelf: "Fairness active: your Skills are locked",
+      fairnessLockOpponent: "Fairness active: both players' Skills are locked",
       passive: "Passive",
       autoTrigger: "Auto-Trigger"
     },

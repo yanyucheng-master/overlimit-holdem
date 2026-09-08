@@ -48,6 +48,11 @@ const {
   isEconomyFaulted,
   SAFE_ROOM_FAULT_MESSAGE,
 } = require("./chipEconomy");
+const {
+  PRESENTATION_KIND,
+  presentationDuration,
+  toPublicPresentationBarrier,
+} = require("./presentationConfig");
 
 const HAND_SETTLE_MS = 2000;
 const PARTIAL_BOARD_SETTLE_MS = 4000;
@@ -134,8 +139,72 @@ class GameEngine {
     room.actionDeadline = null;
   }
 
+  cancelPresentationBarrier(room) {
+    if (!room) return;
+    if (room.presentationBarrierTimer) {
+      clearTimeout(room.presentationBarrierTimer);
+      room.presentationBarrierTimer = null;
+    }
+    room.presentationBarrier = null;
+    room.presentationBarrierRelease = null;
+  }
+
+  beginPresentationBarrier(room, { kind, onRelease } = {}) {
+    const durationMs = presentationDuration(kind);
+    if (!room || durationMs <= 0) return null;
+    this.cancelPresentationBarrier(room);
+    this.clearActionTimer(room);
+    const startedAt = Date.now();
+    room.presentationBarrierSeq = Math.max(0, Number(room.presentationBarrierSeq) || 0) + 1;
+    const barrier = {
+      id: `${room.handId || room.handNo || "hand"}:presentation:${room.presentationBarrierSeq}:${kind}`,
+      kind,
+      handNo: Math.max(0, Number(room.handNo) || 0),
+      startedAt,
+      until: startedAt + durationMs,
+    };
+    room.presentationBarrier = barrier;
+    room.presentationBarrierRelease = typeof onRelease === "function" ? onRelease : null;
+    room.presentationBarrierTimer = setTimeout(() => {
+      this.releasePresentationBarrier(room, barrier.id);
+    }, durationMs);
+    if (typeof room.presentationBarrierTimer.unref === "function") room.presentationBarrierTimer.unref();
+    this.eventBus.emit("presentation:started", {
+      roomId: room.roomId,
+      ...toPublicPresentationBarrier(barrier),
+    });
+    return toPublicPresentationBarrier(barrier);
+  }
+
+  releasePresentationBarrier(room, expectedId = null) {
+    if (!room?.presentationBarrier) return false;
+    if (expectedId && room.presentationBarrier.id !== expectedId) return false;
+    const barrier = toPublicPresentationBarrier(room.presentationBarrier);
+    const release = room.presentationBarrierRelease;
+    if (room.presentationBarrierTimer) clearTimeout(room.presentationBarrierTimer);
+    room.presentationBarrierTimer = null;
+    room.presentationBarrier = null;
+    room.presentationBarrierRelease = null;
+    this.eventBus.emit("presentation:released", {
+      roomId: room.roomId,
+      ...(barrier || {}),
+    });
+    try {
+      release?.();
+    } catch (error) {
+      this.logger.error("PRESENTATION", "表现屏障释放回调异常", {
+        roomId: room.roomId,
+        kind: barrier?.kind || null,
+        error: error?.message || String(error),
+      });
+      this.broadcastRoomState(room);
+    }
+    return true;
+  }
+
   abortPendingRoomWork(room) {
     this.clearActionTimer(room);
+    this.cancelPresentationBarrier(room);
     for (const timerKey of ["nextHandTimer"]) {
       if (room[timerKey]) {
         clearTimeout(room[timerKey]);
@@ -337,10 +406,15 @@ class GameEngine {
     else room.handResultHistory.push(entry);
   }
 
-  storeAndEmitHandResult(room, handResult, { revealAll = false } = {}) {
+  storeHandResult(room, handResult) {
     this.syncHandResultAfterEndHand(room, handResult);
     this.rememberHandResult(room, handResult);
     room.lastHandResult = handResult;
+    return handResult;
+  }
+
+  storeAndEmitHandResult(room, handResult, { revealAll = false } = {}) {
+    this.storeHandResult(room, handResult);
     this.emitHandResult(room, handResult, { revealAll });
   }
 
@@ -572,7 +646,8 @@ class GameEngine {
       activePlayerId: current?.playerId || null,
       turnId: room.turnId || null,
       communityCards: room.communityCards,
-      actionDeadline: room.actionDeadline || null,
+      actionDeadline: room.presentationBarrier ? null : (room.actionDeadline || null),
+      presentationBarrier: toPublicPresentationBarrier(room.presentationBarrier),
       handId: room.handId || null,
       deckCommitment: room.deckCommitment || null,
       chipViewHidden: hideChips,
@@ -664,6 +739,7 @@ class GameEngine {
 
   resetRoomForRematch(room) {
     this.clearActionTimer(room);
+    this.cancelPresentationBarrier(room);
     if (room.nextHandTimer) {
       clearTimeout(room.nextHandTimer);
       room.nextHandTimer = null;
@@ -722,6 +798,7 @@ class GameEngine {
   closeRoom(room, reason = "rematch_timeout") {
     if (!room || !this.roomManager.getRoom(room.roomId)) return;
     this.clearActionTimer(room);
+    this.cancelPresentationBarrier(room);
     if (room.nextHandTimer) {
       clearTimeout(room.nextHandTimer);
       room.nextHandTimer = null;
@@ -862,6 +939,7 @@ class GameEngine {
   }
 
   handleSkillUse(room, player, payload, options = {}) {
+    if (room?.presentationBarrier) return { ok: false, error: "公共演出尚未结束" };
     return this.skillEngine.requestUse(room, player, payload || {}, options);
   }
 
@@ -918,6 +996,10 @@ class GameEngine {
       return;
     }
 
+    // A reconnecting client receives the authoritative presentation barrier in
+    // room_state. Do not also expose a usable turn while that public sequence
+    // is intentionally frozen.
+    if (room.presentationBarrier) return;
     if (!["pre_flop", "flop", "turn", "river"].includes(room.phase)) return;
     const current = room.players[room.currentPlayerIndex];
     if (!current) return;
@@ -939,6 +1021,7 @@ class GameEngine {
     if (isEconomyFaulted(room)) return false;
     if (isSkillEnabled(room.skillMode) && !this.ensureValidMatchLoadouts(room)) return false;
     this.clearActionTimer(room);
+    this.cancelPresentationBarrier(room);
     if (room.nextHandTimer) {
       clearTimeout(room.nextHandTimer);
       room.nextHandTimer = null;
@@ -1071,6 +1154,11 @@ class GameEngine {
 
   emitTurn(room, { timeoutMs = ACTION_TIMEOUT_MS } = {}) {
     if (["waiting", "showdown", "end", "game_over"].includes(room.phase)) return;
+    if (room.presentationBarrier) {
+      this.clearActionTimer(room);
+      this.broadcastRoomState(room);
+      return;
+    }
     if (room.skillState?.endgameWindow) {
       this.emitEndgameWindow(room, { timeoutMs });
       return;
@@ -1281,7 +1369,26 @@ class GameEngine {
     else this.emitTurn(room);
   }
 
+  beginEndgamePresentation(room) {
+    if (room.skillState) {
+      room.skillState.endgameWindow = null;
+      room.skillState.endgameWindowResolved = true;
+      room.skillState.bettingClosed = true;
+    }
+    this.clearActionTimer(room);
+    const handNo = room.handNo;
+    const handId = room.handId;
+    return this.beginPresentationBarrier(room, {
+      kind: PRESENTATION_KIND.ENDGAME_DECLARE,
+      onRelease: () => {
+        if (room.handNo !== handNo || room.handId !== handId) return;
+        this.continueAfterEndgame(room);
+      },
+    });
+  }
+
   continueAfterEndgame(room) {
+    if (!room || room.presentationBarrier?.kind === PRESENTATION_KIND.ENDGAME_DECLARE) return false;
     if (room.skillState) {
       room.skillState.endgameWindow = null;
       room.skillState.endgameWindowResolved = true;
@@ -1289,6 +1396,7 @@ class GameEngine {
     }
     this.clearActionTimer(room);
     this.runoutToShowdownIfAllIn(room);
+    return true;
   }
 
   settleLoanKill(room, winner, loser) {
@@ -1560,73 +1668,62 @@ class GameEngine {
       tie = false;
     }
 
-    if (tie) {
-      const recipients = [first.player, second.player].filter(Boolean);
-      const bigBlind = room.players[otherIndex(room.dealerIndex)];
-      splitPotHeadsUp(room, recipients, bigBlind, CHIP_REASON.TIE_SPLIT);
-    } else {
-      awardPotTo(room, winnerPlayer, CHIP_REASON.STANDARD_SHOWDOWN);
-    }
-    if (tie || !winnerPlayer) {
-      this.skillEngine.applySettlementModifiers(room, {
-        reason: "showdown",
-        winner: null,
-        tie: true,
-      });
-    } else {
-      const startChips = Number.isSafeInteger(winnerPlayer.skillRuntime?.handStartChips)
-        ? winnerPlayer.skillRuntime.handStartChips
-        : (Number.isSafeInteger(winnerPlayer.handStartChips) ? winnerPlayer.handStartChips : null);
-      const directGain = Number.isSafeInteger(winnerPlayer.skillRuntime?.directChipGainThisHand)
-        ? winnerPlayer.skillRuntime.directChipGainThisHand
-        : 0;
-      const standardPokerNet = Number.isSafeInteger(startChips)
-        ? Math.max(0, winnerPlayer.chips - startChips - directGain)
-        : Math.max(0, Number(room.players.find((player) => player.playerId !== winnerPlayer.playerId)?.totalBet) || 0);
-      this.skillEngine.applySettlementModifiers(room, {
-        reason: "showdown",
-        winner: winnerPlayer,
-        winnerCategory: result.find((entry) => entry.player.playerId === winnerPlayer.playerId)?.hand?.category ?? null,
-        tie: false,
-        standardPokerNet,
-      });
-    }
+    let settledShowdown = null;
+    const settleResolvedShowdown = () => {
+      if (settledShowdown) return settledShowdown;
+      if (tie) {
+        const recipients = [first.player, second.player].filter(Boolean);
+        const bigBlind = room.players[otherIndex(room.dealerIndex)];
+        splitPotHeadsUp(room, recipients, bigBlind, CHIP_REASON.TIE_SPLIT);
+      } else {
+        awardPotTo(room, winnerPlayer, CHIP_REASON.STANDARD_SHOWDOWN);
+      }
+      if (tie || !winnerPlayer) {
+        this.skillEngine.applySettlementModifiers(room, {
+          reason: "showdown",
+          winner: null,
+          tie: true,
+        });
+      } else {
+        const startChips = Number.isSafeInteger(winnerPlayer.skillRuntime?.handStartChips)
+          ? winnerPlayer.skillRuntime.handStartChips
+          : (Number.isSafeInteger(winnerPlayer.handStartChips) ? winnerPlayer.handStartChips : null);
+        const directGain = Number.isSafeInteger(winnerPlayer.skillRuntime?.directChipGainThisHand)
+          ? winnerPlayer.skillRuntime.directChipGainThisHand
+          : 0;
+        const standardPokerNet = Number.isSafeInteger(startChips)
+          ? Math.max(0, winnerPlayer.chips - startChips - directGain)
+          : Math.max(0, Number(room.players.find((player) => player.playerId !== winnerPlayer.playerId)?.totalBet) || 0);
+        this.skillEngine.applySettlementModifiers(room, {
+          reason: "showdown",
+          winner: winnerPlayer,
+          winnerCategory: result.find((entry) => entry.player.playerId === winnerPlayer.playerId)?.hand?.category ?? null,
+          tie: false,
+          standardPokerNet,
+        });
+      }
 
-    this.logger.info("GAME", "摊牌结算", {
-      roomId: room.roomId,
-      winner: tie ? "tie" : winnerPlayer.playerId,
-      pot: potBefore,
-      returned,
-    });
-    this.eventBus.emit("game:showdown", {
-      roomId: room.roomId,
-      tie,
-      pot: potBefore,
-      endgameExecution: endgameExecutionOverride,
-      endgameExecutionOverride,
-    });
-
-    const showdownPayload = {
-      players: result.map((x) => ({
-        playerId: x.player.playerId,
-        name: x.player.name,
-        cards: x.player.cards,
-        handName: x.hand.handName,
-        handRank: x.hand.category,
-        bestFive: x.hand.bestFive,
-      })),
-      winner: tie ? null : winnerPlayer.playerId,
-      tie,
-      endgameExecution: endgameExecutionOverride,
-      endgameExecutionOverride,
-      pot: potBefore,
-    };
-    room.players.forEach((viewer) => {
-      this.emitToPlayer(viewer, "showdown", {
-        ...showdownPayload,
-        pot: isChipViewHiddenFor(room, viewer) ? null : showdownPayload.pot,
+      this.logger.info("GAME", "摊牌结算", {
+        roomId: room.roomId,
+        winner: tie ? "tie" : winnerPlayer.playerId,
+        pot: potBefore,
+        returned,
       });
-    });
+      const showdownPayload = {
+        players: result.map((x) => ({
+          playerId: x.player.playerId,
+          name: x.player.name,
+          cards: x.player.cards,
+          handName: x.hand.handName,
+          handRank: x.hand.category,
+          bestFive: x.hand.bestFive,
+        })),
+        winner: tie ? null : winnerPlayer.playerId,
+        tie,
+        endgameExecution: endgameExecutionOverride,
+        endgameExecutionOverride,
+        pot: potBefore,
+      };
       const handResult = this.buildHandResultPayload(room, {
         reason: "showdown",
         winner: tie ? null : winnerPlayer,
@@ -1638,10 +1735,63 @@ class GameEngine {
           this.buildPlayerHandDetail(x.player, room.communityCards, {}, room)
         ),
       });
-    this.skillEngine.endHand(room, {
-      reason: "showdown",
-      winner: tie ? null : winnerPlayer,
+      this.skillEngine.endHand(room, {
+        reason: "showdown",
+        winner: tie ? null : winnerPlayer,
+        tie,
+      });
+      settledShowdown = { showdownPayload, handResult };
+      return settledShowdown;
+    };
+
+    if (endgameExecutionOverride) {
+      const handNo = room.handNo;
+      const handId = room.handId;
+      const presentationBarrier = this.beginPresentationBarrier(room, {
+        kind: PRESENTATION_KIND.ENDGAME_EXECUTION,
+        onRelease: () => {
+          if (room.handNo !== handNo || room.handId !== handId) return;
+          const { handResult } = settleResolvedShowdown();
+          this.storeAndEmitHandResult(room, handResult, { revealAll: true });
+          this.revealHandCommitment(room);
+          room.phase = "end";
+          this.finalizeHand(room, this.getHandFinalizeDelay(room, handResult.settleMs));
+        },
+      });
+      this.eventBus.emit("game:showdown", {
+        roomId: room.roomId,
+        tie,
+        pot: potBefore,
+        endgameExecution: true,
+        endgameExecutionOverride: true,
+        presentationBarrier,
+      });
+      room.players.forEach((viewer) => {
+        this.emitToPlayer(viewer, "showdown", {
+          roomId: room.roomId,
+          handNo: room.handNo,
+          endgameExecution: true,
+          endgameExecutionOverride: true,
+          presentationBarrier,
+        });
+      });
+      this.broadcastRoomState(room);
+      return;
+    }
+
+    const { showdownPayload, handResult } = settleResolvedShowdown();
+    this.eventBus.emit("game:showdown", {
+      roomId: room.roomId,
       tie,
+      pot: potBefore,
+      endgameExecution: false,
+      endgameExecutionOverride: false,
+    });
+    room.players.forEach((viewer) => {
+      this.emitToPlayer(viewer, "showdown", {
+        ...showdownPayload,
+        pot: isChipViewHiddenFor(room, viewer) ? null : showdownPayload.pot,
+      });
     });
     this.storeAndEmitHandResult(room, handResult, { revealAll: true });
     this.revealHandCommitment(room);
@@ -1789,6 +1939,7 @@ class GameEngine {
     this.ensureEconomyFaultHandler(room);
     const economyBlock = this.refuseIfEconomyFaulted(room);
     if (economyBlock) return economyBlock;
+    if (room.presentationBarrier) return { ok: false, error: "公共演出尚未结束" };
     if (
       options.enforceTurnToken &&
       (options.handId !== room.handId || options.turnId !== room.turnId)

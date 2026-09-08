@@ -35,7 +35,10 @@
       executed: "战术已执行",
       you: "你",
       opponent: "对手",
-      publicResult: "PUBLIC RESULT"
+      publicResult: "PUBLIC RESULT",
+      perceptionField: "公共信息场",
+      perceptionRange: "范围重构",
+      perceptionSignal: "信号采样"
     },
     connection: {
       ok: "连接正常",
@@ -364,6 +367,8 @@
       silenceFair: "公平封锁",
       silenceIntimidation: "恐吓 · 禁止弃牌",
       silenceLock: "技能封锁",
+      fairnessLockSelf: "公平生效：己方技能已封锁",
+      fairnessLockOpponent: "公平生效：双方技能已封锁",
       passive: "被动",
       autoTrigger: "自动触发"
     },

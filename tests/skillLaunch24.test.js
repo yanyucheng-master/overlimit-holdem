@@ -428,6 +428,8 @@ describe("伪装", () => {
     expect(oppView.isAllIn).toBe(false);
     a.isAllIn = false;
     expect(use(engine, room, a, "DEAD_END", {}, "dead")).toMatchObject({ status: "SUCCESS" });
+    expect(room.presentationBarrier).toMatchObject({ kind: "DEAD_END_COMMIT" });
+    expect(engine.releasePresentationBarrier(room, room.presentationBarrier.id)).toBe(true);
     const forced = engine.getViewPlayers(room, b).find((player) => player.playerId === a.playerId);
     expect(forced.isAllIn).toBe(true);
 
@@ -465,6 +467,11 @@ describe("终局", () => {
     expect(room.skillState.bettingClosed).toBe(true);
     expect(room.skillState.endgameActive.confiscated).toBe(200);
     expect(a.skillRuntime.directChipGainThisHand).toBe(200);
+    expect(room.phase).toBe("pre_flop");
+    expect(room.presentationBarrier).toMatchObject({ kind: "ENDGAME_DECLARE" });
+    expect(room.lastHandResult).toBeNull();
+    const declarationId = room.presentationBarrier.id;
+    expect(engine.releasePresentationBarrier(room, declarationId)).toBe(true);
     expect(["showdown", "end"]).toContain(room.phase);
   });
 
@@ -489,6 +496,10 @@ describe("终局", () => {
     same.room.phase = "river";
     same.room.pot = 100;
     same.engine.settleShowdown(same.room);
+    expect(same.room.presentationBarrier).toMatchObject({ kind: "ENDGAME_EXECUTION" });
+    expect(same.room.lastHandResult).toBeNull();
+    expect(same.room.handResultHistory).toEqual([]);
+    expect(same.engine.releasePresentationBarrier(same.room, same.room.presentationBarrier.id)).toBe(true);
     expect(same.room.lastHandResult.winner).toBe(same.a.playerId);
     expect(same.room.lastHandResult.endgameExecution).toBe(true);
 
