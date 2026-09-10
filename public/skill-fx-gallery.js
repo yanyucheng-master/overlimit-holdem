@@ -38,7 +38,6 @@
     target: byId("skill-fx-gallery-target"),
     variant: byId("skill-fx-gallery-variant"),
     quality: byId("skill-fx-gallery-quality"),
-    reduced: byId("skill-fx-gallery-reduced"),
     showStage: byId("skill-fx-gallery-show-stage"),
     showTarget: byId("skill-fx-gallery-show-target"),
     showCaption: byId("skill-fx-gallery-show-caption"),
@@ -82,7 +81,7 @@
 
   const anchor = (name) => stage.querySelector(`[data-fx-gallery-anchor="${name}"]`);
   const targetMarker = byId("skill-fx-gallery-target-marker");
-  const gallerySettings = { quality: "high", reduceMotion: false, lowPerformance: false };
+  const gallerySettings = { quality: "high" };
   const manager = managerApi.createSkillFxManager({
     effectLayer: byId("skill-fx-gallery-effect-layer"),
     stateLayer: byId("skill-fx-gallery-state-layer"),
@@ -166,8 +165,12 @@
 
   function replay() {
     manager.clear({ keepStates: true });
-    gallerySettings.quality = controls.quality.value;
-    gallerySettings.reduceMotion = controls.reduced.checked;
+    gallerySettings.quality = managerApi.normalizeQuality(controls.quality.value);
+    const setting = byId("setting-animation");
+    if (setting && setting.value !== gallerySettings.quality) {
+      setting.value = gallerySettings.quality;
+      setting.dispatchEvent(new Event("change", { bubbles: true }));
+    }
     const perspective = controls.perspective.value;
     const disclosure = controls.disclosure.value;
     const skillId = controls.skill.value;
@@ -251,6 +254,7 @@
   }
 
   function openGallery() {
+    controls.quality.value = document.documentElement.dataset.animation;
     modal.classList.remove("hidden");
     controls.skill.focus();
     requestAnimationFrame(replay);

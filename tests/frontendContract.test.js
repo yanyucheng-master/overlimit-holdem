@@ -403,7 +403,7 @@ describe("frontend DOM contract", () => {
     expect(client).toContain("const ALL_IN_VIBRATION_PATTERN");
     expect(client).toContain("function playAllInHaptics()");
     expect(client).toContain('typeof navigator.vibrate !== "function"');
-    expect(client).toContain("state.settings.reduceMotion");
+    expect(client).toContain('state.settings.animation === "low"');
     expect(client).toContain("navigator.vibrate(pattern)");
     expect(client).toContain("playFxHaptics(ALL_IN_VIBRATION_PATTERN)");
     expect(client).toMatch(/playAllInHaptics\(\);\s+playTone\("allin"\)/);

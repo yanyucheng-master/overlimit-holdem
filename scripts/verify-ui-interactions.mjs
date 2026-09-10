@@ -1906,11 +1906,18 @@ async function main() {
     await page.click(`#skill-lab-catalog .skill-card[data-skill-id="${skillId}"] .skill-card-select`);
   }
   report.lab.selected = await page.locator("#skill-lab-catalog .skill-card.selected").count();
+  await page.waitForFunction(() => [...document.querySelectorAll("#skill-lab-catalog .skill-card.selected")].every((card) => {
+    const paint = card.querySelector(":scope > .ui-feedback-surface") || card;
+    return !paint.getAnimations().some((animation) => animation.playState === "running");
+  }));
   report.lab.selectionVisibility = await page.evaluate(() => {
     const selected = [...document.querySelectorAll("#skill-lab-catalog .skill-card.selected")];
     const unselected = document.querySelector("#skill-lab-catalog .skill-card:not(.selected)");
-    const selectedStyles = selected.map((card) => getComputedStyle(card));
-    const unselectedStyle = unselected ? getComputedStyle(unselected) : null;
+    // The animated paint surface carries selection styling while the native
+    // target remains stationary. Keep the same visible-distinction assertions.
+    const paintSurface = (card) => card.querySelector(":scope > .ui-feedback-surface") || card;
+    const selectedStyles = selected.map((card) => getComputedStyle(paintSurface(card)));
+    const unselectedStyle = unselected ? getComputedStyle(paintSurface(unselected)) : null;
     const markers = selected.map((card) => card.querySelector(".skill-selection-mark"));
     return {
       markerCount: markers.filter(Boolean).length,

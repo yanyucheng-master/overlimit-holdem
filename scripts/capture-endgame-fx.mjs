@@ -81,8 +81,9 @@ async function main() {
   });
   await page.goto(BASE, { waitUntil: "networkidle" });
   await page.evaluate(() => {
-    document.body.classList.add("reduce-motion");
-    document.body.classList.remove("reduce-motion");
+    const previousQuality = document.documentElement.dataset.animation;
+    document.documentElement.dataset.animation = "low";
+    document.documentElement.dataset.animation = previousQuality;
     const shell = document.querySelector(".app-shell");
     if (shell) shell.style.visibility = "hidden";
     const settings = document.getElementById("btn-settings");

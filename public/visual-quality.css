@@ -1,0 +1,59 @@
+/* One low-tier policy. High keeps the existing presentation unchanged. */
+html[data-animation="low"] *,
+html[data-animation="low"] *::before,
+html[data-animation="low"] *::after {
+  scroll-behavior: auto !important;
+  animation-duration: 1ms !important;
+  animation-delay: 0ms !important;
+  animation-iteration-count: 1 !important;
+  transition-property: color, background-color, border-color, opacity !important;
+  transition-duration: 80ms !important;
+  transition-delay: 0ms !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+@keyframes visual-low-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+html[data-animation="low"] .screen.active:not(#screen-game),
+html[data-animation="low"] .modal-panel,
+html[data-animation="low"] .toast {
+  animation: visual-low-fade 80ms ease-out both !important;
+}
+
+/* Opaque dialog surfaces replace blur without exposing distracting text behind. */
+html[data-animation="low"] .modal-panel {
+  background: #10141c !important;
+}
+
+html[data-animation="low"] button:hover,
+html[data-animation="low"] button:active,
+html[data-animation="low"] .protocol-card:hover {
+  transform: none !important;
+}
+
+html[data-animation="low"] button:active:not(:disabled) {
+  filter: brightness(1.12);
+}
+
+/* Keep low-tier skill information readable for its actual presentation hold.
+   Only opacity changes; no routes, particles or individual shape animations. */
+html[data-animation="low"] .skill-effect-layer[data-fx-quality="low"] .skill-effect-instance,
+html[data-animation="low"] .skill-effect-layer[data-fx-quality="low"] .skill-effect-instance *,
+html[data-animation="low"] .skill-effect-layer[data-fx-quality="low"] .skill-effect-instance::before,
+html[data-animation="low"] .skill-effect-layer[data-fx-quality="low"] .skill-effect-instance::after {
+  animation-name: skill-effect-reduced-fade !important;
+  animation-duration: var(--fx-duration) !important;
+  animation-timing-function: ease !important;
+}
+
+html[data-animation="low"] .skill-effect-layer .skill-effect-particles,
+html[data-animation="low"] .skill-effect-layer .skill-effect-route,
+html[data-animation="low"] .skill-effect-layer .skill-impact-flash,
+html[data-animation="low"] .allin-text::before,
+html[data-animation="low"] .allin-text::after {
+  display: none !important;
+}

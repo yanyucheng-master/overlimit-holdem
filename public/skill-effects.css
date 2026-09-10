@@ -1362,7 +1362,6 @@
 }
 
 /* Quality gates. */
-.skill-effect-layer[data-fx-quality="medium"] .particle:nth-child(n+7),
 .skill-effect-layer[data-fx-quality="low"] .particle:nth-child(n+4),
 .skill-effect-layer[data-fx-quality="low"] .halo-b,
 .skill-effect-layer[data-fx-quality="low"] .line-c {
@@ -1377,7 +1376,6 @@
   filter: none;
 }
 
-.skill-effect-layer[data-fx-quality="medium"] .skill-effect-atmosphere { opacity: .78; }
 .skill-effect-layer[data-fx-quality="low"] .skill-effect-atmosphere { display: none; }
 
 .skill-effect-layer[data-fx-quality="low"] .route-packet,
@@ -1464,8 +1462,7 @@
   .skill-state-marker { padding: 2px 5px; font-size: 8px; }
 }
 
-body.reduce-motion .fairness-lock-badge,
-body.low-performance .fairness-lock-badge {
+html[data-animation="low"] .fairness-lock-badge {
   animation: none;
 }
 

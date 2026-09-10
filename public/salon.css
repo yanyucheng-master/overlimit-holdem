@@ -3175,15 +3175,13 @@ html.has-modal-layer body {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .salon-ui .rules-toc,
-  .salon-ui .rules-toc-backdrop {
-    transition: none;
-  }
+html[data-animation="low"] .salon-ui .rules-toc,
+html[data-animation="low"] .salon-ui .rules-toc-backdrop {
+  transition: none;
+}
 
-  .salon-ui .is-rule-target-flash {
-    animation: none;
-  }
+html[data-animation="low"] .salon-ui .is-rule-target-flash {
+  animation: none;
 }
 
 /* ══════════════════════════════════
@@ -4615,7 +4613,7 @@ html.has-modal-layer body {
   }
 }
 
-body.reduce-motion .quickstart-track {
+html[data-animation="low"] .quickstart-track {
   transition: none !important;
 }
 
@@ -4692,13 +4690,5 @@ html[data-locale="en-US"] .salon-ui .opponent-intel-summary-copy {
 @media (max-width: 430px) {
   .salon-ui .lobby-lang-switch {
     padding: 2px 4px;
-  }
-}
-
-/* Reduced motion */
-@media (prefers-reduced-motion: reduce) {
-  .salon-ui * {
-    animation: none !important;
-    transition: none !important;
   }
 }

@@ -200,14 +200,12 @@ function actionLabel(action) {
 
 function loadSettings() {
   const defaults = {
-    animation: "high",
+    animation: window.OverlimitVisualQuality.resolveStoredQuality(null, Boolean(window.matchMedia?.("(prefers-reduced-motion: reduce)").matches)),
     allInStyle: "abyss",
     proPlayerMode: false,
     proFontStyle: "broadcast",
-    reduceMotion: window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches,
     sfx: 55,
     music: 0,
-    lowPerformance: false,
     skillExpertText: false,
     language: "zh-CN",
     languageChosen: false,
@@ -225,9 +223,7 @@ function loadSettings() {
     : (window.OverlimitI18n ? window.OverlimitI18n.detectBrowserLanguage() : defaults.language);
   if (window.OverlimitI18n) window.OverlimitI18n.setLocale(language, { silent: true });
   return {
-    animation: ["high", "medium", "low"].includes(stored.animation)
-      ? stored.animation
-      : defaults.animation,
+    animation: window.OverlimitVisualQuality.resolveStoredQuality(stored, defaults.animation === "low"),
     allInStyle: ALL_IN_STYLES.includes(stored.allInStyle)
       ? stored.allInStyle
       : defaults.allInStyle,
@@ -236,14 +232,8 @@ function loadSettings() {
     proFontStyle: PRO_FONT_STYLES.includes(stored.proFontStyle)
       ? stored.proFontStyle
       : defaults.proFontStyle,
-    reduceMotion:
-      typeof stored.reduceMotion === "boolean" ? stored.reduceMotion : defaults.reduceMotion,
     sfx: clampStoredNumber(stored.sfx, 0, 100, defaults.sfx),
     music: clampStoredNumber(stored.music, 0, 100, defaults.music),
-    lowPerformance:
-      typeof stored.lowPerformance === "boolean"
-        ? stored.lowPerformance
-        : defaults.lowPerformance,
     skillExpertText:
       typeof stored.skillExpertText === "boolean" ? stored.skillExpertText : defaults.skillExpertText,
     language,
@@ -451,12 +441,10 @@ const el = {
   settingProMode: byId("setting-pro-mode"),
   settingProFont: byId("setting-pro-font"),
   settingProFontRow: byId("setting-pro-font-row"),
-  settingReduceMotion: byId("setting-reduce-motion"),
   settingSfx: byId("setting-sfx"),
   settingSfxValue: byId("setting-sfx-value"),
   settingMusic: byId("setting-music"),
   settingMusicValue: byId("setting-music-value"),
-  settingLowPerformance: byId("setting-low-performance"),
   leaveConfirmModal: byId("leave-confirm-modal"),
   btnLeaveCancel: byId("btn-leave-cancel"),
   btnLeaveConfirm: byId("btn-leave-confirm"),
@@ -678,6 +666,14 @@ function visibleModalLayers() {
   return modalLayers.filter((modal) => !modal.classList.contains("hidden"));
 }
 
+function setModalVisible(modal, visible) {
+  if (!modal) return;
+  modal.classList.toggle("hidden", !visible);
+  // Isolation changes with intent, before focus is restored. A closing visual
+  // may remain painted for 120ms, but must never keep receiving input.
+  syncModalIsolation();
+}
+
 function modalFocusables(modal) {
   return [...modal.querySelectorAll(
     'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
@@ -694,7 +690,7 @@ function syncModalIsolation() {
   modalLayers.forEach((modal) => {
     const hidden = modal.classList.contains("hidden");
     const covered = !hidden && modal !== top;
-    modal.inert = covered;
+    modal.inert = covered || (hidden && modal.hasAttribute("data-ui-modal"));
     modal.setAttribute("aria-hidden", hidden || covered ? "true" : "false");
   });
   if (top && !top.contains(document.activeElement)) {
@@ -1004,8 +1000,7 @@ function applySettings() {
   document.documentElement.dataset.animation = state.settings.animation;
   document.documentElement.dataset.allinStyle = state.settings.allInStyle;
   document.documentElement.dataset.proFont = state.settings.proFontStyle;
-  document.body.classList.toggle("reduce-motion", Boolean(state.settings.reduceMotion));
-  document.body.classList.toggle("low-performance", Boolean(state.settings.lowPerformance));
+  skillFxManager?.refreshQuality();
   document.body.classList.toggle("pro-player-mode", Boolean(state.settings.proPlayerMode));
   el.settingAnimation.value = state.settings.animation;
   el.flash.dataset.allinStyle = state.settings.allInStyle;
@@ -1021,12 +1016,10 @@ function applySettings() {
     el.settingProFontRow.classList.toggle("is-disabled", !state.settings.proPlayerMode);
   }
   if (el.settingLanguage) el.settingLanguage.value = state.settings.language === "en-US" ? "en-US" : "zh-CN";
-  el.settingReduceMotion.checked = Boolean(state.settings.reduceMotion);
   el.settingSfx.value = String(state.settings.sfx);
   el.settingSfxValue.textContent = String(state.settings.sfx) + "%";
   el.settingMusic.value = String(state.settings.music);
   el.settingMusicValue.textContent = String(state.settings.music) + "%";
-  el.settingLowPerformance.checked = Boolean(state.settings.lowPerformance);
   updateAmbientAudio();
   if (el.game?.classList.contains("active")) renderActions();
 }
@@ -1159,11 +1152,13 @@ function showToast(message, tone) {
 function showScreen(name) {
   const target = el[name];
   if (target?.classList.contains("active") && document.body.dataset.screen === name) return;
+  const previous = document.querySelector(".screen.active");
   [el.auth, el.wait, el.game, el.skillLab].forEach((screen) => {
     if (screen) screen.classList.remove("active");
   });
   if (target) target.classList.add("active");
   document.body.dataset.screen = name;
+  window.OverlimitUIFeedback?.enterScreen(target, previous);
   if (name === "game") el.toastRegion.textContent = "";
 }
 
@@ -1951,7 +1946,7 @@ function setBanner(message, win) {
 }
 
 function animateChipFlow(fromElement, toElement, count = 4) {
-  if (state.settings.reduceMotion || state.settings.lowPerformance) return;
+  if (state.settings.animation === "low") return;
   const fromRect = fromElement?.getBoundingClientRect();
   const toRect = toElement?.getBoundingClientRect();
   if (!fromRect || !toRect) return;
@@ -2012,7 +2007,7 @@ function playFxHaptics(pattern) {
         window.matchMedia("(max-width: 640px)").matches));
   if (
     !isTouchDevice ||
-    state.settings.reduceMotion ||
+    (state.settings.animation === "low") ||
     document.visibilityState !== "visible" ||
     typeof navigator.vibrate !== "function"
   ) {
@@ -2041,8 +2036,7 @@ function playAllInEffect(_actorId, { preview = false } = {}) {
   if (!preview) allInEffectEndsAt = Date.now() + ALL_IN_EFFECT_MS;
   const allowShake =
     !preview &&
-    !state.settings.reduceMotion &&
-    !state.settings.lowPerformance &&
+    state.settings.animation === "high" &&
     window.matchMedia("(min-width: 641px)").matches;
   if (allowShake) {
     void document.body.offsetWidth;
@@ -2098,8 +2092,7 @@ function playEndgameSfx(kind) {
 
 function allowFxShake() {
   return (
-    !state.settings.reduceMotion &&
-    !state.settings.lowPerformance &&
+    state.settings.animation === "high" &&
     window.matchMedia("(min-width: 641px)").matches
   );
 }
@@ -2149,8 +2142,6 @@ function getSkillFxManager() {
     privateLayer: el.skillFxSecret,
     getSettings: () => ({
       quality: state.settings.animation,
-      reduceMotion: state.settings.reduceMotion,
-      lowPerformance: state.settings.lowPerformance,
     }),
     getAnchors: () => ({
       board: el.board,
@@ -2605,7 +2596,7 @@ function runEndgamePresentation(kind, { execution = false, barrier = state.prese
   const nominalMs = kind === "ENDGAME_EXECUTION" ? ENDGAME_KILL_MS : ENDGAME_DECLARE_MS;
   const remainingMs = presentationBarrierRemaining(barrier);
   const fullMotionMs = Math.max(520, Math.min(nominalMs, remainingMs || nominalMs));
-  const dynamicMs = state.settings.reduceMotion
+  const dynamicMs = (state.settings.animation === "low")
     ? Math.min(ENDGAME_REDUCED_DYNAMIC_MS, fullMotionMs)
     : fullMotionMs;
   getSkillFxManager()?.pause(Math.max(dynamicMs, remainingMs), { clear: true });
@@ -3712,6 +3703,7 @@ function setProtocol(gameMode, skillMode) {
 }
 
 function openSkillLab(pendingAction = null) {
+  if (el.auth.classList.contains("active")) skillLabReturnFocus = document.activeElement;
   if (pendingAction !== null || !state.pendingRoomAction) state.pendingRoomAction = pendingAction;
   const validation = validateLoadoutIds(state.savedLoadout);
   state.selectedLoadout = validation.ok ? [...state.savedLoadout] : [];
@@ -3720,11 +3712,17 @@ function openSkillLab(pendingAction = null) {
   }
   showScreen("skillLab");
   renderSkillLab();
+  requestAnimationFrame(() => {
+    if (el.skillLab.classList.contains("active")) el.btnBackSkillLab?.focus({ preventScroll: true });
+  });
 }
 
 function closeSkillLab() {
   showScreen("auth");
   updateSkillPrepUi();
+  requestAnimationFrame(() => {
+    if (el.auth.classList.contains("active")) (skillLabReturnFocus?.isConnected ? skillLabReturnFocus : el.btnOpenSkillLab)?.focus({ preventScroll: true });
+  });
 }
 
 function returnFromSkillLab() {
@@ -3853,7 +3851,7 @@ function syncSkillPreviewModeButtons() {
 
 function closeSkillPreview() {
   if (!el.skillPreviewModal || el.skillPreviewModal.classList.contains("hidden")) return;
-  el.skillPreviewModal.classList.add("hidden");
+  setModalVisible(el.skillPreviewModal, false);
   previewingSkill = null;
   const target = skillPreviewReturnFocus;
   skillPreviewReturnFocus = null;
@@ -3906,7 +3904,7 @@ function showSkillPreview(skill, trigger) {
     el.skillPreviewRules.append(dt, dd);
   });
 
-  el.skillPreviewModal.classList.remove("hidden");
+  setModalVisible(el.skillPreviewModal, true);
   el.btnCloseSkillPreview?.focus();
 }
 
@@ -3922,7 +3920,7 @@ function createSkillZoomButton(skill) {
   zoom.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
-    showSkillPreview(skill, zoom);
+    showSkillPreview(state.skillCatalog.find((entry) => entry.id === skill.id) || skill, zoom);
   });
   return zoom;
 }
@@ -3932,29 +3930,15 @@ function createSkillCatalogCard(skill, { selected = false, disabled = false, onS
   card.className = "skill-card load-" + skill.load;
   card.dataset.skillId = skill.id;
   card.setAttribute("role", "group");
-  const displayName = skillCopy(skill, "name");
-  card.setAttribute("aria-label", t("lab.cardAria", { name: displayName }));
-  card.classList.toggle("selected", selected);
 
   const select = document.createElement("button");
   select.type = "button";
   select.className = "skill-card-select";
   select.disabled = disabled;
-  select.setAttribute("aria-pressed", selected ? "true" : "false");
-  select.setAttribute("aria-label", selected ? t("lab.unequip", { name: displayName }) : t("lab.equip", { name: displayName }));
   const name = document.createElement("strong");
   const cost = document.createElement("small");
   const description = document.createElement("span");
   description.className = "skill-card-copy skill-card-catalog-summary";
-  name.textContent = displayName;
-  const passive = (skill.tags || []).includes("PASSIVE");
-  const energyHint = skill.energyCosts
-    ? t("lab.energySplit", { costs: Object.values(skill.energyCosts).join("/") })
-    : Number(skill.energyCost || 0) > 0
-      ? passive ? t("lab.triggerCost", { cost: skill.energyCost }) : t("lab.energyHint", { cost: skill.energyCost })
-      : passive ? t("lab.autoTrigger") : t("lab.energyZero");
-  cost.textContent = t("skill.load", { load: skill.load }) + energyHint;
-  description.textContent = skillCopy(skill, "catalogSummary");
   select.append(name, cost, description);
   if (typeof onSelect === "function") select.addEventListener("click", onSelect);
 
@@ -3964,7 +3948,48 @@ function createSkillCatalogCard(skill, { selected = false, disabled = false, onS
   selectedMark.textContent = t("lab.selectedMark");
 
   card.append(select, selectedMark, createSkillZoomButton(skill));
+  updateSkillCatalogCard(card, skill, selected);
   return card;
+}
+
+function updateSkillCatalogCard(card, skill, selected) {
+  const displayName = skillCopy(skill, "name");
+  const select = card.querySelector(".skill-card-select");
+  const passive = (skill.tags || []).includes("PASSIVE");
+  const energyHint = skill.energyCosts
+    ? t("lab.energySplit", { costs: Object.values(skill.energyCosts).join("/") })
+    : Number(skill.energyCost || 0) > 0
+      ? passive ? t("lab.triggerCost", { cost: skill.energyCost }) : t("lab.energyHint", { cost: skill.energyCost })
+      : passive ? t("lab.autoTrigger") : t("lab.energyZero");
+  const writeText = (node, value) => { if (node && node.textContent !== value) node.textContent = value; };
+  card.setAttribute("aria-label", t("lab.cardAria", { name: displayName }));
+  card.classList.toggle("selected", selected);
+  select.setAttribute("aria-pressed", selected ? "true" : "false");
+  select.setAttribute("aria-label", selected ? t("lab.unequip", { name: displayName }) : t("lab.equip", { name: displayName }));
+  writeText(select.querySelector("strong"), displayName);
+  writeText(select.querySelector("small"), t("skill.load", { load: skill.load }) + energyHint);
+  writeText(select.querySelector(".skill-card-copy"), skillCopy(skill, "catalogSummary"));
+  writeText(card.querySelector(".skill-selection-mark"), t("lab.selectedMark"));
+  const zoom = card.querySelector(".skill-zoom-button");
+  zoom.title = t("skill.zoomNamed", { name: displayName });
+  zoom.setAttribute("aria-label", t("skill.zoom", { name: displayName }));
+}
+
+const skillLabCardNodes = new Map();
+let skillLabReturnFocus = null;
+
+function toggleLabSkill(skillId) {
+  const { maxEquipped, maxLoad } = currentSkillBuildLimits();
+  const index = state.selectedLoadout.indexOf(skillId);
+  if (index >= 0) state.selectedLoadout.splice(index, 1);
+  else if (state.selectedLoadout.length >= maxEquipped) {
+    showToast(t("lab.maxCount", { max: maxEquipped }), "error");
+    return;
+  } else if (loadoutLoad([...state.selectedLoadout, skillId]) > maxLoad) {
+    showToast(t("lab.maxLoad"), "error");
+    return;
+  } else state.selectedLoadout.push(skillId);
+  renderSkillLab();
 }
 
 const SKILL_LAB_FILTERS = Object.freeze([
@@ -4052,7 +4077,7 @@ function renderSkillLabFilters() {
 function renderSkillLab() {
   if (!el.skillLabCatalog) return;
   renderSkillLabFilters();
-  const { maxEquipped, maxLoad } = currentSkillBuildLimits();
+  const { maxLoad } = currentSkillBuildLimits();
   const validation = validateLoadoutIds(state.selectedLoadout);
   const load = state.selectedLoadout.reduce((sum, id) => {
     const def = state.skillCatalog.find((skill) => skill.id === id);
@@ -4078,8 +4103,16 @@ function renderSkillLab() {
       : t("lab.selectedInvalid", { summary: selectionSummary, error: validation.error || skillBuildRuleText() });
   }
   if (el.btnSaveLoadout) el.btnSaveLoadout.disabled = !validation.ok;
-  el.skillLabCatalog.textContent = "";
+  const scrollTop = el.skillLabCatalog.scrollTop;
+  const focused = el.skillLabCatalog.contains(document.activeElement) ? document.activeElement : null;
   const catalog = visibleSkillLabCatalog();
+  const visibleIds = new Set(catalog.map((skill) => skill.id));
+  for (const child of [...el.skillLabCatalog.children]) {
+    if (!visibleIds.has(child.dataset.skillId)) child.remove();
+  }
+  for (const [id] of skillLabCardNodes) {
+    if (!state.skillCatalog.some((skill) => skill.id === id)) skillLabCardNodes.delete(id);
+  }
   if (!catalog.length) {
     if (state.skillCatalog.length) {
       const empty = document.createElement("p");
@@ -4089,26 +4122,19 @@ function renderSkillLab() {
     }
     return;
   }
-  catalog.forEach((skill) => {
-    const card = createSkillCatalogCard(skill, {
-      selected: state.selectedLoadout.includes(skill.id),
-      onSelect: () => {
-      const idx = state.selectedLoadout.indexOf(skill.id);
-      if (idx >= 0) state.selectedLoadout.splice(idx, 1);
-      else if (state.selectedLoadout.length >= maxEquipped) {
-        showToast(t("lab.maxCount", { max: maxEquipped }), "error");
-        return;
-      } else if (loadoutLoad([...state.selectedLoadout, skill.id]) > maxLoad) {
-        showToast(t("lab.maxLoad"), "error");
-        return;
-      } else {
-        state.selectedLoadout.push(skill.id);
-      }
-      renderSkillLab();
-      },
-    });
-    el.skillLabCatalog.appendChild(card);
-  });
+  let cursor = el.skillLabCatalog.firstElementChild;
+  for (const skill of catalog) {
+    let card = skillLabCardNodes.get(skill.id);
+    if (!card) {
+      card = createSkillCatalogCard(skill, { onSelect: () => toggleLabSkill(skill.id) });
+      skillLabCardNodes.set(skill.id, card);
+    }
+    updateSkillCatalogCard(card, skill, state.selectedLoadout.includes(skill.id));
+    if (card !== cursor) el.skillLabCatalog.insertBefore(card, cursor);
+    cursor = card.nextElementSibling;
+  }
+  if (focused?.isConnected && document.activeElement !== focused) focused.focus({ preventScroll: true });
+  el.skillLabCatalog.scrollTop = scrollTop;
 }
 
 function saveLoadoutFromLab() {
@@ -4162,8 +4188,8 @@ function openMatchQueueUi(gameMode, skillMode) {
   state.matchQueueGameMode = gameMode || state.gameMode;
   state.matchQueueSkillMode = skillMode || state.skillMode;
   if (el.matchQueueLane) el.matchQueueLane.textContent = laneLabel(state.matchQueueGameMode, state.matchQueueSkillMode);
-  el.matchQueueModal?.classList.remove("hidden");
-  el.matchContinueModal?.classList.add("hidden");
+  setModalVisible(el.matchQueueModal, true);
+  setModalVisible(el.matchContinueModal, false);
   syncModalIsolation();
   stopMatchWaitTimer();
   updateMatchWaitTimer();
@@ -4173,8 +4199,8 @@ function closeMatchQueueUi() {
   state.matching = false;
   state.matchQueuedAt = 0;
   stopMatchWaitTimer();
-  el.matchQueueModal?.classList.add("hidden");
-  el.matchContinueModal?.classList.add("hidden");
+  setModalVisible(el.matchQueueModal, false);
+  setModalVisible(el.matchContinueModal, false);
   syncModalIsolation();
 }
 
@@ -4186,7 +4212,7 @@ function stopMatchInviteTimer() {
 function closeMatchInviteModal() {
   state.pendingMatchInvite = null;
   stopMatchInviteTimer();
-  el.matchInviteModal?.classList.add("hidden");
+  setModalVisible(el.matchInviteModal, false);
   syncModalIsolation();
 }
 
@@ -4222,7 +4248,7 @@ function openMatchInviteModal(payload) {
     expiresAt: Number(payload.expiresAt || Date.now() + 6000),
   };
   fillMatchInviteText();
-  el.matchInviteModal?.classList.remove("hidden");
+  setModalVisible(el.matchInviteModal, true);
   syncModalIsolation();
   stopMatchInviteTimer();
   updateMatchInviteCountdown();
@@ -4295,12 +4321,12 @@ function startRoomAction(type, gameMode, skillMode) {
 function openJoinPasswordModal(roomId) {
   state.pendingJoinRoomId = roomId;
   if (el.modalJoinPassword) el.modalJoinPassword.value = "";
-  el.joinPasswordModal?.classList.remove("hidden");
+  setModalVisible(el.joinPasswordModal, true);
   el.modalJoinPassword?.focus();
 }
 
 function closeJoinPasswordModal() {
-  el.joinPasswordModal?.classList.add("hidden");
+  setModalVisible(el.joinPasswordModal, false);
   state.pendingJoinRoomId = null;
 }
 
@@ -4310,7 +4336,7 @@ function confirmJoinWithPassword() {
     if (!roomId) return showToast(t("toast.needRoom"), "error");
     if (!password) return showToast(t("toast.needPassword"), "error");
   if (!beginRealtimeRequest("room", 7000)) return;
-  el.joinPasswordModal?.classList.add("hidden");
+  setModalVisible(el.joinPasswordModal, false);
   prepareManualRoomRequest();
   state.autoLoadoutSubmitted = false;
   state.myName = (el.inputName.value || "").trim() || "player2";
@@ -4373,7 +4399,7 @@ el.protocolButtons?.forEach((button) => {
 el.btnMatchCancel?.addEventListener("click", () => cancelMatchmaking());
 el.btnMatchContinue?.addEventListener("click", () => {
   if (!beginRealtimeRequest("match", 7000)) return;
-  el.matchContinueModal?.classList.add("hidden");
+  setModalVisible(el.matchContinueModal, false);
   socket.emit("match:continue");
 });
 el.btnMatchStop?.addEventListener("click", () => cancelMatchmaking());
@@ -4748,7 +4774,7 @@ function openQuickStartImage(shot, returnFocus = shot) {
   el.quickStartImageExpanded.alt = source.alt || title;
   if (el.quickStartImageTitle) el.quickStartImageTitle.textContent = title;
   if (el.quickStartImageCaption) el.quickStartImageCaption.textContent = source.alt || title;
-  el.quickStartImageModal.classList.remove("hidden");
+  setModalVisible(el.quickStartImageModal, true);
   requestAnimationFrame(() => applyQuickStartImageView());
   el.btnCloseQuickStartImage?.focus({ preventScroll: true });
   if (document.activeElement !== el.btnCloseQuickStartImage) {
@@ -4760,7 +4786,7 @@ function openQuickStartImage(shot, returnFocus = shot) {
 function closeQuickStartImage({ restoreFocus = true } = {}) {
   if (!isQuickStartImageOpen()) return false;
   resetQuickStartImageView();
-  el.quickStartImageModal.classList.add("hidden");
+  setModalVisible(el.quickStartImageModal, false);
   const target = quickStartImageReturnFocus && document.contains(quickStartImageReturnFocus)
     ? quickStartImageReturnFocus
     : el.btnCloseQuickStart;
@@ -4830,7 +4856,7 @@ function openQuickStart({ page = 1, returnFocus = document.activeElement } = {})
   if (!el.quickStartModal || isQuickStartOpen()) return false;
   quickStartReturnFocus = returnFocus && document.contains(returnFocus) ? returnFocus : el.btnOpenQuickStart;
   renderQuickStartPage(page);
-  el.quickStartModal.classList.remove("hidden");
+  setModalVisible(el.quickStartModal, true);
   requestAnimationFrame(() => el.btnCloseQuickStart?.focus());
   return true;
 }
@@ -4840,7 +4866,7 @@ function closeQuickStart({ remember = true, restoreFocus = true } = {}) {
   if (remember) rememberQuickStart();
   quickStartPointer = null;
   el.quickStartViewport?.classList.remove("is-dragging");
-  el.quickStartModal.classList.add("hidden");
+  setModalVisible(el.quickStartModal, false);
   const target = quickStartReturnFocus && document.contains(quickStartReturnFocus)
     ? quickStartReturnFocus
     : el.btnOpenQuickStart;
@@ -5321,7 +5347,7 @@ function scrollToRulesTarget(anchorId, { behavior = "auto", query = "", highligh
   }
   el.rulesArticle.scrollTo({
     top: Math.max(0, top - 12),
-    behavior: state.settings.reduceMotion ? "auto" : behavior,
+    behavior: (state.settings.animation === "low") ? "auto" : behavior,
   });
   if (highlight) {
     highlightRulesTarget(target, query);
@@ -5462,12 +5488,12 @@ function openRulesHandbook({ fromSettings = false, sectionId = "rule-overview" }
   }
   rulesHandbookFromSettings = Boolean(fromSettings);
   rulesHandbookReturnFocus = document.activeElement;
-  if (fromSettings) el.settingsModal?.classList.add("hidden");
+  if (fromSettings) setModalVisible(el.settingsModal, false);
   if (el.rulesSearch) el.rulesSearch.value = "";
   filterRulesHandbook("");
   setRulesTocOpen(false);
   el.rulesModal.scrollTop = 0;
-  el.rulesModal?.classList.remove("hidden");
+  setModalVisible(el.rulesModal, true);
   requestAnimationFrame(() => {
     scrollToRulesTarget(sectionId, { behavior: "auto", highlight: false });
     el.rulesSearch?.focus();
@@ -5480,14 +5506,14 @@ function closeRulesHandbook() {
   removeRulesHighlights();
   setRulesTocOpen(false);
   renderRulesSearchResults([], "");
-  el.rulesModal.classList.add("hidden");
+  setModalVisible(el.rulesModal, false);
   const fromSettings = rulesHandbookFromSettings;
   const previous = rulesHandbookReturnFocus;
   rulesHandbookFromSettings = false;
   rulesHandbookReturnFocus = null;
   if (fromSettings) {
     el.settingsNavigation?.classList.toggle("hidden", el.auth.classList.contains("active"));
-    el.settingsModal.classList.remove("hidden");
+    setModalVisible(el.settingsModal, true);
     requestAnimationFrame(() => el.btnSettingsRules?.focus());
     return true;
   }
@@ -5498,15 +5524,15 @@ function closeRulesHandbook() {
 
 el.btnSettings.addEventListener("click", () => {
   el.settingsNavigation?.classList.toggle("hidden", el.auth.classList.contains("active"));
-  el.settingsModal.classList.remove("hidden");
+  setModalVisible(el.settingsModal, true);
   el.btnCloseSettings.focus();
 });
 el.btnCloseSettings.addEventListener("click", () => {
-  el.settingsModal.classList.add("hidden");
+  setModalVisible(el.settingsModal, false);
   el.btnSettings.focus();
 });
 el.btnSettingsLobby?.addEventListener("click", () => {
-  el.settingsModal.classList.add("hidden");
+  setModalVisible(el.settingsModal, false);
   returnToLobby();
 });
 el.btnOpenRules?.addEventListener("click", () => openRulesHandbook());
@@ -5588,7 +5614,7 @@ el.langButtons?.forEach((btn) => {
   });
 });
 el.settingAnimation.addEventListener("change", () => {
-  state.settings.animation = el.settingAnimation.value;
+  state.settings.animation = window.OverlimitVisualQuality.normalizeQuality(el.settingAnimation.value);
   saveSettings();
   applySettings();
 });
@@ -5619,11 +5645,6 @@ el.settingProFont?.addEventListener("change", () => {
   saveSettings();
   applySettings();
 });
-el.settingReduceMotion.addEventListener("change", () => {
-  state.settings.reduceMotion = el.settingReduceMotion.checked;
-  saveSettings();
-  applySettings();
-});
 el.settingSfx.addEventListener("input", () => {
   state.settings.sfx = Number(el.settingSfx.value);
   saveSettings();
@@ -5631,11 +5652,6 @@ el.settingSfx.addEventListener("input", () => {
 });
 el.settingMusic.addEventListener("input", () => {
   state.settings.music = Number(el.settingMusic.value);
-  saveSettings();
-  applySettings();
-});
-el.settingLowPerformance.addEventListener("change", () => {
-  state.settings.lowPerformance = el.settingLowPerformance.checked;
   saveSettings();
   applySettings();
 });
@@ -5669,7 +5685,7 @@ document.addEventListener("keydown", (event) => {
   } else if (top === el.rulesModal) {
     closeRulesHandbook();
   } else if (top === el.settingsModal) {
-    top.classList.add("hidden");
+    setModalVisible(top, false);
     el.btnSettings.focus();
   } else if (top === el.leaveConfirmModal) {
     top.classList.add("hidden");
@@ -5726,7 +5742,7 @@ socket.on("match:queued", (payload) => {
 socket.on("match:found", () => {
   closeMatchQueueUi();
   closeMatchInviteModal();
-  el.matchContinueModal?.classList.add("hidden");
+  setModalVisible(el.matchContinueModal, false);
   endUiRequest("match");
 });
 
@@ -5744,8 +5760,8 @@ socket.on("match:timeout", () => {
 
 socket.on("match:prompt_continue", () => {
   closeMatchInviteModal();
-  el.matchQueueModal?.classList.add("hidden");
-  el.matchContinueModal?.classList.remove("hidden");
+  setModalVisible(el.matchQueueModal, false);
+  setModalVisible(el.matchContinueModal, true);
   syncModalIsolation();
 });
 
@@ -6220,6 +6236,8 @@ state.savedLoadout = loadSavedLoadout();
 state.selectedLoadout = [...state.savedLoadout];
 setMode(GAME_MODE.STANDARD);
 setSkillMode("off");
+// Persist the normalized two-tier choice and discard legacy visual switches.
+saveSettings();
 applySettings();
 applyLanguage();
 updateSkillPrepUi();

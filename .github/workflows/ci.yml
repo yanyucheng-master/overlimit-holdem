@@ -51,6 +51,8 @@ jobs:
           fi
 
           npm run verify:skill-fx
+          npm run verify:visual-quality
+          npm run verify:lobby-feedback
           npm run verify:ui
           npm run verify:interactions
           npm run verify:online

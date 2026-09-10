@@ -3267,12 +3267,10 @@ html[data-pro-font="classic"] body.pro-player-mode .raise-amount-meta .raise-to-
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .salon-ui #screen-game .live-indicator i,
-  .salon-ui #screen-game .opponent-skill-field {
-    animation: none;
-    transition: none;
-  }
+html[data-animation="low"] .salon-ui #screen-game .live-indicator i,
+html[data-animation="low"] .salon-ui #screen-game .opponent-skill-field {
+  animation: none;
+  transition: none;
 }
 
 /* Keep every table zone inside the board on phones and short landscape screens.
@@ -4111,10 +4109,8 @@ body.pro-player-mode.salon-ui #screen-game .action-button.allin {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .salon-ui #screen-game .board-turn-clock .action-countdown {
-    animation: none;
-  }
+html[data-animation="low"] .salon-ui #screen-game .board-turn-clock .action-countdown {
+  animation: none;
 }
 
 @keyframes nullify-target-pulse {
@@ -4204,11 +4200,9 @@ body.pro-player-mode.salon-ui #screen-game .action-button.allin {
     0 0 18px rgba(80, 225, 232, 0.32);
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .salon-ui #screen-game.is-nullify-targeting #community-cards .card,
-  .salon-ui #screen-game.is-nullify-targeting #opponent-cards .card {
-    animation: none;
-  }
+html[data-animation="low"] .salon-ui #screen-game.is-nullify-targeting #community-cards .card,
+html[data-animation="low"] .salon-ui #screen-game.is-nullify-targeting #opponent-cards .card {
+  animation: none;
 }
 
 /* --------------------------------------------------------------------------
@@ -5730,11 +5724,9 @@ body.pro-player-mode.salon-ui #screen-game .action-button .action-en {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .salon-ui #screen-game .opponent-skill-field,
-  .salon-ui #screen-game .table-telemetry {
-    transition: none;
-  }
+html[data-animation="low"] .salon-ui #screen-game .opponent-skill-field,
+html[data-animation="low"] .salon-ui #screen-game .table-telemetry {
+  transition: none;
 }
 
 /* --------------------------------------------------------------------------
@@ -7284,12 +7276,10 @@ body.pro-player-mode.salon-ui #screen-game .action-button,
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .salon-ui #screen-game .opponent-skill-field,
-  .salon-ui #screen-game .table-telemetry,
-  .salon-ui #screen-game .opponent-intel-summary {
-    transition: none;
-  }
+html[data-animation="low"] .salon-ui #screen-game .opponent-skill-field,
+html[data-animation="low"] .salon-ui #screen-game .table-telemetry,
+html[data-animation="low"] .salon-ui #screen-game .opponent-intel-summary {
+  transition: none;
 }
 
 /* --------------------------------------------------------------------------

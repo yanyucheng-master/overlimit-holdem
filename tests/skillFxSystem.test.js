@@ -29,10 +29,10 @@ describe("launch skill FX system contract", () => {
       expect(tier).toBeDefined();
       expect(tier.defaultMs).toBeGreaterThanOrEqual(tier.min);
       expect(tier.defaultMs).toBeLessThanOrEqual(tier.max);
-      expect(profiles.fxDuration(entry, "high", false)).toBeLessThanOrEqual(tier.max);
-      expect(profiles.fxDuration(entry, "low", false)).toBeGreaterThanOrEqual(tier.min);
-      expect(profiles.fxDuration(entry, "high", true)).toBeGreaterThanOrEqual(300);
-      expect(profiles.fxDuration(entry, "high", true)).toBeLessThanOrEqual(420);
+      expect(profiles.fxDuration(entry, "high")).toBeLessThanOrEqual(tier.max);
+      expect(profiles.fxDuration(entry, "high")).toBeGreaterThanOrEqual(tier.min);
+      expect(profiles.fxDuration(entry, "low")).toBeGreaterThanOrEqual(300);
+      expect(profiles.fxDuration(entry, "low")).toBeLessThanOrEqual(420);
     });
   });
 
@@ -46,13 +46,13 @@ describe("launch skill FX system contract", () => {
     expect(probe).toMatchObject({ tier: "FX2", durationMs: 960, presentation: "journey" });
     expect(alert).toMatchObject({ tier: "FX1", presentation: "pulse", route: false });
     [deepBreath, recycle, probe].forEach((profile) => {
-      expect(profiles.fxDuration(profile, "high", false)).toBeGreaterThanOrEqual(profiles.JOURNEY_MIN_MS);
-      expect(profiles.fxDuration(profile, "low", false)).toBeGreaterThanOrEqual(profiles.JOURNEY_MIN_MS);
+      expect(profiles.fxDuration(profile, "high")).toBeGreaterThanOrEqual(profiles.JOURNEY_MIN_MS);
+      expect(profiles.fxDuration(profile, "low")).toBeLessThanOrEqual(420);
     });
-    expect(profiles.fxDuration(deepBreath, "high", false, "refund")).toBe(1100);
-    expect(profiles.fxDuration(deepBreath, "low", false, "refund")).toBeGreaterThanOrEqual(1000);
-    expect(profiles.fxDuration(deepBreath, "high", true, "refund")).toBeLessThanOrEqual(420);
-    expect(profiles.fxDuration(alert, "high", false)).toBe(560);
+    expect(profiles.fxDuration(deepBreath, "high", "refund")).toBe(1100);
+    expect(profiles.fxDuration(deepBreath, "low", "refund")).toBeGreaterThanOrEqual(300);
+    expect(profiles.fxDuration(deepBreath, "low", "refund")).toBeLessThanOrEqual(420);
+    expect(profiles.fxDuration(alert, "high")).toBe(560);
   });
 
   test("FX 3.0 five-beat timelines are monotonic and keep a readable resolve hold", () => {
@@ -62,7 +62,7 @@ describe("launch skill FX system contract", () => {
       ["FAIRNESS", 220, 320],
     ];
     samples.forEach(([skillId, minHold, maxHold]) => {
-      const timeline = profiles.fxTimeline(profiles.getSkillFxProfile(skillId), "high", false);
+      const timeline = profiles.fxTimeline(profiles.getSkillFxProfile(skillId), "high");
       expect([
         0,
         timeline.anticipationEndMs,

@@ -201,7 +201,6 @@ function auditMatchesAnchors(audit) {
 async function auditFairnessCompletion(page) {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.locator("#skill-fx-gallery-quality").selectOption("high");
-  await page.locator("#skill-fx-gallery-reduced").uncheck();
   return page.evaluate(async () => {
     const gallery = window.OverlimitSkillFxGallery;
     const effectLayer = document.getElementById("skill-fx-gallery-effect-layer");
@@ -381,17 +380,17 @@ async function auditFairnessStateBadges(page) {
   });
 }
 
-async function auditReducedEndgameBarrier(page) {
+async function auditLowEndgameBarrier(page) {
   await page.setViewportSize({ width: 390, height: 844 });
   return page.evaluate(async () => {
     clearPresentationCoordinator();
     clearHandSettlement();
-    const reduceMotion = document.getElementById("setting-reduce-motion");
+    const visualQuality = document.getElementById("setting-animation");
     const modal = document.getElementById("hand-settle-modal");
     const overlay = document.getElementById("flash-endgame-kill");
     const game = document.getElementById("screen-game");
-    reduceMotion.checked = true;
-    reduceMotion.dispatchEvent(new Event("change", { bubbles: true }));
+    visualQuality.value = "low";
+    visualQuality.dispatchEvent(new Event("change", { bubbles: true }));
 
     const events = [];
     let resolveFinished;
@@ -459,8 +458,8 @@ async function auditReducedEndgameBarrier(page) {
     document.removeEventListener("overlimit:presentation", onPresentation);
     clearHandSettlement();
     clearPresentationCoordinator();
-    reduceMotion.checked = false;
-    reduceMotion.dispatchEvent(new Event("change", { bubbles: true }));
+    visualQuality.value = "high";
+    visualQuality.dispatchEvent(new Event("change", { bubbles: true }));
     return {
       staticHold,
       settlementVisibleAfterBarrier,
@@ -856,19 +855,17 @@ async function main() {
   });
 
   await page.locator("#skill-fx-gallery-quality").selectOption("low");
-  await page.locator("#skill-fx-gallery-reduced").uncheck();
   let degradedInstance = await selectAndReplay(page, "BLOOD_BATTLE");
-  const lowPerformance = await degradedInstance.evaluate((node) => ({
+  const lowQualityDecoration = await degradedInstance.evaluate((node) => ({
     quality: node.dataset.quality,
     stageDisplay: getComputedStyle(node.querySelector(".skill-effect-stage")).display,
     impactDisplay: getComputedStyle(node.querySelector(".skill-effect-impact")).display,
     packetDisplay: getComputedStyle(node.querySelector(".route-packet")).display,
   }));
 
-  await page.locator("#skill-fx-gallery-quality").selectOption("high");
-  await page.locator("#skill-fx-gallery-reduced").check();
+  await page.locator("#skill-fx-gallery-quality").selectOption("low");
   degradedInstance = await selectAndReplay(page, "FAIRNESS");
-  const reducedMotion = await degradedInstance.evaluate((node) => ({
+  const lowQualityMotion = await degradedInstance.evaluate((node) => ({
     motion: node.dataset.motion,
     stageDisplay: getComputedStyle(node.querySelector(".skill-effect-stage")).display,
     impactDisplay: getComputedStyle(node.querySelector(".skill-effect-impact")).display,
@@ -876,7 +873,7 @@ async function main() {
     bodyShakes: document.body.classList.contains("skill-fx-shake-soft"),
   }));
 
-  await page.locator("#skill-fx-gallery-reduced").uncheck();
+  await page.locator("#skill-fx-gallery-quality").selectOption("high");
   await page.locator("#skill-fx-gallery-show-caption").uncheck();
   const captionlessInstance = await selectAndReplay(page, "CHEAT");
   const captionless = await captionlessInstance.evaluate((node) => ({
@@ -916,7 +913,7 @@ async function main() {
   const fairnessCompletion = await auditFairnessCompletion(page);
   const fairnessStateBadges = await auditFairnessStateBadges(page);
   const endgameSettlementOrdering = await auditEndgameSettlementOrdering(page);
-  const reducedEndgameBarrier = await auditReducedEndgameBarrier(page);
+  const lowEndgameBarrier = await auditLowEndgameBarrier(page);
 
   const orphanCleanup = await page.evaluate(() => {
     const gallery = window.OverlimitSkillFxGallery;
@@ -931,7 +928,6 @@ async function main() {
   if (CAPTURE_DIR) {
     fs.mkdirSync(CAPTURE_DIR, { recursive: true });
     await page.locator("#skill-fx-gallery-quality").selectOption("high");
-    await page.locator("#skill-fx-gallery-reduced").uncheck();
     await page.locator("#skill-fx-gallery-show-stage").uncheck();
     await page.locator("#skill-fx-gallery-show-target").uncheck();
     for (const skillId of REPRESENTATIVE_CAPTURES) {
@@ -992,15 +988,14 @@ async function main() {
     await page.locator("#skill-fx-gallery-stage").screenshot({ path: lowCapturePath });
     captures.push(lowCapturePath);
 
-    await page.locator("#skill-fx-gallery-quality").selectOption("high");
-    await page.locator("#skill-fx-gallery-reduced").check();
+    await page.locator("#skill-fx-gallery-quality").selectOption("low");
     degradedCapture = await selectAndReplay(page, "FAIRNESS");
     degradedDuration = await degradedCapture.evaluate((node) => Number.parseFloat(node.style.getPropertyValue("--fx-duration")) || 420);
     await page.waitForTimeout(Math.round(degradedDuration * .65));
     const reducedCapturePath = path.join(CAPTURE_DIR, "reduced-motion-fairness-65.png");
     await page.locator("#skill-fx-gallery-stage").screenshot({ path: reducedCapturePath });
     captures.push(reducedCapturePath);
-    await page.locator("#skill-fx-gallery-reduced").uncheck();
+    await page.locator("#skill-fx-gallery-quality").selectOption("high");
   }
 
   const desktopViewports = [];
@@ -1130,8 +1125,8 @@ async function main() {
     || directorInteractions.counterCut.interrupted !== "true"
     || directorInteractions.counterCut.queueOrder.join(",") !== "COUNTER,PROBE") failures.push("Counter did not cut the active target stage and take priority before resolving");
   if (stateMarkers.length !== 2 || stateMarkers.some((marker) => marker.distanceFromStage < 55)) failures.push("persistent state markers drifted to the stage center");
-  if (lowPerformance.quality !== "low" || lowPerformance.stageDisplay === "none" || lowPerformance.impactDisplay === "none" || lowPerformance.packetDisplay !== "none") failures.push("Low Performance did not preserve the reduced central director");
-  if (reducedMotion.motion !== "reduced" || reducedMotion.stageDisplay === "none" || reducedMotion.impactDisplay === "none" || reducedMotion.routeDisplay !== "none" || reducedMotion.bodyShakes) failures.push("Reduced Motion central stage/impact contract failed");
+  if (lowQualityDecoration.quality !== "low" || lowQualityDecoration.stageDisplay === "none" || lowQualityDecoration.impactDisplay === "none" || lowQualityDecoration.packetDisplay !== "none") failures.push("Low quality did not preserve the reduced central director");
+  if (lowQualityMotion.motion !== "reduced" || lowQualityMotion.stageDisplay === "none" || lowQualityMotion.impactDisplay === "none" || lowQualityMotion.routeDisplay !== "none" || lowQualityMotion.bodyShakes) failures.push("Low quality central stage/impact contract failed");
   if (captionless.captionDisplay !== "none" || captionless.coreDisplay === "none") failures.push("captionless graphical identity mode failed");
   if (new Set(graphicalSignatures.map((entry) => `${entry.family}|${entry.glyph}|${entry.haloAnimation}|${entry.cardsVisible}|${entry.stageData}`)).size < 12) failures.push("core skills are not graphically distinct enough without captions");
   if (!guides.stageControl || !guides.targetControl || Number(guides.stageVisible) < .5 || Number(guides.targetVisible) < .5) failures.push("Gallery stage/target guides are unavailable");
@@ -1150,15 +1145,15 @@ async function main() {
   if (Object.values(fairnessStateBadges).some((passed) => passed !== true)) {
     failures.push("Fairness state sync failed to restore/remove both locks without replaying the main animation");
   }
-  if (reducedEndgameBarrier.staticHold.status !== "finished"
-    || !reducedEndgameBarrier.staticHold.visible || !reducedEndgameBarrier.staticHold.resultHold
-    || !reducedEndgameBarrier.staticHold.settlementHidden || !reducedEndgameBarrier.staticHold.barrierActive
-    || !reducedEndgameBarrier.staticHold.actionDeadlineCleared || !reducedEndgameBarrier.staticHold.countdownRafIdle
-    || reducedEndgameBarrier.staticHold.countdownText !== "—"
-    || !reducedEndgameBarrier.settlementVisibleAfterBarrier || !reducedEndgameBarrier.ordered
-    || reducedEndgameBarrier.dynamicDurationMs < 300 || reducedEndgameBarrier.dynamicDurationMs > 500
-    || reducedEndgameBarrier.revealDelayMs < 350) {
-    failures.push("Reduced Motion Endgame did not switch to a static hold until the shared reveal barrier released");
+  if (lowEndgameBarrier.staticHold.status !== "finished"
+    || !lowEndgameBarrier.staticHold.visible || !lowEndgameBarrier.staticHold.resultHold
+    || !lowEndgameBarrier.staticHold.settlementHidden || !lowEndgameBarrier.staticHold.barrierActive
+    || !lowEndgameBarrier.staticHold.actionDeadlineCleared || !lowEndgameBarrier.staticHold.countdownRafIdle
+    || lowEndgameBarrier.staticHold.countdownText !== "—"
+    || !lowEndgameBarrier.settlementVisibleAfterBarrier || !lowEndgameBarrier.ordered
+    || lowEndgameBarrier.dynamicDurationMs < 300 || lowEndgameBarrier.dynamicDurationMs > 500
+    || lowEndgameBarrier.revealDelayMs < 350) {
+    failures.push("Low quality Endgame did not switch to a static hold until the shared reveal barrier released");
   }
   if (orphanCleanup.effects || orphanCleanup.states) failures.push("manager clear left orphan FX nodes");
   const invalidMobileViewports = mobileViewports.filter((entry) => (
@@ -1191,8 +1186,8 @@ async function main() {
     report: {
       optionCount: optionIds.length, effects, stageAudits, alertPulse, deepBreathRefund,
       secrecy, resultOnly, protocolResultOnly, neutralGeometry, dedupeAndPriority, eventAdmission, directorInteractions,
-      stateMarkers, lowPerformance, reducedMotion, captionless, graphicalSignatures, guides,
-      pointerSafety, fairnessCompletion, fairnessStateBadges, endgameSettlementOrdering, reducedEndgameBarrier, orphanCleanup,
+      stateMarkers, lowQualityDecoration, lowQualityMotion, captionless, graphicalSignatures, guides,
+      pointerSafety, fairnessCompletion, fairnessStateBadges, endgameSettlementOrdering, lowEndgameBarrier, orphanCleanup,
       mobile, mobileViewports, mobileTargetAudits, desktopViewports, captures,
     },
   }, null, 2));

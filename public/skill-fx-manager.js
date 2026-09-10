@@ -1,10 +1,12 @@
 (function initOverlimitSkillFxManager(root, factory) {
   const profilesApi = root?.OVERLIMIT_SKILL_FX
     || (typeof require === "function" ? require("./skill-fx-profiles") : null);
-  const api = factory(profilesApi);
+  const qualityApi = root?.OverlimitVisualQuality
+    || (typeof require === "function" ? require("./visual-quality") : null);
+  const api = factory(profilesApi, qualityApi);
   if (typeof module === "object" && module.exports) module.exports = api;
   if (root) root.OverlimitSkillFx = api;
-})(typeof globalThis !== "undefined" ? globalThis : this, function buildSkillFxManager(profilesApi) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function buildSkillFxManager(profilesApi, qualityApi) {
   "use strict";
 
   const SHAKE_ALLOWLIST = new Set(["FAIRNESS", "DEAD_END", "BLOOD_BATTLE"]);
@@ -15,8 +17,7 @@
   const BLOOD_UPGRADE_HOLD_MS = 520;
 
   function normalizeQuality(value) {
-    const next = String(value || "high").toLowerCase();
-    return ["high", "medium", "low"].includes(next) ? next : "high";
+    return qualityApi.normalizeQuality(value);
   }
 
   function cleanToken(value, fallback = "") {
@@ -181,7 +182,7 @@
       this.getAnchors = typeof options.getAnchors === "function" ? options.getAnchors : () => ({});
       this.getSettings = typeof options.getSettings === "function"
         ? options.getSettings
-        : () => ({ quality: "high", reduceMotion: false, lowPerformance: false });
+        : () => ({ quality: "high" });
       this.playSound = typeof options.playSound === "function" ? options.playSound : () => {};
       this.playHaptics = typeof options.playHaptics === "function" ? options.playHaptics : () => {};
       this.onSuppressed = typeof options.onSuppressed === "function" ? options.onSuppressed : () => {};
@@ -207,10 +208,24 @@
     settings() {
       const raw = this.getSettings() || {};
       return {
-        quality: raw.lowPerformance ? "low" : normalizeQuality(raw.quality || raw.animation),
-        reduceMotion: Boolean(raw.reduceMotion),
-        lowPerformance: Boolean(raw.lowPerformance),
+        quality: normalizeQuality(raw.quality),
       };
+    }
+
+    refreshQuality() {
+      const settings = this.settings();
+      if (this.effectLayer) {
+        this.effectLayer.dataset.fxQuality = settings.quality;
+        this.effectLayer.dataset.fxMotion = settings.quality === "low" ? "reduced" : "full";
+      }
+      if (this.activeJob && this.activeNode) {
+        this.activeJob.settings = settings;
+        this.activeNode.dataset.quality = settings.quality;
+        this.activeNode.dataset.motion = settings.quality === "low" ? "reduced" : "full";
+        if (settings.quality === "low") this.activeNode.dataset.shake = "none";
+      }
+      // An active effect keeps its original deadline; visual preferences must
+      // never advance a presentation barrier or replay an accepted event.
     }
 
     rememberKey(key) {
@@ -275,8 +290,8 @@
       const key = semanticSkillFxKey(receivedEvent);
       if (!event.force && (this.dedupeKeys.has(key) || this.isRecentDuplicate(receivedEvent))) return false;
       const settings = this.settings();
-      const duration = profilesApi.fxDuration(profile, settings.quality, settings.reduceMotion, event.variant);
-      const timeline = profilesApi.fxTimeline?.(profile, settings.quality, settings.reduceMotion, event.variant)
+      const duration = profilesApi.fxDuration(profile, settings.quality, event.variant);
+      const timeline = profilesApi.fxTimeline?.(profile, settings.quality, event.variant)
         || { rhythm: profile.rhythm || "standard", durationMs: duration };
       const job = { event, profile, settings, duration, timeline, key };
       if (profile.id === "BLOOD_BATTLE" && !neutralResult) {
@@ -302,7 +317,7 @@
             if (glyph) glyph.textContent = "×4";
             if (impactGlyph) impactGlyph.textContent = "×4";
             if (result) result.textContent = "STAKES ×4";
-            this.extendActiveHold(settings.reduceMotion ? 300 : BLOOD_UPGRADE_HOLD_MS);
+            this.extendActiveHold(settings.quality === "low" ? 300 : BLOOD_UPGRADE_HOLD_MS);
           }
           if (!event.force) this.rememberAcceptedEvent(receivedEvent, key);
           return true;
@@ -325,7 +340,7 @@
       if (interruptsActive) {
         this.activeNode.classList.add("is-counter-cut");
         this.activeNode.dataset.interrupted = "true";
-        this.activeDeadline = Date.now() + (settings.reduceMotion ? 90 : COUNTER_CUT_MS);
+        this.activeDeadline = Date.now() + (settings.quality === "low" ? 90 : COUNTER_CUT_MS);
         this.scheduleActiveFinish();
       }
       this.pump();
@@ -343,6 +358,9 @@
         return;
       }
       const job = this.queue.shift();
+      job.settings = this.settings();
+      job.duration = profilesApi.fxDuration(job.profile, job.settings.quality, job.event.variant);
+      job.timeline = profilesApi.fxTimeline(job.profile, job.settings.quality, job.event.variant);
       this.busy = true;
       this.activeJob = job;
       this.activeToken += 1;
@@ -488,7 +506,7 @@
       node.dataset.impact = impactType;
       node.dataset.tier = profile.tier;
       node.dataset.quality = settings.quality;
-      node.dataset.motion = settings.reduceMotion ? "reduced" : "full";
+      node.dataset.motion = settings.quality === "low" ? "reduced" : "full";
       node.dataset.side = event.casterId === event.viewerId ? "self" : "opponent";
       node.dataset.status = cleanToken(event.status || "SUCCESS").toLowerCase();
       node.dataset.variant = cleanToken(event.variant || event.mode || "default").toLowerCase();
@@ -500,7 +518,7 @@
         || event.context === "settlement"
         || event.resultOnly === true
         || ["REVEALED", "RESULT"].includes(cleanToken(event.status).toUpperCase());
-      node.dataset.shake = !settings.reduceMotion && !settings.lowPerformance && shakeEligible
+      node.dataset.shake = settings.quality === "high" && shakeEligible
         && profile.shake === "soft" && SHAKE_ALLOWLIST.has(profile.id)
         ? "soft"
         : "none";
@@ -661,7 +679,7 @@
         return;
       }
       this.effectLayer.dataset.fxQuality = job.settings.quality;
-      this.effectLayer.dataset.fxMotion = job.settings.reduceMotion ? "reduced" : "full";
+      this.effectLayer.dataset.fxMotion = job.settings.quality === "low" ? "reduced" : "full";
       if (job.event.context === "settlement") this.effectLayer.classList.add("is-settlement-active");
       const node = this.buildEffectNode(job);
       this.effectLayer.appendChild(node);
@@ -669,7 +687,7 @@
       this.positionNode(node, this.resolveStage(job), this.resolveTarget(job), job);
       this.renderBroadcast(job);
       this.playSound(job.profile.sound, job);
-      if (job.profile.haptics) this.playHaptics(job.profile.haptics, job);
+      if (job.settings.quality === "high" && job.profile.haptics) this.playHaptics(job.profile.haptics, job);
     }
 
     refreshPositions() {

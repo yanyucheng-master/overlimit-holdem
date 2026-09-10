@@ -1,0 +1,267 @@
+/* Lobby interaction tokens are independent of game/skill animation timing. */
+[data-ui-scope] {
+  --ui-hover-ms: 120ms;
+  --ui-press-ms: 70ms;
+  --ui-release-ms: 180ms;
+  --ui-confirm-ms: 220ms;
+  --ui-modal-in: 180ms;
+  --ui-modal-out: 120ms;
+  --ui-accent: 232, 204, 137;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+html[data-animation="low"] [data-ui-scope] {
+  --ui-hover-ms: 80ms;
+  --ui-press-ms: 80ms;
+  --ui-release-ms: 80ms;
+  --ui-confirm-ms: 80ms;
+  --ui-modal-in: 80ms;
+  --ui-modal-out: 80ms;
+}
+
+/* Preserve selectable content and editing inside the operational chrome. */
+[data-ui-scope] :is(input, textarea, [contenteditable], #rules-article, #skill-preview-description,
+  #skill-preview-rules, #skill-preview-meta, [data-copyable]) {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+[data-ui-scope] img {
+  -webkit-user-drag: none;
+}
+
+.salon-ui :is(#screen-auth, #screen-skill-lab) :is(.glass-panel, .screen-bar),
+.salon-ui #screen-auth .lobby-hero,
+.salon-ui [data-ui-modal] .modal-panel {
+  border-radius: 24px;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .045), 0 12px 30px rgba(0, 0, 0, .2);
+}
+
+.salon-ui #screen-auth .protocol-mid,
+.salon-ui #screen-auth .protocol-card:is(.overdrive, .abyss) .protocol-mid {
+  border-color: transparent;
+  background: linear-gradient(120deg, rgba(255, 255, 255, .025), transparent 80%);
+  border-radius: 12px;
+}
+
+.salon-ui [data-ui-scope] :is(input[type="text"], input[type="password"], input[type="search"], select, .setting-row) {
+  border-radius: 12px;
+}
+
+/* Translated hints need their natural height inside the scrollable settings. */
+.salon-ui #settings-modal .settings-grid {
+  grid-auto-rows: max-content;
+  align-content: start;
+}
+@media (max-width: 640px) {
+  .salon-ui #settings-modal .settings-panel:has(.settings-navigation.hidden) {
+    grid-template-rows: auto minmax(0, 1fr) auto;
+  }
+}
+
+/* Paint moves on an inert inner surface. The native target never transforms. */
+.salon-ui [data-ui-feedback] {
+  --ui-scale: 1;
+  --ui-pressed-scale: .97;
+  --ui-response-ms: var(--ui-hover-ms);
+  --ui-surface-bg: rgba(18, 22, 30, .85);
+  --ui-surface-border: rgba(218, 205, 174, .22);
+  --ui-surface-shadow: inset 0 1px 0 rgba(255, 255, 255, .055), 0 3px 8px rgba(0, 0, 0, .18);
+  isolation: isolate;
+  transform: none !important;
+  transition-property: color, opacity !important;
+  transition-duration: var(--ui-hover-ms) !important;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+}
+
+.salon-ui [data-ui-feedback]:not([data-ui-feedback="media"]) {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+}
+
+.salon-ui .ui-static-control { position: relative; }
+.salon-ui [data-ui-feedback="control"] { border-radius: 12px; }
+.salon-ui [data-ui-feedback="control"].skill-zoom-button { border-radius: 10px; }
+.salon-ui [data-ui-feedback]:is([data-ui-feedback="card"], [data-ui-feedback="skill"]) {
+  --ui-pressed-scale: .985;
+  --ui-surface-bg: linear-gradient(155deg, rgba(33, 39, 51, .95), rgba(12, 14, 20, .96));
+  --ui-surface-border: rgba(213, 209, 226, .14);
+  --ui-surface-shadow: inset 0 1px 0 rgba(255, 255, 255, .06), 0 5px 12px rgba(0, 0, 0, .15);
+  border-radius: 16px;
+}
+
+.salon-ui [data-ui-feedback="skill"] { --ui-surface-bg: rgba(7, 10, 15, .8); }
+.salon-ui #skill-lab-catalog .skill-card[data-ui-feedback] { border-radius: 16px; }
+.salon-ui [data-ui-feedback="card"].overdrive { --ui-accent: 218, 126, 108; }
+.salon-ui [data-ui-feedback="card"].abyss { --ui-accent: 103, 203, 182; }
+.salon-ui [data-ui-feedback="card"].overdrive.abyss { --ui-accent: 184, 146, 226; }
+
+.salon-ui [data-ui-feedback="control"].button-primary,
+.salon-ui [data-ui-feedback="control"].skill-lab-filter.is-active {
+  --ui-surface-bg: linear-gradient(180deg, #e8d5a3, #c9a85a);
+  --ui-surface-border: rgba(242, 215, 152, .7);
+  --ui-surface-shadow: inset 0 1px 0 rgba(255, 250, 226, .42), 0 4px 10px rgba(132, 97, 25, .16);
+}
+.salon-ui [data-ui-feedback="control"].button-secondary {
+  --ui-accent: 103, 203, 182;
+  --ui-surface-bg: linear-gradient(180deg, rgba(63, 154, 138, .2), rgba(63, 154, 138, .1));
+  --ui-surface-border: rgba(93, 184, 164, .46);
+}
+.salon-ui [data-ui-feedback="control"].button-match {
+  --ui-surface-bg: linear-gradient(180deg, rgba(255, 183, 77, .2), rgba(255, 183, 77, .09));
+  --ui-surface-border: rgba(255, 193, 101, .5);
+}
+.salon-ui [data-ui-feedback="control"].button-danger {
+  --ui-accent: 244, 138, 119;
+  --ui-surface-bg: linear-gradient(180deg, #d46a58, #a84436);
+  --ui-surface-border: rgba(244, 138, 119, .6);
+}
+.salon-ui [data-ui-feedback="control"]:is(.button-ghost, .lang-btn, .quickstart-text-button, .quickstart-corner) {
+  --ui-surface-bg: transparent;
+  --ui-surface-border: transparent;
+  --ui-surface-shadow: none;
+}
+.salon-ui [data-ui-feedback="control"].quickstart-corner { border-radius: 0; }
+
+.salon-ui [data-ui-feedback] > .ui-feedback-surface {
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  display: block;
+  width: auto;
+  height: auto;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--ui-surface-border);
+  border-radius: inherit;
+  background: var(--ui-surface-bg);
+  box-shadow: var(--ui-surface-shadow);
+  pointer-events: none;
+  scale: var(--ui-scale);
+  transition: scale var(--ui-response-ms) cubic-bezier(.16, 1, .3, 1), border-color var(--ui-hover-ms), box-shadow var(--ui-hover-ms), filter var(--ui-hover-ms) !important;
+}
+
+.salon-ui [data-ui-feedback] > .ui-feedback-surface::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(var(--ui-accent), .85);
+  border-radius: inherit;
+  box-shadow: inset 0 0 16px rgba(var(--ui-accent), .13);
+  background: linear-gradient(135deg, rgba(var(--ui-accent), .17), transparent 65%);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.ui-feedback-label { display: inline-block; pointer-events: none; }
+.salon-ui [data-ui-feedback="control"] > :not(.ui-feedback-surface),
+.salon-ui [data-ui-feedback="card"] > :is(strong, .protocol-mid),
+.salon-ui [data-ui-feedback="skill"] > .skill-card-select > *,
+.salon-ui [data-ui-feedback="media"] > :is(img, .allin-style-option-body) {
+  scale: var(--ui-scale);
+  transition: scale var(--ui-response-ms) cubic-bezier(.16, 1, .3, 1) !important;
+}
+
+.salon-ui [data-ui-feedback="skill"] > .skill-card-select {
+  background: transparent;
+  transform: none !important;
+}
+
+.salon-ui [data-ui-feedback].ui-hover:not(:disabled) > .ui-feedback-surface,
+.salon-ui [data-ui-feedback]:focus-visible > .ui-feedback-surface {
+  border-color: rgba(var(--ui-accent), .65);
+  filter: brightness(1.12);
+  box-shadow: var(--ui-surface-shadow), 0 0 0 1px rgba(var(--ui-accent), .07);
+}
+
+.salon-ui [data-ui-feedback].selected {
+  --ui-surface-border: rgba(var(--ui-accent), .72);
+  --ui-surface-bg: linear-gradient(140deg, rgba(var(--ui-accent), .13), rgba(10, 13, 20, .94));
+  --ui-surface-shadow: inset 0 1px 0 rgba(var(--ui-accent), .16), inset 0 0 0 1px rgba(var(--ui-accent), .1), 0 5px 16px rgba(0, 0, 0, .2);
+}
+.salon-ui [data-ui-feedback="skill"].selected {
+  --ui-surface-shadow: inset 3px 0 0 rgba(var(--ui-accent), .85), inset 0 1px 0 rgba(var(--ui-accent), .12);
+}
+
+.salon-ui [data-ui-feedback].ui-pressed {
+  --ui-scale: var(--ui-pressed-scale);
+  --ui-response-ms: var(--ui-press-ms);
+}
+.salon-ui [data-ui-feedback].ui-pressed > .ui-feedback-surface { filter: brightness(1.2); }
+.salon-ui [data-ui-feedback].ui-releasing { --ui-response-ms: var(--ui-release-ms); }
+.salon-ui [data-ui-feedback].ui-releasing > .ui-feedback-surface {
+  animation: ui-surface-release var(--ui-release-ms) cubic-bezier(.16, 1, .3, 1) both !important;
+}
+.salon-ui [data-ui-feedback]:is(.ui-releasing, .ui-confirming) > .ui-feedback-surface::after {
+  animation: ui-confirm var(--ui-confirm-ms) ease-out both !important;
+}
+.salon-ui [data-ui-feedback="media"].ui-pressed { filter: brightness(1.15); }
+
+@keyframes ui-surface-release {
+  0% { scale: var(--ui-pressed-scale); }
+  62% { scale: 1; }
+  82% { scale: .998; }
+  100% { scale: 1; }
+}
+@keyframes ui-confirm {
+  0% { opacity: .85; }
+  100% { opacity: 0; }
+}
+
+html[data-animation="low"] .salon-ui [data-ui-feedback] { --ui-scale: 1; }
+html[data-animation="low"] .salon-ui [data-ui-feedback] > .ui-feedback-surface {
+  animation: none !important;
+  scale: 1 !important;
+  transition-property: border-color, opacity !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .04);
+}
+html[data-animation="low"] .salon-ui [data-ui-feedback] > :not(.ui-feedback-surface),
+html[data-animation="low"] .salon-ui [data-ui-feedback="skill"] .skill-card-select > * {
+  scale: 1 !important;
+}
+
+/* Native discrete display transitions reverse safely, with no delayed callbacks
+   that can hide a dialog after the user has reopened it. Older browsers close
+   immediately while retaining the same focus/inert behavior. */
+.salon-ui :is(#screen-auth, #screen-skill-lab)[data-ui-scope],
+.salon-ui [data-ui-modal] > .modal-panel {
+  animation: none !important;
+}
+.salon-ui [data-ui-modal].hidden { pointer-events: none; }
+
+@supports (transition-behavior: allow-discrete) {
+  .salon-ui [data-ui-modal] {
+    opacity: 1;
+    transition-property: opacity, display !important;
+    transition-duration: var(--ui-modal-in) !important;
+    transition-timing-function: ease-out !important;
+    transition-behavior: normal, allow-discrete !important;
+  }
+  .salon-ui [data-ui-modal] > .modal-panel {
+    opacity: 1;
+    transform: none;
+    transition: opacity var(--ui-modal-in) ease-out, transform var(--ui-modal-in) cubic-bezier(.16, 1, .3, 1) !important;
+  }
+  .salon-ui [data-ui-modal].hidden {
+    opacity: 0;
+    transition-duration: var(--ui-modal-out) !important;
+  }
+  .salon-ui [data-ui-modal].hidden > .modal-panel {
+    opacity: 0;
+    transform: translateY(8px) scale(.985);
+    transition-duration: var(--ui-modal-out) !important;
+  }
+  @starting-style {
+    .salon-ui [data-ui-modal]:not(.hidden) { opacity: 0; }
+    .salon-ui [data-ui-modal]:not(.hidden) > .modal-panel { opacity: 0; transform: translateY(10px) scale(.985); }
+  }
+  html[data-animation="low"] .salon-ui [data-ui-modal] > .modal-panel {
+    transform: none !important;
+    transition-property: opacity !important;
+  }
+}

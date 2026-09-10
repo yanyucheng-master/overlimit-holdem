@@ -305,22 +305,20 @@
     return false;
   }
 
-  function fxDuration(profileValue, quality, reduceMotion, variant = "") {
+  function fxDuration(profileValue, quality, variant = "") {
     const selected = profileValue || FX_TIERS.FX2;
     const tier = FX_TIERS[selected.tier] || FX_TIERS.FX2;
     const variantKey = String(variant || "").trim().toLowerCase();
     const resultBudget = selected.resultDurations?.[variantKey] || null;
     const defaultMs = Number(resultBudget?.defaultMs ?? selected.durationMs ?? tier.defaultMs);
-    if (reduceMotion) return Math.min(REDUCED_MOTION_MS[selected.tier] || 360, defaultMs);
-    const mode = String(quality || "high").toLowerCase();
-    const scale = mode === "low" ? 0.86 : mode === "medium" ? 0.94 : 1;
+    if (quality === "low") return Math.min(REDUCED_MOTION_MS[selected.tier] || 360, defaultMs);
     if (resultBudget) {
-      return Math.max(resultBudget.min, Math.min(resultBudget.max, Math.round(defaultMs * scale)));
+      return Math.max(resultBudget.min, Math.min(resultBudget.max, defaultMs));
     }
     const readableMin = selected.presentation === FX_PRESENTATION.JOURNEY
       ? Math.max(tier.min, JOURNEY_MIN_MS)
       : tier.min;
-    return Math.max(readableMin, Math.min(tier.max, Math.round(defaultMs * scale)));
+    return Math.max(readableMin, Math.min(tier.max, defaultMs));
   }
 
   function resolveFxRhythm(profileValue, variant = "") {
@@ -332,8 +330,8 @@
     return FX_RHYTHMS[rhythmKey] ? rhythmKey : "standard";
   }
 
-  function fxTimeline(profileValue, quality, reduceMotion, variant = "") {
-    const durationMs = fxDuration(profileValue, quality, reduceMotion, variant);
+  function fxTimeline(profileValue, quality, variant = "") {
+    const durationMs = fxDuration(profileValue, quality, variant);
     const rhythm = resolveFxRhythm(profileValue, variant);
     const beats = FX_RHYTHMS[rhythm];
     const at = (ratio) => Math.round(durationMs * ratio);

@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0a0c10" />
+    <script src="./visual-quality.js"></script>
     <script>
       (function bootLocale() {
         try {
@@ -51,6 +52,8 @@
     <link rel="stylesheet" href="./salon.css" />
     <link rel="stylesheet" href="./table-v2.css" />
     <link rel="stylesheet" href="./skill-effects.css" />
+    <link rel="stylesheet" href="./visual-quality.css" />
+    <link rel="stylesheet" href="./lobby-feedback.css" />
   </head>
   <body class="salon-ui">
     <a class="skip-link" href="#main-content" data-i18n="a11y.skip">跳到主要内容</a>
@@ -222,10 +225,9 @@
           </label>
 
           <label class="setting-row" for="setting-animation">
-            <span><strong data-i18n="settings.animation">动画强度</strong><small data-i18n="settings.animationHint">控制发牌与能量演出</small></span>
+            <span><strong data-i18n="settings.animation">视觉效果</strong><small data-i18n="settings.animationHint">高：完整演出；低：减少运动与渲染开销</small></span>
             <select id="setting-animation">
               <option value="high" data-i18n="settings.high">高</option>
-              <option value="medium" data-i18n="settings.medium">中</option>
               <option value="low" data-i18n="settings.low">低</option>
             </select>
           </label>
@@ -300,11 +302,6 @@
             </select>
           </label>
 
-          <label class="setting-row switch-row" for="setting-reduce-motion">
-            <span><strong data-i18n="settings.reduceMotion">减少动态效果</strong><small data-i18n="settings.reduceMotionHint">停用大幅位移与闪烁</small></span>
-            <input id="setting-reduce-motion" type="checkbox" role="switch" />
-          </label>
-
           <label class="setting-row range-setting" for="setting-sfx">
             <span><strong data-i18n="settings.sfx">音效音量</strong><small id="setting-sfx-value">55%</small></span>
             <input id="setting-sfx" type="range" min="0" max="100" step="5" value="55" />
@@ -315,10 +312,6 @@
             <input id="setting-music" type="range" min="0" max="100" step="5" value="0" />
           </label>
 
-          <label class="setting-row switch-row" for="setting-low-performance">
-            <span><strong data-i18n="settings.lowPerf">低性能模式</strong><small data-i18n="settings.lowPerfHint">减少粒子、模糊与背景刷新</small></span>
-            <input id="setting-low-performance" type="checkbox" role="switch" />
-          </label>
         </div>
 
         <p class="settings-note" data-i18n="settings.note">设置只保存在当前设备，不参与牌局判定。</p>
@@ -1509,9 +1502,8 @@
               <option value="hole" data-i18n="modal.galleryHole">底牌</option><option value="refund" data-i18n="modal.galleryRefund">返能结果</option>
             </select></label>
             <label><span data-i18n="modal.galleryQuality">质量</span><select id="skill-fx-gallery-quality">
-              <option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option>
+              <option value="high" data-i18n="settings.high">高</option><option value="low" data-i18n="settings.low">低</option>
             </select></label>
-            <label class="skill-fx-gallery-check"><span>Reduce Motion</span><input id="skill-fx-gallery-reduced" type="checkbox" /></label>
             <label class="skill-fx-gallery-check"><span>Stage Anchor</span><input id="skill-fx-gallery-show-stage" type="checkbox" checked /></label>
             <label class="skill-fx-gallery-check"><span>Target Anchor</span><input id="skill-fx-gallery-show-target" type="checkbox" checked /></label>
             <label class="skill-fx-gallery-check"><span>Stage Caption</span><input id="skill-fx-gallery-show-caption" type="checkbox" checked /></label>
@@ -1568,6 +1560,7 @@
     <script src="./skill-fx-profiles.js"></script>
     <script src="./skill-fx-manager.js"></script>
     <script src="./skill-fx-gallery.js"></script>
+    <script src="./lobby-feedback.js"></script>
     <script src="./client.js"></script>
   </body>
 </html>
