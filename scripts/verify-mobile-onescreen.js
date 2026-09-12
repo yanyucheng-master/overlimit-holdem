@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+const lobby = require("./lobby-test-helpers");
 /**
  * Mobile one-screen verification + skill solo smoke.
  */
@@ -17,12 +18,7 @@ const VIEWPORTS = [
 ];
 
 const CRITICAL = {
-  auth: [
-    "#btn-open-skill-lab",
-    "#btn-join",
-    ".protocol-card[data-skill-mode='off'] .protocol-btn[data-room-action='solo']",
-    ".protocol-card[data-skill-mode='abyss'] .protocol-btn[data-room-action='create']",
-  ],
+  auth: ["[data-lobby-mode-card='off']", "[data-lobby-mode-card='abyss']", "#lobby-overdrive", "#btn-open-skill-lab", "#btn-edit-name", "#btn-open-join", "[data-room-action='match']", "[data-room-action='solo']", "[data-room-action='create']"],
   skillLab: ["#btn-back-skill-lab", "#btn-save-loadout", "#btn-clear-loadout", "#skill-lab-catalog"],
   wait: ["#btn-back-wait", "#btn-copy-room", "#wait-room-id", "#btn-set-room-password"],
   game: [
@@ -92,6 +88,8 @@ async function measure(page, screenId, selectors) {
 
 async function showScreenOnly(page, key) {
   await page.evaluate(async (k) => {
+    showScreen(k);
+    if (k === "auth") setSkillMode("abyss");
     const map = {
       auth: "screen-auth",
       skillLab: "screen-skill-lab",
@@ -172,6 +170,11 @@ async function layoutPass(page, vpName) {
   const results = [];
   for (const s of screens) {
     await showScreenOnly(page, s.key);
+    if (s.key === "auth") {
+      const audit = await lobby.auditLobbyLayout(page);
+      results.push({ viewport: vpName, screen: s.key, pass: audit.ok, audit });
+      continue;
+    }
     const m = await measure(page, s.id, CRITICAL[s.key]);
     const pass = !m.needsScroll && m.items.every((i) => i.exists && i.inView && i.visible !== false);
     results.push({ viewport: vpName, screen: s.key, pass, needsScroll: m.needsScroll, items: m.items, doc: m.doc, screenBox: m.screen });
@@ -182,7 +185,7 @@ async function layoutPass(page, vpName) {
 async function skillSoloPass(page, vpName) {
   await showScreenOnly(page, "auth");
   // open lab via UI
-  await page.click("#btn-open-skill-lab");
+  await lobby.openLobbyLab(page);
   await page.waitForSelector("#screen-skill-lab.active");
   await page.waitForSelector("#skill-lab-catalog .skill-card");
 
@@ -191,22 +194,17 @@ async function skillSoloPass(page, vpName) {
   const n = await cards.count();
   for (let i = 0; i < Math.min(n, 6); i++) {
     if (!(await page.locator("#btn-save-loadout").isDisabled())) break;
-    await cards.nth(i).click({ force: true });
+    await cards.nth(i).click();
   }
   if (await page.locator("#btn-save-loadout").isDisabled()) {
     return { viewport: vpName, screen: "skillSolo", pass: false, error: "save still disabled" };
   }
-  await page.click("#btn-save-loadout", { force: true });
+  await page.click("#btn-save-loadout");
   await page.waitForSelector("#screen-auth.active", { timeout: 10000 });
   await page.waitForTimeout(300);
 
-  // start solo abyss via DOM click to avoid intercept issues
-  await page.evaluate(() => {
-    const btn = document.querySelector(
-      '.protocol-card[data-game-mode="standard"][data-skill-mode="abyss"] .protocol-btn[data-room-action="solo"]'
-    );
-    btn?.click();
-  });
+  // Start Skill Solo through the visible mode selector and central action.
+  await lobby.startLobbyAction(page, "standard", "abyss", "solo");
 
   // drafting may show wait briefly
   const deadline = Date.now() + 25000;
@@ -234,7 +232,7 @@ async function skillSoloPass(page, vpName) {
         document.getElementById(id)?.classList.contains("active")
       ),
       phase: document.getElementById("phase-text")?.textContent,
-      prep: document.getElementById("skill-prep-status")?.textContent,
+      prep: document.getElementById("lobby-loadout-status")?.textContent,
       loadout: localStorage.getItem("abyss_skill_loadout_v2"),
       draftStatus: document.getElementById("draft-status")?.textContent,
       toast: document.body.innerText.includes("请先完成") ? "need-loadout" : null,

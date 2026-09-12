@@ -1,3 +1,4 @@
+const lobby = require("./lobby-test-helpers");
 const { chromium } = require("playwright");
 const { chromiumLaunchOptions } = require("./playwright-runtime");
 
@@ -8,13 +9,7 @@ const { chromiumLaunchOptions } = require("./playwright-runtime");
     localStorage.setItem("overlimit_quickstart_v1", "seen");
   });
   await page.goto("http://127.0.0.1:3002", { waitUntil: "networkidle" });
-  await page.evaluate(() => {
-    document
-      .querySelector(
-        '.protocol-card[data-skill-mode="off"] .protocol-btn[data-room-action="solo"]'
-      )
-      ?.click();
-  });
+  await lobby.startLobbyAction(page, "standard", "off", "solo");
   await page.waitForSelector("#screen-game.active", { timeout: 15000 });
   await page.waitForTimeout(800);
   const result = await page.evaluate(async () => {

@@ -131,7 +131,6 @@
 
 /* —— Controls (lobby / wait / lab only; game keeps original neon chrome) —— */
 .salon-ui .button,
-.salon-ui .protocol-btn,
 .salon-ui .skill-use-btn,
 .salon-ui .skill-card {
   border-radius: var(--radius-sm);
@@ -145,8 +144,7 @@
   content: none;
 }
 
-.salon-ui .button:hover,
-.salon-ui .protocol-btn:hover {
+.salon-ui .button:hover{
   transform: translateY(-1px);
 }
 
@@ -273,23 +271,9 @@
   letter-spacing: 0.06em;
 }
 
-.salon-ui:has(#screen-auth.lobby-screen.active) .settings-trigger {
-  top: calc(var(--safe-top) + 18px);
-  right: calc(var(--safe-right) + 18px);
-  color: rgba(236, 228, 255, 0.78);
-  text-shadow: 0 1px 8px rgba(0, 0, 0, 0.45);
-}
-
 .salon-ui .settings-trigger:hover {
   color: var(--bone);
   background: transparent;
-}
-
-.salon-ui:has(#screen-auth.lobby-screen.active) .settings-trigger:hover {
-  color: #fff;
-  text-shadow:
-    0 0 10px rgba(190, 140, 255, 0.55),
-    0 1px 8px rgba(0, 0, 0, 0.5);
 }
 
 .salon-ui .settings-trigger:focus-visible {
@@ -336,43 +320,6 @@
   padding: 8px 12px;
   font-size: 0.78rem;
   opacity: 0.92;
-}
-
-.salon-ui body:has(#screen-auth.lobby-screen.active) .app-shell,
-.salon-ui:has(#screen-auth.lobby-screen.active) .app-shell {
-  padding-top: calc(var(--safe-top) + 16px);
-  padding-bottom: calc(var(--safe-bottom) + 14px);
-}
-
-.salon-ui #screen-auth.lobby-screen.active {
-  display: flex;
-  flex-direction: column;
-  gap: clamp(10px, 1.4vh, 18px);
-  justify-content: flex-start;
-  min-height: 0;
-  height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 30px);
-  max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 30px);
-  overflow: hidden;
-}
-
-.salon-ui #screen-auth.lobby-screen.active > .lobby-hero,
-.salon-ui #screen-auth.lobby-screen.active > .skill-prep-bar,
-.salon-ui #screen-auth.lobby-screen.active > .lobby-entry {
-  flex-shrink: 0;
-}
-
-/* 协议区吃掉剩余视口高度，避免高屏底部大片空置 */
-.salon-ui #screen-auth.lobby-screen.active > .protocol-section {
-  flex: 1 1 auto;
-  min-height: 0;
-}
-
-.salon-ui .protocol-desc {
-  flex: 0 0 auto;
-}
-
-.salon-ui .protocol-actions {
-  margin-top: auto;
 }
 
 .salon-ui .lobby-hero-compact {
@@ -498,204 +445,10 @@
   line-height: 1.35;
 }
 
-.salon-ui .lobby-hero-meta {
-  align-self: center;
-  gap: 6px;
-  margin-right: 4px;
-}
-
-.salon-ui .skill-prep-bar {
-  padding: clamp(10px, 1.3vh, 14px) clamp(12px, 1.2vw, 16px);
-  border-radius: var(--radius-md);
-  align-items: center;
-}
-
-.salon-ui .skill-prep-copy h2 {
-  margin: 0;
-  font-size: clamp(0.95rem, 1.3vw, 1.1rem);
-}
-
-.salon-ui .skill-prep-status {
-  margin: 2px 0 0;
-  color: var(--muted);
-  font-size: clamp(0.74rem, 1vw, 0.86rem);
-}
-
-.salon-ui .skill-prep-status.ready {
-  color: var(--ok);
-}
-
-.salon-ui .protocol-section {
-  padding: clamp(10px, 1.5vh, 18px) clamp(12px, 1.4vw, 18px);
-  border-radius: var(--radius-lg);
-  min-height: 0 !important;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  gap: clamp(8px, 1.2vh, 14px);
-  justify-content: stretch;
-}
-
-.salon-ui .protocol-grid {
-  gap: clamp(8px, 1.1vw, 14px);
-  min-height: 0 !important;
-  flex: 1 1 auto !important;
-  align-content: center;
-  align-items: stretch;
-  height: auto !important;
-}
-
-.salon-ui .protocol-card {
-  gap: 8px;
-  padding: clamp(12px, 1.6vh, 18px) clamp(10px, 1vw, 14px);
-  min-height: clamp(190px, 28vh, 250px) !important;
-  height: auto !important;
-  max-height: 280px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--line);
-  background:
-    linear-gradient(160deg, rgba(36, 42, 54, 0.95), rgba(12, 14, 20, 0.96));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
-  cursor: pointer;
-  justify-content: flex-start;
-}
-
-.salon-ui .protocol-mid {
-  flex: 1 1 auto;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: flex-start;
-  gap: 6px;
-  min-height: 0;
-  width: 100%;
-  margin: 2px 0 4px;
-  padding: 12px 12px 14px;
-  border-radius: 10px;
-  border: 1px solid rgba(232, 213, 163, 0.1);
-  background:
-    radial-gradient(ellipse 80% 70% at 12% 20%, rgba(212, 181, 106, 0.1), transparent 55%),
-    linear-gradient(165deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.28));
-  text-align: left;
-}
-
-.salon-ui .protocol-card.overdrive .protocol-mid {
-  background:
-    radial-gradient(ellipse 80% 70% at 12% 20%, rgba(196, 92, 74, 0.14), transparent 55%),
-    linear-gradient(165deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.28));
-  border-color: rgba(196, 92, 74, 0.16);
-}
-
-.salon-ui .protocol-card.abyss .protocol-mid {
-  background:
-    radial-gradient(ellipse 80% 70% at 12% 20%, rgba(63, 154, 138, 0.16), transparent 55%),
-    linear-gradient(165deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.28));
-  border-color: rgba(63, 154, 138, 0.18);
-}
-
-.salon-ui .protocol-card.overdrive.abyss .protocol-mid {
-  background:
-    radial-gradient(ellipse 70% 60% at 10% 18%, rgba(196, 92, 74, 0.14), transparent 50%),
-    radial-gradient(ellipse 70% 60% at 88% 80%, rgba(63, 154, 138, 0.14), transparent 52%),
-    linear-gradient(165deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.28));
-}
-
-.salon-ui .protocol-card::before {
-  content: "";
-  display: block;
-  width: 28px;
-  height: 3px;
-  border-radius: 2px;
-  background: rgba(212, 181, 106, 0.45);
-}
-
-.salon-ui .protocol-card.overdrive::before {
-  background: rgba(196, 92, 74, 0.65);
-}
-
-.salon-ui .protocol-card.abyss::before {
-  background: rgba(63, 154, 138, 0.7);
-}
-
-.salon-ui .protocol-card.overdrive.abyss::before {
-  background: linear-gradient(90deg, rgba(196, 92, 74, 0.7), rgba(63, 154, 138, 0.7));
-}
-
-.salon-ui .protocol-section .section-heading h2 {
-  margin: 0;
-  font-size: clamp(0.95rem, 1.4vw, 1.15rem);
-}
-
-.salon-ui .protocol-summary {
+.salon-ui .skill-lab-hint {
   color: var(--gold);
   font-size: clamp(0.74rem, 1vw, 0.88rem);
   letter-spacing: 0.04em;
-}
-
-.salon-ui .protocol-card:hover {
-  border-color: rgba(212, 181, 106, 0.35);
-  box-shadow: none;
-}
-
-.salon-ui .protocol-card.selected,
-.salon-ui .protocol-card:has(input:checked) {
-  border-color: rgba(212, 181, 106, 0.55);
-  background: rgba(212, 181, 106, 0.06);
-  box-shadow: inset 0 0 0 1px rgba(212, 181, 106, 0.12);
-}
-
-.salon-ui .protocol-card.overdrive.selected,
-.salon-ui .protocol-card.overdrive:has(input:checked),
-.salon-ui .protocol-card.abyss.selected {
-  border-color: rgba(196, 92, 74, 0.5);
-  background: rgba(196, 92, 74, 0.07);
-  box-shadow: inset 0 0 0 1px rgba(196, 92, 74, 0.1);
-}
-
-.salon-ui .protocol-index {
-  display: none;
-}
-
-.salon-ui .protocol-card > strong {
-  font-size: clamp(1.05rem, 1.5vw, 1.28rem);
-  color: var(--bone);
-  font-weight: 700;
-}
-
-.salon-ui .protocol-card > strong small {
-  color: var(--gold);
-  font-size: clamp(0.7rem, 0.95vw, 0.82rem);
-  margin-top: 4px;
-}
-
-.salon-ui .protocol-desc {
-  color: #d2ccc0;
-  font-size: clamp(0.8rem, 1.05vw, 0.95rem);
-  line-height: 1.35;
-  opacity: 1;
-  font-weight: 600;
-}
-
-.salon-ui .protocol-note {
-  color: var(--muted);
-  font-size: clamp(0.7rem, 0.95vw, 0.8rem);
-  line-height: 1.35;
-  letter-spacing: 0.02em;
-}
-
-.salon-ui .protocol-actions .button-secondary {
-  border-color: rgba(63, 154, 138, 0.55);
-  background: rgba(63, 154, 138, 0.16);
-}
-
-.salon-ui .protocol-actions .button-match {
-  border-color: rgba(255, 183, 77, 0.55);
-  background: rgba(255, 183, 77, 0.14);
-  color: #ffd89a;
-}
-
-.salon-ui .protocol-actions .button-match:hover {
-  background: rgba(255, 183, 77, 0.24);
 }
 
 .salon-ui .match-queue-panel {
@@ -734,47 +487,6 @@
 .salon-ui .match-invite-countdown strong {
   color: #ffb74d;
   font-variant-numeric: tabular-nums;
-}
-
-.salon-ui .protocol-actions .button-primary {
-  min-height: clamp(36px, 4.2vh, 44px);
-}
-
-.salon-ui .protocol-actions {
-  gap: 7px;
-  padding-top: 6px;
-}
-
-.salon-ui .protocol-actions .button {
-  min-height: clamp(34px, 4vh, 42px);
-  padding: 7px 8px;
-  font-size: clamp(0.8rem, 1vw, 0.92rem);
-  font-weight: 700;
-}
-
-.salon-ui .lobby-entry {
-  flex-shrink: 0;
-  padding: clamp(12px, 1.6vh, 18px) clamp(12px, 1.2vw, 16px);
-  border-radius: var(--radius-md);
-}
-
-.salon-ui .lobby-entry-head h2 {
-  margin: 0 0 8px;
-  font-size: clamp(0.95rem, 1.3vw, 1.1rem);
-}
-
-.salon-ui .lobby-entry-grid label {
-  color: var(--muted);
-  font-size: clamp(0.74rem, 1vw, 0.86rem);
-}
-
-.salon-ui .lobby-entry-grid {
-  margin-top: 6px;
-  gap: 8px 10px;
-}
-
-.salon-ui .lobby-entry-grid input {
-  padding: clamp(9px, 1.2vh, 12px) 12px;
 }
 
 /* ══════════════════════════════════
@@ -915,7 +627,7 @@
   font-size: 1rem;
 }
 
-.salon-ui .skill-lab-panel .protocol-summary,
+.salon-ui .skill-lab-panel .skill-lab-hint,
 .salon-ui .skill-lab-panel .panel-tip {
   margin: 0;
   font-size: 0.72rem;
@@ -1059,11 +771,6 @@
   border-color: rgba(212, 181, 106, 0.65);
   background: rgba(212, 181, 106, 0.08);
   box-shadow: inset 0 0 0 1px rgba(212, 181, 106, 0.18);
-}
-
-.salon-ui .protocol-card:focus-visible {
-  outline: 2px solid rgba(212, 181, 106, 0.9);
-  outline-offset: 2px;
 }
 
 /* Skill cards keep selection and inspection as two independent, reliable actions. */
@@ -1474,12 +1181,6 @@
   }
 }
 
-@media (max-width: 960px) {
-  .salon-ui .protocol-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
 @media (min-width: 641px) and (max-width: 840px) {
   .salon-ui #skill-lab-catalog.skill-catalog {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1487,16 +1188,6 @@
 }
 
 @media (min-width: 641px) and (max-height: 860px) {
-  .salon-ui:has(#screen-auth.lobby-screen.active) .app-shell {
-    padding-top: calc(var(--safe-top) + 8px);
-    padding-bottom: calc(var(--safe-bottom) + 6px);
-  }
-
-  .salon-ui #screen-auth.lobby-screen.active {
-    gap: 6px;
-    height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 14px);
-    max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 14px);
-  }
 
   .salon-ui .lobby-hero-compact {
     padding: 6px 96px 6px 4px;
@@ -1515,54 +1206,6 @@
   .salon-ui .lobby-hero-compact .brand-title.neon-title,
   .salon-ui .lobby-hero-compact .neon-title {
     font-size: clamp(1.35rem, 2.8vw, 1.7rem);
-  }
-
-  .salon-ui .skill-prep-bar {
-    padding: 6px 10px;
-  }
-
-  .salon-ui .protocol-section {
-    padding: 6px 10px;
-    gap: 5px;
-  }
-
-  .salon-ui .protocol-desc {
-    display: none;
-  }
-
-  .salon-ui .protocol-note {
-    font-size: 0.7rem;
-  }
-
-  .salon-ui .protocol-mid {
-    padding: 8px 10px;
-    gap: 4px;
-  }
-
-  .salon-ui .protocol-card {
-    padding: 8px 9px;
-    gap: 4px;
-    min-height: 0 !important;
-    max-height: none;
-  }
-
-  .salon-ui .protocol-actions .button {
-    min-height: 30px;
-    font-size: 0.76rem;
-    padding: 5px 6px;
-  }
-
-  .salon-ui .lobby-entry {
-    padding: 8px 10px;
-  }
-
-  .salon-ui .lobby-entry-head h2 {
-    margin-bottom: 4px;
-    font-size: 0.88rem;
-  }
-
-  .salon-ui .lobby-entry-grid input {
-    padding: 7px 9px;
   }
 }
 
@@ -1618,16 +1261,6 @@
 }
 
 @media (max-width: 640px) {
-  .salon-ui:has(#screen-auth.lobby-screen.active) .app-shell {
-    padding-top: calc(var(--safe-top) + 8px);
-    padding-bottom: calc(var(--safe-bottom) + 6px);
-  }
-
-  .salon-ui #screen-auth.lobby-screen.active {
-    gap: 5px;
-    height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 14px);
-    max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 14px);
-  }
 
   .salon-ui .lobby-hero-compact {
     padding: 4px 72px 4px 2px;
@@ -1659,71 +1292,6 @@
   .salon-ui .lobby-hero-compact .neon-title {
     font-size: clamp(1.25rem, 6vw, 1.55rem);
     letter-spacing: 0.12em;
-  }
-
-  .salon-ui .lobby-hero-meta .mode-pill:not(:last-child) {
-    display: none;
-  }
-
-  .salon-ui .skill-prep-bar {
-    padding: 6px 8px;
-  }
-
-  .salon-ui .skill-prep-copy h2 {
-    font-size: 0.88rem;
-  }
-
-  .salon-ui .skill-prep-status {
-    font-size: 0.7rem;
-  }
-
-  .salon-ui .protocol-section {
-    padding: 6px;
-    gap: 4px;
-  }
-
-  .salon-ui .protocol-grid {
-    gap: 6px;
-  }
-
-  .salon-ui .protocol-card {
-    padding: 8px;
-    gap: 4px;
-    min-height: 0 !important;
-    max-height: none;
-  }
-
-  .salon-ui .protocol-card::before {
-    width: 18px;
-    height: 2px;
-  }
-
-  .salon-ui .protocol-desc {
-    display: none;
-  }
-
-  .salon-ui .protocol-mid {
-    padding: 8px 9px;
-    margin: 0;
-  }
-
-  .salon-ui .protocol-note {
-    font-size: 0.66rem;
-  }
-
-  .salon-ui .protocol-card > strong {
-    font-size: 0.84rem;
-  }
-
-  .salon-ui .protocol-actions {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    padding-top: 4px;
-    gap: 4px;
-  }
-
-  .salon-ui .protocol-actions .button {
-    min-height: 44px;
-    font-size: 0.72rem;
   }
 
   .salon-ui #screen-skill-lab.skill-lab-screen.active {
@@ -1824,15 +1392,6 @@
 
   .salon-ui #screen-skill-lab .skill-selection-mark {
     right: 56px;
-  }
-
-  .salon-ui .lobby-entry {
-    padding: 8px 10px;
-  }
-
-  .salon-ui .lobby-entry-head h2 {
-    margin-bottom: 4px;
-    font-size: 0.88rem;
   }
 
   .salon-ui .settings-trigger {
@@ -2090,16 +1649,6 @@
 }
 
 @media (max-width: 640px) and (max-height: 700px) {
-  .salon-ui:has(#screen-auth.lobby-screen.active) .app-shell {
-    padding-top: calc(var(--safe-top) + 2px);
-    padding-bottom: calc(var(--safe-bottom) + 2px);
-  }
-
-  .salon-ui #screen-auth.lobby-screen.active {
-    gap: 4px;
-    height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 4px);
-    max-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - 4px);
-  }
 
   .salon-ui .lobby-hero-compact {
     padding-block: 2px;
@@ -2113,46 +1662,6 @@
 
   .salon-ui .lobby-hero-compact .hero-kicker {
     display: none;
-  }
-
-  .salon-ui .skill-prep-bar {
-    padding: 4px 6px;
-  }
-
-  .salon-ui .skill-prep-status {
-    display: none;
-  }
-
-  .salon-ui .protocol-section {
-    padding: 5px;
-    gap: 3px;
-  }
-
-  .salon-ui .protocol-grid {
-    gap: 4px;
-  }
-
-  .salon-ui .protocol-card {
-    padding: 5px;
-    gap: 2px;
-  }
-
-  .salon-ui .protocol-card::before {
-    display: none;
-  }
-
-  .salon-ui .protocol-card > strong small {
-    margin-top: 1px;
-    font-size: 0.62rem;
-  }
-
-  .salon-ui .protocol-actions {
-    padding-top: 2px;
-    gap: 3px;
-  }
-
-  .salon-ui .lobby-entry {
-    padding: 6px 8px;
   }
 }
 
@@ -3184,113 +2693,6 @@ html[data-animation="low"] .salon-ui .is-rule-target-flash {
   animation: none;
 }
 
-/* ══════════════════════════════════
-   QUICK START — four-page field manual
-   ══════════════════════════════════ */
-.salon-ui .quickstart-entry {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto auto;
-  align-items: center;
-  gap: 10px 14px;
-  flex: 0 0 auto;
-  min-height: 58px;
-  padding: 8px 10px 8px 12px;
-  border-radius: 12px;
-  background:
-    linear-gradient(90deg, rgba(212, 181, 106, 0.1), transparent 38%),
-    rgba(5, 8, 13, 0.52);
-  box-shadow:
-    inset 3px 0 0 rgba(212, 181, 106, 0.74),
-    inset 0 1px 0 rgba(255, 255, 255, 0.035);
-}
-
-.salon-ui .quickstart-entry-index {
-  display: grid;
-  place-items: center;
-  min-width: 52px;
-  min-height: 32px;
-  color: rgba(232, 213, 163, 0.82);
-  font-family: "Oswald", var(--font-display);
-  font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.14em;
-  font-variant-numeric: tabular-nums;
-}
-
-.salon-ui .quickstart-entry-copy {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: baseline;
-  gap: 2px 12px;
-  min-width: 0;
-}
-
-.salon-ui .quickstart-entry-copy p {
-  grid-column: 1 / -1;
-  margin: 0;
-  color: rgba(151, 176, 226, 0.58);
-  font-family: "Oswald", var(--font-display);
-  font-size: 0.56rem;
-  font-weight: 700;
-  letter-spacing: 0.18em;
-}
-
-.salon-ui .quickstart-entry-copy h3 {
-  margin: 0;
-  color: var(--bone, #f4efe4);
-  font-size: 0.95rem;
-  white-space: nowrap;
-}
-
-.salon-ui .quickstart-entry-copy > span {
-  min-width: 0;
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 0.72rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.salon-ui .quickstart-entry-state {
-  color: rgba(212, 181, 106, 0.72);
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  white-space: nowrap;
-}
-
-.salon-ui .quickstart-entry.is-read .quickstart-entry-state {
-  color: rgba(91, 217, 169, 0.78);
-}
-
-.salon-ui .quickstart-entry-button {
-  min-width: 120px;
-  min-height: 36px;
-  justify-content: space-between;
-  gap: 14px;
-  padding: 6px 12px;
-  border-color: rgba(212, 181, 106, 0.32);
-  color: var(--gold-soft, #d4b56a);
-  background: rgba(212, 181, 106, 0.075);
-  box-shadow: none;
-}
-
-.salon-ui .quickstart-entry-button b {
-  color: rgba(232, 213, 163, 0.64);
-  font-size: 1rem;
-  font-weight: 500;
-}
-
-.salon-ui .quickstart-entry-button:hover,
-.salon-ui .quickstart-entry-button:focus-visible {
-  border-color: rgba(212, 181, 106, 0.72);
-  color: var(--bone, #f4efe4);
-  background: rgba(212, 181, 106, 0.13);
-  box-shadow: 0 0 0 1px rgba(212, 181, 106, 0.12);
-}
-
 .salon-ui .quickstart-layer {
   z-index: 260;
   overflow: hidden;
@@ -4201,14 +3603,6 @@ html[data-animation="low"] .salon-ui .is-rule-target-flash {
 }
 
 @media (min-width: 641px) and (max-height: 860px) {
-  .salon-ui .quickstart-entry {
-    min-height: 42px;
-    padding-block: 4px;
-  }
-
-  .salon-ui .quickstart-entry-copy p {
-    display: none;
-  }
 
   .salon-ui .quickstart-book-header {
     min-height: 48px;
@@ -4240,43 +3634,6 @@ html[data-animation="low"] .salon-ui .is-rule-target-flash {
 }
 
 @media (max-width: 640px) {
-  .salon-ui .quickstart-entry {
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    gap: 6px 8px;
-    min-height: 42px;
-    padding: 4px 5px 4px 7px;
-    border-radius: 8px;
-  }
-
-  .salon-ui .quickstart-entry-index {
-    display: none;
-  }
-
-  .salon-ui .quickstart-entry-copy {
-    display: block;
-  }
-
-  .salon-ui .quickstart-entry-copy p,
-  .salon-ui .quickstart-entry-copy > span {
-    display: none;
-  }
-
-  .salon-ui .quickstart-entry-copy h3 {
-    font-size: 0.8rem;
-  }
-
-  .salon-ui .quickstart-entry-state {
-    font-size: 0.58rem;
-  }
-
-  .salon-ui .quickstart-entry-button {
-    grid-column: 3;
-    min-width: 90px;
-    min-height: 36px;
-    gap: 6px;
-    padding: 5px 8px;
-    font-size: 0.68rem;
-  }
 
   .salon-ui .quickstart-layer {
     padding:
@@ -4566,20 +3923,6 @@ html[data-animation="low"] .salon-ui .is-rule-target-flash {
 }
 
 @media (max-width: 640px) and (max-height: 700px) {
-  .salon-ui .quickstart-entry {
-    min-height: 34px;
-    padding-block: 2px;
-  }
-
-  .salon-ui .quickstart-entry-state,
-  .salon-ui .quickstart-entry-button b {
-    display: none;
-  }
-
-  .salon-ui .quickstart-entry-button {
-    min-width: 74px;
-    min-height: 32px;
-  }
 
   .salon-ui .quickstart-book-header {
     min-height: 44px;
@@ -4658,15 +4001,6 @@ html[data-animation="low"] .quickstart-track {
   min-width: 0;
 }
 
-html[data-locale="en-US"] .salon-ui .protocol-actions {
-  flex-wrap: wrap;
-}
-
-html[data-locale="en-US"] .salon-ui .protocol-btn {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-
 html[data-locale="en-US"] .salon-ui .quickstart-shot[data-quickstart-zoom]::before {
   content: "Zoom";
 }
@@ -4682,7 +4016,6 @@ html[data-locale="en-US"] .salon-ui .quickstart-flow li {
 }
 
 html[data-locale="en-US"] .salon-ui .wait-player-slot,
-html[data-locale="en-US"] .salon-ui .skill-prep-status,
 html[data-locale="en-US"] .salon-ui .opponent-intel-summary-copy {
   min-width: 0;
 }

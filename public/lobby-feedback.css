@@ -38,13 +38,6 @@ html[data-animation="low"] [data-ui-scope] {
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .045), 0 12px 30px rgba(0, 0, 0, .2);
 }
 
-.salon-ui #screen-auth .protocol-mid,
-.salon-ui #screen-auth .protocol-card:is(.overdrive, .abyss) .protocol-mid {
-  border-color: transparent;
-  background: linear-gradient(120deg, rgba(255, 255, 255, .025), transparent 80%);
-  border-radius: 12px;
-}
-
 .salon-ui [data-ui-scope] :is(input[type="text"], input[type="password"], input[type="search"], select, .setting-row) {
   border-radius: 12px;
 }
@@ -96,9 +89,6 @@ html[data-animation="low"] [data-ui-scope] {
 
 .salon-ui [data-ui-feedback="skill"] { --ui-surface-bg: rgba(7, 10, 15, .8); }
 .salon-ui #skill-lab-catalog .skill-card[data-ui-feedback] { border-radius: 16px; }
-.salon-ui [data-ui-feedback="card"].overdrive { --ui-accent: 218, 126, 108; }
-.salon-ui [data-ui-feedback="card"].abyss { --ui-accent: 103, 203, 182; }
-.salon-ui [data-ui-feedback="card"].overdrive.abyss { --ui-accent: 184, 146, 226; }
 
 .salon-ui [data-ui-feedback="control"].button-primary,
 .salon-ui [data-ui-feedback="control"].skill-lab-filter.is-active {
@@ -160,7 +150,7 @@ html[data-animation="low"] [data-ui-scope] {
 
 .ui-feedback-label { display: inline-block; pointer-events: none; }
 .salon-ui [data-ui-feedback="control"] > :not(.ui-feedback-surface),
-.salon-ui [data-ui-feedback="card"] > :is(strong, .protocol-mid),
+.salon-ui [data-ui-feedback="card"] > :not(.ui-feedback-surface),
 .salon-ui [data-ui-feedback="skill"] > .skill-card-select > *,
 .salon-ui [data-ui-feedback="media"] > :is(img, .allin-style-option-body) {
   scale: var(--ui-scale);
@@ -179,7 +169,7 @@ html[data-animation="low"] [data-ui-scope] {
   box-shadow: var(--ui-surface-shadow), 0 0 0 1px rgba(var(--ui-accent), .07);
 }
 
-.salon-ui [data-ui-feedback].selected {
+.salon-ui [data-ui-feedback]:is(.selected, [aria-checked="true"]) {
   --ui-surface-border: rgba(var(--ui-accent), .72);
   --ui-surface-bg: linear-gradient(140deg, rgba(var(--ui-accent), .13), rgba(10, 13, 20, .94));
   --ui-surface-shadow: inset 0 1px 0 rgba(var(--ui-accent), .16), inset 0 0 0 1px rgba(var(--ui-accent), .1), 0 5px 16px rgba(0, 0, 0, .2);

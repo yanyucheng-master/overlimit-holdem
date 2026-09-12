@@ -1,3 +1,4 @@
+import lobby from "./lobby-test-helpers.js";
 import { chromium } from "playwright";
 import playwrightRuntime from "./playwright-runtime.js";
 
@@ -7,7 +8,7 @@ async function fit(page) {
   return page.evaluate(() => {
     const de = document.documentElement;
     const dock = document.querySelector(".action-dock");
-    const join = document.getElementById("btn-join");
+    const join = document.getElementById("btn-open-join");
     const save = document.getElementById("btn-save-loadout");
     const waitPwd = document.getElementById("btn-set-room-password");
     const visible = (el) => {
@@ -31,72 +32,7 @@ async function fit(page) {
   });
 }
 
-async function auditLobbyViewport(page, viewport) {
-  await page.setViewportSize(viewport);
-  await page.waitForTimeout(80);
-  return page.evaluate(({ width, height }) => {
-    const auth = document.getElementById("screen-auth");
-    const protocol = document.querySelector(".protocol-section");
-    const protocolGrid = document.querySelector(".protocol-grid");
-    const panels = [
-      document.querySelector(".lobby-hero"),
-      document.querySelector(".skill-prep-bar"),
-      protocol,
-      document.querySelector(".lobby-entry"),
-    ].filter(Boolean);
-    const interactive = [
-      ...document.querySelectorAll(
-        "#screen-auth input, #screen-auth button, #screen-auth .protocol-card"
-      ),
-    ].filter((node) => {
-      const rect = node.getBoundingClientRect();
-      return rect.width > 0 && rect.height > 0;
-    });
-    const rect = (node) => node?.getBoundingClientRect();
-    const authRect = rect(auth);
-    const protocolRect = rect(protocol);
-    const gridRect = rect(protocolGrid);
-    const overlaps = panels.slice(1).flatMap((panel, index) => {
-      const previous = panels[index];
-      const previousRect = rect(previous);
-      const panelRect = rect(panel);
-      return previousRect && panelRect && previousRect.bottom > panelRect.top + 1
-        ? [`${previous.className} -> ${panel.className}`]
-        : [];
-    });
-    const clipped = interactive.flatMap((node) => {
-      const nodeRect = rect(node);
-      return nodeRect &&
-        (nodeRect.top < -1 ||
-          nodeRect.left < -1 ||
-          nodeRect.bottom > innerHeight + 1 ||
-          nodeRect.right > innerWidth + 1 ||
-          (authRect &&
-            (nodeRect.top < authRect.top - 1 ||
-              nodeRect.left < authRect.left - 1 ||
-              nodeRect.bottom > authRect.bottom + 1 ||
-              nodeRect.right > authRect.right + 1)))
-        ? [node.id || node.className]
-        : [];
-    });
-    return {
-      requested: { width, height },
-      actual: { width: innerWidth, height: innerHeight },
-      pageScrolls: document.documentElement.scrollHeight > innerHeight + 1,
-      authInsideViewport: Boolean(
-        authRect &&
-          authRect.top >= -1 &&
-          authRect.left >= -1 &&
-          authRect.bottom <= innerHeight + 1 &&
-          authRect.right <= innerWidth + 1
-      ),
-      protocolTailGap:
-        protocolRect && gridRect ? Math.max(0, protocolRect.bottom - gridRect.bottom) : null,
-      clipped,
-      overlaps,
-    };
-  }, viewport);
-}
+const auditLobbyViewport = lobby.auditLobbyLayout;
 
 async function auditSettlementCardGeometry(page) {
   await page.evaluate(() => {
@@ -328,19 +264,7 @@ async function auditDesktopSettlementLayout(page, viewport, variant) {
   return audit;
 }
 
-async function clickProtocol(page, gameMode, skillMode, action) {
-  await page.evaluate(
-    ({ gameMode, skillMode, action }) => {
-      const card = document.querySelector(
-        `.protocol-card[data-game-mode="${gameMode}"][data-skill-mode="${skillMode}"]`
-      );
-      const btn = card?.querySelector(`.protocol-btn[data-room-action="${action}"]`);
-      if (!btn) throw new Error("protocol button missing");
-      btn.click();
-    },
-    { gameMode, skillMode, action }
-  );
-}
+const clickLobbyAction = lobby.startLobbyAction;
 
 const SKILL_LAB_VIEWPORTS = [
   { width: 1920, height: 1080 },
@@ -547,11 +471,11 @@ async function main() {
   const lobbyFields = await page.evaluate(() => ({
     hasCreatePwd: Boolean(document.getElementById("input-password")),
     hasJoinPwd: Boolean(document.getElementById("input-join-password")),
-    hasName: Boolean(document.getElementById("input-name")),
+    hasName: Boolean(document.querySelector("#nickname-modal #nickname-input") && document.getElementById("lobby-player-name")),
     hasRoom: Boolean(document.getElementById("input-room")),
     hasPwdModal: Boolean(document.getElementById("join-password-modal")),
     hasWaitPwd: Boolean(document.getElementById("input-wait-password")),
-    status: document.getElementById("skill-prep-status")?.textContent || "",
+    status: document.getElementById("lobby-loadout-status")?.textContent || "",
   }));
   const lobbyViewports = [];
   for (const viewport of [
@@ -590,7 +514,7 @@ async function main() {
     settlementLayouts,
   });
 
-  await page.click("#btn-open-skill-lab");
+  await lobby.openLobbyLab(page);
   await page.waitForSelector("#screen-skill-lab.active", { timeout: 5000 });
   await page.waitForTimeout(700);
   const lab = await page.evaluate(() => ({
@@ -649,7 +573,7 @@ async function main() {
   await page.click("#btn-back-skill-lab");
   await page.waitForSelector("#screen-auth.active");
 
-  await clickProtocol(page, "standard", "off", "create");
+  await clickLobbyAction(page, "standard", "off", "create");
   await page.waitForSelector("#screen-wait.active", { timeout: 8000 });
   await page.waitForTimeout(500);
   const wait = await page.evaluate(() => ({
@@ -676,7 +600,7 @@ async function main() {
   await page.waitForSelector("#screen-auth.active");
   await page.waitForTimeout(300);
 
-  await clickProtocol(page, "standard", "abyss", "solo");
+  await clickLobbyAction(page, "standard", "abyss", "solo");
   await page.waitForSelector("#screen-game.active", { timeout: 10000 });
   await page.waitForTimeout(1200);
   const game = await page.evaluate(() => ({
@@ -721,7 +645,11 @@ async function main() {
   await mobilePage.goto(BASE + "/?mobile=1", { waitUntil: "networkidle" });
   await mobilePage.waitForSelector("#screen-auth.active", { timeout: 5000 });
   await mobilePage.waitForTimeout(400);
-  report.push({ step: "mobile-lobby", mobileLobby: await fit(mobilePage) });
+  report.push({
+    step: "mobile-lobby",
+    mobileLobby: await fit(mobilePage),
+    mobileReachability: await lobby.auditLobbyLayout(mobilePage),
+  });
   await mobileContext.close();
 
   await browser.close();
@@ -758,12 +686,7 @@ async function main() {
   if (
     lobbyViewportAudits.some(
       (audit) =>
-        audit.pageScrolls ||
-        !audit.authInsideViewport ||
-        audit.clipped.length ||
-        audit.overlaps.length ||
-        audit.protocolTailGap == null ||
-        audit.protocolTailGap > 24
+        !audit.ok || (audit.width >= 1200 && audit.height >= 768 && audit.pageScrolls)
     )
   ) {
     failures.push("lobby does not fit cleanly across required viewports");
@@ -860,7 +783,8 @@ async function main() {
   if (!game.active || game.hudHidden || game.skills.length < 2) failures.push("abyss solo skills missing");
   if (gameFit?.needsScroll || gameFit?.dockVisible === false) failures.push("game screen overflow");
   if (mobileLobby?.active !== "screen-auth") failures.push("mobile lobby assertion ran on the wrong screen");
-  if (mobileLobby?.needsScroll) failures.push("mobile lobby scrolls");
+  const mobileReachability = report.find((r) => r.step === "mobile-lobby")?.mobileReachability;
+  if (!mobileReachability?.ok) failures.push("mobile lobby controls are clipped or unreachable");
 
   console.log(JSON.stringify({ ok: failures.length === 0, failures, report }, null, 2));
   if (failures.length) process.exit(1);

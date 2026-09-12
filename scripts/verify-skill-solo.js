@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+const lobby = require("./lobby-test-helpers");
 /**
  * Skill solo battle smoke: configure loadout → start abyss solo → act / use skill.
  */
@@ -25,26 +26,20 @@ const BASE = process.env.BASE_URL || "http://127.0.0.1:3002";
   await page.goto(BASE, { waitUntil: "networkidle" });
   await page.waitForSelector("#screen-auth.active");
 
-  await page.click("#btn-open-skill-lab");
+  await lobby.openLobbyLab(page);
   await page.waitForSelector("#skill-lab-catalog .skill-card");
   await page.click("#btn-clear-loadout");
   const cards = page.locator("#skill-lab-catalog .skill-card-select");
   const n = await cards.count();
   for (let i = 0; i < Math.min(n, 6); i++) {
     if (!(await page.locator("#btn-save-loadout").isDisabled())) break;
-    await cards.nth(i).click({ force: true });
+    await cards.nth(i).click();
   }
-  await page.click("#btn-save-loadout", { force: true });
+  await page.click("#btn-save-loadout");
   await page.waitForSelector("#screen-auth.active");
   notes.push("loadout-saved");
 
-  await page.evaluate(() => {
-    document
-      .querySelector(
-        '.protocol-card[data-game-mode="standard"][data-skill-mode="abyss"] .protocol-btn[data-room-action="solo"]'
-      )
-      ?.click();
-  });
+  await lobby.startLobbyAction(page, "standard", "abyss", "solo");
 
   const deadline = Date.now() + 25000;
   while (Date.now() < deadline) {

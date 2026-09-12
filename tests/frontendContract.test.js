@@ -39,7 +39,7 @@ describe("frontend DOM contract", () => {
   });
 
   test("技能构筑玩家文案与 1–4 / 负载 8 配置保持一致", () => {
-    expect(html).toContain('id="skill-lab-hint" class="protocol-summary">1–4 个 · 负载 ≤ 8</p>');
+    expect(html).toContain('id="skill-lab-hint" class="skill-lab-hint">1–4 个 · 负载 ≤ 8</p>');
     expect(html).toContain('id="draft-status" class="panel-tip">选择 1–4 个技能，总负载不超过 8。</p>');
     expect(html).not.toMatch(/2[–—-]4\s*个/);
     expect(client).toContain('skillLabHint: byId("skill-lab-hint")');
@@ -294,7 +294,8 @@ describe("frontend DOM contract", () => {
     expect(client).toContain('el.btnOpenQuickStart?.addEventListener("click", () => openQuickStart({ page: 1 }))');
     expect(client).toContain('openRulesFromQuickStart("rule-hands")');
     expect(client).toContain("openSkillsFromQuickStart");
-    expect(salon).toContain(".salon-ui .quickstart-entry");
+    expect(html).toMatch(/id="lobby-navigation"[\s\S]*id="btn-open-quickstart"/);
+    expect(html).not.toContain('class="quickstart-entry"');
     expect(salon).toContain(".salon-ui .quickstart-track");
     expect(salon).toContain(".salon-ui .quickstart-shot[data-quickstart-zoom]");
     expect(salon).toContain(".salon-ui .quickstart-image-layer");
@@ -553,14 +554,15 @@ describe("frontend DOM contract", () => {
 
   test("入口资源与模式选择控件存在", () => {
     expect(html).toContain('<script src="./client.js"></script>');
-    expect(html).toContain('name="game-mode" value="standard"');
-    expect(html).toContain('name="game-mode" value="overdrive"');
-    expect(html).toContain('name="skill-mode" value="off"');
-    expect(html).toContain('name="skill-mode" value="abyss"');
-    expect(html).toContain('name="protocol" value="standard-off"');
-    expect(html).toContain('name="protocol" value="overdrive-off"');
-    expect(html).toContain('name="protocol" value="standard-abyss"');
-    expect(html).toContain('name="protocol" value="overdrive-abyss"');
+    expect(html).toContain('role="radiogroup"');
+    expect(html).toContain('data-lobby-mode-card="off" role="radio" aria-checked="true"');
+    expect(html).toContain('data-lobby-mode-card="abyss" role="radio" aria-checked="false"');
+    expect(html).toMatch(/id="lobby-overdrive"[^>]*role="switch" aria-checked="false"/);
+    expect((html.match(/data-lobby-mode-card=/g) || [])).toHaveLength(2);
+    expect((html.match(/data-room-action=/g) || [])).toHaveLength(3);
+    expect(html).not.toMatch(/protocol-card|protocol-btn|name="protocol"|name="game-mode"|name="skill-mode"|id="input-name"/);
+    expect(client).not.toMatch(/protocolCards|protocolInputs|protocolButtons|inputName|selectedModeTag|selectedSkillTag/);
+    expect(html).toContain('data-room-action="match"');
     expect(html).toContain('data-room-action="solo"');
     expect(html).toContain('data-room-action="create"');
     expect(html).toContain('id="btn-open-skill-lab"');

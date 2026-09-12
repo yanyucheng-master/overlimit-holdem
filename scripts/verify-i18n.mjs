@@ -1,3 +1,4 @@
+import lobby from "./lobby-test-helpers.js";
 import { chromium } from "playwright";
 import playwrightRuntime from "./playwright-runtime.js";
 
@@ -19,16 +20,7 @@ const MOBILE = [
   { width: 430, height: 932 },
 ];
 
-async function clickProtocol(page, gameMode, skillMode, action) {
-  await page.evaluate(({ gameMode, skillMode, action }) => {
-    const card = document.querySelector(
-      `.protocol-card[data-game-mode="${gameMode}"][data-skill-mode="${skillMode}"]`
-    );
-    const btn = card?.querySelector(`.protocol-btn[data-room-action="${action}"]`);
-    if (!btn) throw new Error("protocol button missing");
-    btn.click();
-  }, { gameMode, skillMode, action });
-}
+const clickLobbyAction = lobby.startLobbyAction;
 
 async function setLocale(page, locale) {
   await page.evaluate((next) => {
@@ -51,7 +43,8 @@ function residueCollector() {
   const allowedExact = new Set(["中文", "简体中文"]);
   const skipClosest = ".action-zh, script, style, noscript, template";
   const nicknameIds = new Set([
-    "input-name",
+    "nickname-input",
+    "lobby-player-name",
     "opponent-name",
     "self-name",
     "wait-host-name",
@@ -193,7 +186,7 @@ async function main() {
   }
   await page.click("#btn-close-quickstart");
 
-  await page.click("#btn-open-skill-lab");
+  await lobby.openLobbyLab(page);
   await page.waitForSelector("#screen-skill-lab.active", { timeout: 8000 });
   await page.waitForTimeout(600);
   const labResidue = await collectResidue(page);
@@ -248,7 +241,7 @@ async function main() {
   await page.waitForTimeout(500);
   await page.waitForSelector("#screen-auth.active");
   await setLocale(page, "en-US");
-  await clickProtocol(page, "standard", "abyss", "solo");
+  await clickLobbyAction(page, "standard", "abyss", "solo");
   await page.waitForSelector("#screen-game.active", { timeout: 12000 });
   await page.waitForTimeout(700);
   const roomBefore = await page.evaluate(() => document.getElementById("game-room-id")?.textContent || "");

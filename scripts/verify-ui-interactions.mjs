@@ -1,3 +1,4 @@
+import lobby from "./lobby-test-helpers.js";
 import { chromium } from "playwright";
 import playwrightRuntime from "./playwright-runtime.js";
 
@@ -17,18 +18,19 @@ async function visible(page, selector) {
   return page.locator(selector).isVisible().catch(() => false);
 }
 
-async function protocolSkillCopy(page) {
+async function loadoutStatusCopy(page) {
+  await page.locator('[data-lobby-mode-card="abyss"]').click();
   const read = () => page.evaluate(() => (
     document.querySelector(
-      '.protocol-card[data-game-mode="standard"][data-skill-mode="abyss"] .protocol-desc'
+      '#lobby-loadout-status'
     )?.textContent?.trim() || ""
   ));
   const zh = await read();
   await page.click('.lang-btn[data-locale="en-US"]');
-  await page.waitForTimeout(80);
+  await page.waitForFunction(() => document.documentElement.dataset.locale === "en-US");
   const en = await read();
   await page.click('.lang-btn[data-locale="zh-CN"]');
-  await page.waitForTimeout(80);
+  await page.waitForFunction(() => document.documentElement.dataset.locale === "zh-CN");
   return { zh, en };
 }
 
@@ -1467,15 +1469,15 @@ async function main() {
 
   await page.goto(BASE + "/?verify-interactions=1", { waitUntil: "domcontentloaded" });
   await page.waitForSelector("#screen-auth.active", { timeout: 10000 });
-  await page.waitForSelector("#btn-open-skill-lab:not([disabled])", { timeout: 10000 });
+  await page.waitForFunction(() => state.skillCatalogStatus === "ready");
 
   await page.waitForSelector("#quickstart-modal", { state: "hidden", timeout: 5000 });
-  report.lobby.skillModeCopyLocked = await protocolSkillCopy(page);
+  report.lobby.skillModeCopyLocked = await loadoutStatusCopy(page);
   report.quickstart.autoStart = await page.evaluate(() => ({
     autoOpened: !document.getElementById("quickstart-modal")?.classList.contains("hidden"),
     mainInert: Boolean(document.getElementById("main-content")?.inert),
     stored: localStorage.getItem("overlimit_quickstart_v1"),
-    entryAction: document.getElementById("quickstart-entry-action")?.textContent || "",
+    entryAction: document.getElementById("btn-open-quickstart")?.textContent?.trim() || "",
   }));
   await page.click("#btn-open-quickstart");
   await page.waitForSelector("#quickstart-modal:not(.hidden)", { timeout: 5000 });
@@ -1735,12 +1737,11 @@ async function main() {
   }));
   await page.click("#btn-quickstart-next");
   await page.waitForSelector("#quickstart-modal", { state: "hidden" });
-  await page.waitForFunction(() => document.activeElement?.classList.contains("protocol-card"));
+  await page.waitForFunction(() => document.activeElement?.id === "btn-open-quickstart");
   report.quickstart.completion = await page.evaluate(() => ({
     stored: localStorage.getItem("overlimit_quickstart_v1"),
-    entryAction: document.getElementById("quickstart-entry-action")?.textContent || "",
-    entryState: document.getElementById("quickstart-entry-state")?.textContent || "",
-    selectedProtocolFocused: document.activeElement?.classList.contains("protocol-card") || false,
+    entryAction: document.getElementById("btn-open-quickstart")?.textContent?.trim() || "",
+    openerFocused: document.activeElement?.id === "btn-open-quickstart" || false,
   }));
   await page.click("#btn-open-quickstart");
   await page.click('#quickstart-dots [data-quickstart-target="2"]');
@@ -1809,7 +1810,7 @@ async function main() {
   await page.click("#btn-close-settings");
   report.lobby.settingsClosed = !(await visible(page, "#settings-modal:not(.hidden)"));
 
-  await page.click("#btn-open-skill-lab");
+  await lobby.openLobbyLab(page);
   await page.waitForSelector("#screen-skill-lab.active");
   await page.waitForSelector("#skill-lab-catalog .skill-card-select");
   const cards = page.locator("#skill-lab-catalog .skill-card");
@@ -1831,7 +1832,7 @@ async function main() {
     skillLabActive: document.getElementById("screen-skill-lab")?.classList.contains("active") || false,
     screen: document.body.dataset.screen || "",
   }));
-  await page.click("#btn-open-skill-lab");
+  await lobby.openLobbyLab(page);
   await page.waitForSelector("#screen-skill-lab.active");
   const recycleSelectSelector = '#skill-lab-catalog .skill-card[data-skill-id="RECYCLE"] .skill-card-select';
   const intimidationDetailSelector = '#skill-lab-catalog .skill-card[data-skill-id="INTIMIDATION"] .skill-zoom-button';
@@ -1891,7 +1892,7 @@ async function main() {
       return null;
     }
   });
-  await page.click("#btn-open-skill-lab");
+  await lobby.openLobbyLab(page);
   await page.waitForSelector("#screen-skill-lab.active");
   report.lab.oneSkill.reopened = await skillLabSelectionState(page);
 
@@ -1940,11 +1941,11 @@ async function main() {
   report.lab.saveEnabled = await page.locator("#btn-save-loadout").isEnabled();
   await page.click("#btn-save-loadout");
   await page.waitForSelector("#screen-auth.active");
-  report.lobby.skillModeCopyReady = await protocolSkillCopy(page);
+  report.lobby.skillModeCopyReady = await loadoutStatusCopy(page);
 
   report.room.doubleClickGate = await page.evaluate(() => {
     const button = document.querySelector(
-      '.protocol-card[data-game-mode="standard"][data-skill-mode="abyss"] .protocol-btn[data-room-action="solo"]'
+      '[data-room-action="solo"]'
     );
     if (!button) return { found: false, disabledAfterFirst: false };
     button.click();
@@ -2373,7 +2374,7 @@ async function main() {
     report.quickstart.autoStart.autoOpened ||
     report.quickstart.autoStart.mainInert ||
     report.quickstart.autoStart.stored !== null ||
-    report.quickstart.autoStart.entryAction !== "开始阅读" ||
+    report.quickstart.autoStart.entryAction !== "快速入门" ||
     report.quickstart.initial.pageCount !== 4 ||
     report.quickstart.initial.zoomTriggerCount !== 5 ||
     report.quickstart.initial.pageStatus !== "01 / 04" ||
@@ -2427,8 +2428,8 @@ async function main() {
     !report.quickstart.finalPage.nextCornerHidden ||
     !report.quickstart.finalPage.allImagesLoaded ||
     report.quickstart.completion.stored !== "seen" ||
-    report.quickstart.completion.entryAction !== "重新查看" ||
-    !report.quickstart.completion.selectedProtocolFocused ||
+    report.quickstart.completion.entryAction !== "快速入门" ||
+    !report.quickstart.completion.openerFocused ||
     !report.quickstart.rulesRoute.rulesOpen ||
     !report.quickstart.rulesRoute.handsActive ||
     !report.quickstart.rulesRoute.tutorialClosed
@@ -2460,10 +2461,10 @@ async function main() {
   }
   if (report.lobby.hitAudit.failures.length) failures.push("lobby button hit targets blocked");
   if (
-    report.lobby.skillModeCopyLocked.zh !== "需先完成技能构筑" ||
-    report.lobby.skillModeCopyLocked.en !== "Complete a Skill Loadout first" ||
-    report.lobby.skillModeCopyReady.zh !== "使用已保存的技能构筑" ||
-    report.lobby.skillModeCopyReady.en !== "Saved Skill Loadout ready"
+    report.lobby.skillModeCopyLocked.zh !== "尚未完成技能配置" ||
+    report.lobby.skillModeCopyLocked.en !== "Complete your Skill Loadout" ||
+    report.lobby.skillModeCopyReady.zh !== "已配置 4 技能 · 负载 6/8" ||
+    report.lobby.skillModeCopyReady.en !== "Equipped skills: 4 · Load 6/8"
   ) {
     failures.push("skill-mode readiness copy did not update in Chinese and English");
   }

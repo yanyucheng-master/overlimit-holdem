@@ -54,6 +54,7 @@
     <link rel="stylesheet" href="./skill-effects.css" />
     <link rel="stylesheet" href="./visual-quality.css" />
     <link rel="stylesheet" href="./lobby-feedback.css" />
+    <link rel="stylesheet" href="./lobby-v2.css" />
   </head>
   <body class="salon-ui">
     <a class="skip-link" href="#main-content" data-i18n="a11y.skip">跳到主要内容</a>
@@ -167,16 +168,6 @@
 
     <div id="result-banner" class="result-banner hidden" role="status"></div>
 
-    <button
-      id="btn-settings"
-      class="icon-button settings-trigger"
-      type="button"
-      aria-label="打开界面设置"
-      data-i18n-attr="aria-label:a11y.openSettings"
-      aria-haspopup="dialog"
-    >
-      <span aria-hidden="true">⚙</span>
-    </button>
 
     <div id="settings-modal" class="modal-layer hidden" role="dialog" aria-modal="true" aria-labelledby="settings-title">
       <section class="modal-panel settings-panel glass-panel" tabindex="-1">
@@ -687,6 +678,24 @@
       </section>
     </div>
 
+    <div id="nickname-modal" class="modal-layer hidden" role="dialog" aria-modal="true" aria-labelledby="nickname-title">
+      <section class="modal-panel lobby-small-panel glass-panel" tabindex="-1">
+        <header class="modal-header"><h2 id="nickname-title" data-i18n="lobby.editName">编辑昵称</h2><button id="btn-close-name" class="icon-button" type="button" aria-label="关闭" data-i18n-attr="aria-label:common.close">×</button></header>
+        <label class="modal-field" for="nickname-input" data-i18n="lobby.name">昵称</label>
+        <input id="nickname-input" type="text" maxlength="16" autocomplete="nickname" enterkeyhint="done" placeholder="你的昵称" data-i18n-placeholder="lobby.namePh" />
+        <div class="modal-actions"><button id="btn-save-name" class="button button-primary" type="button" data-i18n="lab.save">保存</button></div>
+      </section>
+    </div>
+
+    <div id="lobby-join-modal" class="modal-layer hidden" role="dialog" aria-modal="true" aria-labelledby="lobby-join-title">
+      <section class="modal-panel lobby-small-panel glass-panel" tabindex="-1">
+        <header class="modal-header"><h2 id="lobby-join-title" data-i18n="lobby.joinTitle">加入房间</h2><button id="btn-close-join" class="icon-button" type="button" aria-label="关闭" data-i18n-attr="aria-label:common.close">×</button></header>
+        <label class="modal-field" for="input-room" data-i18n="lobby.room">房间号</label>
+        <input id="input-room" class="room-input" type="text" maxlength="8" autocomplete="off" spellcheck="false" enterkeyhint="go" placeholder="六位房间号" data-i18n-placeholder="lobby.roomPh" />
+        <div class="modal-actions"><button id="btn-join" class="button button-primary" type="button" data-i18n="lobby.join">加入</button></div>
+      </section>
+    </div>
+
     <div id="join-password-modal" class="modal-layer hidden" role="dialog" aria-modal="true" aria-labelledby="join-password-title">
       <section class="modal-panel confirm-panel glass-panel" tabindex="-1">
         <p class="eyebrow">SECURE ACCESS</p>
@@ -812,7 +821,7 @@
     </div>
 
     <main id="main-content" class="app-shell">
-      <section id="screen-auth" class="screen active lobby-screen" aria-labelledby="brand-title">
+      <section id="screen-auth" class="screen active lobby-screen lobby-v2" aria-labelledby="brand-title">
         <header class="lobby-hero lobby-hero-compact">
           <div class="lobby-brand">
             <div class="lobby-logo-wrap">
@@ -828,149 +837,83 @@
             <div class="hero-copy">
               <p class="hero-kicker">OVERLIMIT: HOLD'EM</p>
               <h1 id="brand-title" class="brand-title neon-title" data-i18n="meta.brand">超限德州</h1>
-              <p class="hero-subtitle" data-i18n="lobby.subtitle">双人实时对局 · 选模式直接开打</p>
             </div>
           </div>
-          <div class="lobby-hero-meta">
+          <nav id="lobby-navigation" class="lobby-navigation" aria-label="大厅导航" data-i18n-attr="aria-label:lobby.navigation">
+            <button id="btn-open-quickstart" class="button button-ghost" type="button" aria-haspopup="dialog" aria-controls="quickstart-modal" data-i18n="lobby.quickstartTitle">快速入门</button>
+            <button id="btn-open-rules" class="button button-ghost" type="button" aria-haspopup="dialog" aria-controls="rules-handbook-modal" data-i18n="settings.rules">规则手册</button>
             <div class="lobby-lang-switch" role="group" data-i18n-attr="aria-label:a11y.language" aria-label="语言">
               <button type="button" class="lang-btn is-active" data-locale="zh-CN" aria-pressed="true">中文</button>
-              <span class="lobby-lang-sep" aria-hidden="true">|</span>
+              <span class="lobby-lang-sep" aria-hidden="true">/</span>
               <button type="button" class="lang-btn" data-locale="en-US" aria-pressed="false">EN</button>
             </div>
-            <span id="selected-mode-tag" class="mode-pill standard">标准</span>
-            <span id="selected-skill-tag" class="mode-pill standard">无技能</span>
             <button
-              id="btn-open-rules"
-              class="button button-ghost lobby-rules-btn"
+              id="btn-settings"
+              class="icon-button settings-trigger"
               type="button"
+              aria-label="打开界面设置"
+              data-i18n-attr="aria-label:a11y.openSettings"
               aria-haspopup="dialog"
-              aria-controls="rules-handbook-modal"
-              data-i18n="lobby.rules"
             >
-              规则查询
+              <span aria-hidden="true">⚙</span>
             </button>
-            <span id="lobby-connection" class="connection-chip sr-only" aria-live="polite"><i class="status-dot"></i><span data-i18n="lobby.connecting">连接中</span></span>
-          </div>
+          </nav>
+          <span id="lobby-connection" class="connection-chip sr-only" aria-live="polite"><i class="status-dot"></i><span data-i18n="lobby.connecting">连接中</span></span>
         </header>
 
-        <section class="skill-prep-bar glass-panel" aria-labelledby="skill-prep-title">
-          <div class="skill-prep-copy">
-            <h2 id="skill-prep-title" data-i18n="lobby.skillLoadout">技能构筑</h2>
-            <p id="skill-prep-status" class="skill-prep-status" data-i18n="lobby.prepEmpty">未配置 · 技能局不可进入</p>
-          </div>
-          <button id="btn-open-skill-lab" class="button button-secondary" type="button">
-            <span data-i18n="lobby.configure">去配置</span>
-          </button>
-        </section>
-
-        <section class="mode-section protocol-section glass-panel" aria-labelledby="mode-title">
-          <div class="section-heading compact">
-            <div>
-              <h2 id="mode-title" data-i18n="lobby.modes">开局模式</h2>
-            </div>
-            <p id="protocol-summary" class="protocol-summary" data-i18n="lobby.summaryOff">标准局 · 无技能</p>
-          </div>
-
-          <aside class="quickstart-entry" aria-labelledby="quickstart-entry-title">
-            <span class="quickstart-entry-index" aria-hidden="true">01—04</span>
-            <div class="quickstart-entry-copy">
-              <p>NEW PLAYER FIELD MANUAL</p>
-              <h3 id="quickstart-entry-title" data-i18n="lobby.quickstartTitle">快速入门</h3>
-              <span data-i18n="lobby.quickstartHint">4 页了解胜负、牌局、牌型奖励与技能构筑</span>
-            </div>
-            <span id="quickstart-entry-state" class="quickstart-entry-state" data-i18n="lobby.quickstartEta">约 45 秒</span>
-            <button
-              id="btn-open-quickstart"
-              class="button quickstart-entry-button"
-              type="button"
-              aria-haspopup="dialog"
-              aria-controls="quickstart-modal"
-            >
-              <span id="quickstart-entry-action" data-i18n="lobby.startReading">开始阅读</span>
-              <b aria-hidden="true">→</b>
+        <div class="lobby-main">
+          <h2 id="lobby-mode-title" data-i18n="lobby.playTitle">开始对局</h2>
+          <div class="lobby-mode-grid" role="radiogroup" aria-labelledby="lobby-mode-title">
+            <button type="button" class="lobby-mode-card" data-lobby-mode-card="off" role="radio" aria-checked="true" tabindex="0" aria-labelledby="lobby-classic-title" aria-describedby="lobby-classic-desc lobby-classic-note">
+              <span class="lobby-mode-symbol" aria-hidden="true">♠</span>
+              <strong id="lobby-classic-title" data-i18n="lobby.classic">经典对局</strong>
+              <span id="lobby-classic-desc" class="lobby-mode-desc" data-i18n="lobby.classicDesc">纯粹的德州博弈</span>
+              <small id="lobby-classic-note" data-i18n="lobby.classicNote">无技能干预</small>
+              <span class="lobby-mode-check" aria-hidden="true">✓</span>
             </button>
-          </aside>
-
-          <div class="protocol-grid" role="list">
-            <article class="protocol-card selected" data-game-mode="standard" data-skill-mode="off" role="listitem" tabindex="0" aria-current="true">
-              <input type="radio" name="protocol" value="standard-off" checked tabindex="-1" />
-              <strong><span data-i18n="lobby.standard">标准局</span> <small data-i18n="lobby.noSkills">无技能</small></strong>
-              <div class="protocol-mid">
-                <span class="protocol-desc" data-i18n="lobby.standardDesc">完整随机牌堆</span>
-                <span class="protocol-note" data-i18n="lobby.standardNote">标准发牌 · 含超限牌型奖励</span>
-              </div>
-              <div class="protocol-actions">
-                <button type="button" class="button button-match protocol-btn" data-room-action="match" data-i18n="lobby.match">匹配</button>
-                <button type="button" class="button button-secondary protocol-btn" data-room-action="solo" data-i18n="lobby.solo">人机</button>
-                <button type="button" class="button button-primary protocol-btn" data-room-action="create" data-i18n="lobby.create">建房</button>
-              </div>
-            </article>
-
-            <article class="protocol-card overdrive" data-game-mode="overdrive" data-skill-mode="off" role="listitem" tabindex="-1">
-              <input type="radio" name="protocol" value="overdrive-off" tabindex="-1" />
-              <strong><span data-i18n="lobby.overdrive">高爆局</span> <small data-i18n="lobby.noSkills">无技能</small></strong>
-              <div class="protocol-mid">
-                <span class="protocol-desc" data-i18n="lobby.overdriveDesc">高潜力起手与河牌</span>
-                <span class="protocol-note" data-i18n="lobby.overdriveNote">高爆牌面 · 含超限牌型奖励</span>
-              </div>
-              <div class="protocol-actions">
-                <button type="button" class="button button-match protocol-btn" data-room-action="match" data-i18n="lobby.match">匹配</button>
-                <button type="button" class="button button-secondary protocol-btn" data-room-action="solo" data-i18n="lobby.solo">人机</button>
-                <button type="button" class="button button-primary protocol-btn" data-room-action="create" data-i18n="lobby.create">建房</button>
-              </div>
-            </article>
-
-            <article class="protocol-card abyss" data-game-mode="standard" data-skill-mode="abyss" role="listitem" tabindex="-1">
-              <input type="radio" name="protocol" value="standard-abyss" tabindex="-1" />
-              <strong><span data-i18n="lobby.standard">标准局</span> <small data-i18n="lobby.overlimitSkills">超限技能</small></strong>
-              <div class="protocol-mid">
-                <span class="protocol-desc" data-i18n="lobby.skillLocked">需先完成技能构筑</span>
-                <span class="protocol-note" data-i18n="lobby.skillNote">标准牌桌 · 技能改写局势</span>
-              </div>
-              <div class="protocol-actions">
-                <button type="button" class="button button-match protocol-btn" data-room-action="match" data-i18n="lobby.match">匹配</button>
-                <button type="button" class="button button-secondary protocol-btn" data-room-action="solo" data-i18n="lobby.solo">人机</button>
-                <button type="button" class="button button-primary protocol-btn" data-room-action="create" data-i18n="lobby.create">建房</button>
-              </div>
-            </article>
-
-            <article class="protocol-card overdrive abyss" data-game-mode="overdrive" data-skill-mode="abyss" role="listitem" tabindex="-1">
-              <input type="radio" name="protocol" value="overdrive-abyss" tabindex="-1" />
-              <strong><span data-i18n="lobby.overdrive">高爆局</span> <small data-i18n="lobby.overlimitSkills">超限技能</small></strong>
-              <div class="protocol-mid">
-                <span class="protocol-desc" data-i18n="lobby.skillLocked">需先完成技能构筑</span>
-                <span class="protocol-note" data-i18n="lobby.overdriveSkillNote">极限节奏 · 技能与牌面齐飞</span>
-              </div>
-              <div class="protocol-actions">
-                <button type="button" class="button button-match protocol-btn" data-room-action="match" data-i18n="lobby.match">匹配</button>
-                <button type="button" class="button button-secondary protocol-btn" data-room-action="solo" data-i18n="lobby.solo">人机</button>
-                <button type="button" class="button button-primary protocol-btn" data-room-action="create" data-i18n="lobby.create">建房</button>
-              </div>
-            </article>
-          </div>
-
-          <div class="sr-only" aria-hidden="true">
-            <input type="radio" name="game-mode" value="standard" checked tabindex="-1" />
-            <input type="radio" name="game-mode" value="overdrive" tabindex="-1" />
-            <input type="radio" name="skill-mode" value="off" checked tabindex="-1" />
-            <input type="radio" name="skill-mode" value="abyss" tabindex="-1" />
-          </div>
-        </section>
-
-        <section class="lobby-entry glass-panel" aria-labelledby="join-title">
-          <div class="lobby-entry-head">
-            <h2 id="join-title" data-i18n="lobby.joinTitle">加入房间</h2>
-          </div>
-          <div class="lobby-entry-grid lobby-entry-join">
-            <label for="input-name" data-i18n="lobby.name">昵称</label>
-            <input id="input-name" type="text" maxlength="16" autocomplete="nickname" placeholder="你的昵称" data-i18n-placeholder="lobby.namePh" />
-            <label for="input-room" data-i18n="lobby.room">房间号</label>
-            <input id="input-room" class="room-input" type="text" maxlength="8" autocomplete="off" spellcheck="false" enterkeyhint="go" placeholder="六位房间号" data-i18n-placeholder="lobby.roomPh" />
-            <button id="btn-join" class="button button-primary" type="button">
-              <span data-i18n="lobby.join">加入</span>
+            <button type="button" class="lobby-mode-card" data-lobby-mode-card="abyss" role="radio" aria-checked="false" tabindex="-1" aria-labelledby="lobby-skills-title" aria-describedby="lobby-skills-desc lobby-skills-note">
+              <span class="lobby-mode-symbol" aria-hidden="true">ϟ</span>
+              <strong id="lobby-skills-title" data-i18n="lobby.overlimitSkills">超限技能</strong>
+              <span id="lobby-skills-desc" class="lobby-mode-desc" data-i18n="lobby.skillsDesc">技能改写局势</span>
+              <small id="lobby-skills-note" data-i18n="lobby.skillsNote">能量 · 技能 · 构筑</small>
+              <span class="lobby-mode-check" aria-hidden="true">✓</span>
             </button>
           </div>
-        </section>
+
+          <div class="lobby-modifier">
+            <div class="lobby-modifier-copy">
+              <strong id="lobby-overdrive-title" data-i18n="lobby.overdriveDeal">高爆牌面</strong>
+              <p id="lobby-overdrive-desc" data-i18n="lobby.overdriveHint">高潜力起手与河牌，提高强牌碰撞概率</p>
+            </div>
+            <button id="lobby-overdrive" type="button" class="lobby-overdrive" role="switch" aria-checked="false" aria-labelledby="lobby-overdrive-title" aria-describedby="lobby-overdrive-desc">
+              <span class="overdrive-signal" aria-hidden="true"><i></i><i></i><i></i></span>
+              <span id="lobby-overdrive-state" data-i18n="lobby.modifierOff">关闭</span>
+            </button>
+          </div>
+
+          <section id="lobby-loadout" class="lobby-loadout hidden" aria-labelledby="lobby-loadout-title">
+            <h3 id="lobby-loadout-title" data-i18n="lobby.currentLoadout">当前构筑</h3>
+            <div class="lobby-loadout-content">
+              <div id="lobby-loadout-skills" class="lobby-loadout-skills" role="list" aria-label="已装备技能" data-i18n-attr="aria-label:lobby.equippedSkills"></div>
+              <p id="lobby-loadout-status" role="status" data-i18n="lobby.loadoutIncomplete">尚未完成技能配置</p>
+            </div>
+            <span id="lobby-loadout-meter" class="lobby-loadout-meter hidden"></span>
+            <button id="btn-open-skill-lab" class="button button-ghost lobby-edit-loadout" type="button"><span data-i18n="lobby.editLoadout">编辑构筑</span><span aria-hidden="true">→</span></button>
+          </section>
+
+          <div class="lobby-actions">
+            <button id="btn-find-match" type="button" class="button button-primary lobby-primary-action" data-room-action="match"><span data-i18n="lobby.findMatch">开始匹配</span><span aria-hidden="true">→</span></button>
+            <div class="lobby-secondary-actions">
+              <button type="button" class="button button-ghost" data-room-action="solo" data-i18n="lobby.practice">人机练习</button>
+              <button type="button" class="button button-ghost" data-room-action="create" data-i18n="lobby.friendMatch">好友对局</button>
+            </div>
+          </div>
+        </div>
+
+        <footer class="lobby-identity-row">
+          <div class="lobby-identity"><span id="lobby-player-name" data-copyable>player1</span><button id="btn-edit-name" class="button button-ghost" type="button" aria-label="编辑昵称" data-i18n-attr="aria-label:lobby.editName" aria-haspopup="dialog" aria-controls="nickname-modal"><span aria-hidden="true">✎</span></button></div>
+          <button id="btn-open-join" class="button button-ghost" type="button" aria-haspopup="dialog" aria-controls="lobby-join-modal"><span data-i18n="lobby.joinWithCode">输入房间号加入</span><span aria-hidden="true">→</span></button>
+        </footer>
       </section>
 
       <section id="screen-skill-lab" class="screen skill-lab-screen" aria-labelledby="skill-lab-title">
@@ -987,7 +930,7 @@
             <div>
               <h2 id="skill-lab-title" data-i18n="lab.title">选择技能</h2>
             </div>
-            <p id="skill-lab-hint" class="protocol-summary">1–4 个 · 负载 ≤ 8</p>
+            <p id="skill-lab-hint" class="skill-lab-hint">1–4 个 · 负载 ≤ 8</p>
           </div>
           <p id="skill-lab-status" class="panel-tip" data-i18n="lab.status">配置保存在本机，进入技能局后自动提交。</p>
           <div id="skill-lab-catalog" class="skill-catalog"></div>

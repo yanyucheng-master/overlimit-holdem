@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import lobby from "./lobby-test-helpers.js";
 /**
  * Recapture English Quick Start screenshots from a live en-US session.
  * Writes public/assets/tutorial/en-US/shot-0X-*.png without touching Chinese assets.
@@ -28,29 +29,18 @@ async function prepareCaptureChrome(page) {
     content: "#connection-banner, #toast-region { display: none !important; }",
   });
   await page.evaluate(() => {
-    const input = document.getElementById("input-name");
-    if (input) input.value = "player1";
-    sessionStorage.setItem("abyss_player_name", "player1");
+    setPlayerName("player1");
   });
   await page.waitForFunction(() => document.documentElement.getAttribute("data-locale") === "en-US");
   await page.waitForSelector("body.i18n-ready");
 }
 
-function clickProtocol(page, gameMode, skillMode, action) {
-  return page.evaluate(({ gameMode, skillMode, action }) => {
-    const card = document.querySelector(
-      `.protocol-card[data-game-mode="${gameMode}"][data-skill-mode="${skillMode}"]`
-    );
-    const btn = card?.querySelector(`.protocol-btn[data-room-action="${action}"]`);
-    if (!btn) throw new Error(`protocol button missing: ${gameMode}/${skillMode}/${action}`);
-    btn.click();
-  }, { gameMode, skillMode, action });
-}
+const clickLobbyAction = lobby.startLobbyAction;
 
 async function startSolo(page, gameMode, skillMode) {
   await page.waitForSelector("#screen-auth.active", { timeout: 15000 });
   if (skillMode === "abyss") await waitForLoadoutReady(page);
-  await clickProtocol(page, gameMode, skillMode, "solo");
+  await clickLobbyAction(page, gameMode, skillMode, "solo");
   const deadline = Date.now() + 25000;
   while (Date.now() < deadline) {
     const active = await page.evaluate(() =>
@@ -127,7 +117,7 @@ async function screenshotViewport(page, dest) {
 
 async function waitForLoadoutReady(page) {
   await page.waitForFunction(
-    () => document.getElementById("skill-prep-status")?.classList.contains("ready"),
+    () => document.getElementById("lobby-loadout")?.classList.contains("is-ready"),
     null,
     { timeout: 15000 }
   );
@@ -135,7 +125,7 @@ async function waitForLoadoutReady(page) {
 
 async function captureLoadout(page) {
   await waitForLoadoutReady(page);
-  await page.click("#btn-open-skill-lab");
+  await lobby.openLobbyLab(page);
   await page.waitForSelector("#screen-skill-lab.active");
   await page.waitForSelector('.skill-card[data-skill-id="LOAN"]');
   await page.evaluate(() => {

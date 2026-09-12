@@ -19,6 +19,7 @@
     "verify:interactions": "node scripts/verify-ui-interactions.mjs",
     "verify:visual-quality": "node scripts/verify-visual-quality.mjs",
     "verify:lobby-feedback": "node scripts/verify-lobby-feedback.mjs",
+    "verify:lobby-v2": "node scripts/verify-lobby-v2.mjs",
     "verify:rulebook": "node scripts/verify-rulebook.mjs",
     "verify:skill-fx": "node scripts/verify-skill-fx-gallery.mjs",
     "capture:ui": "node scripts/capture-ui-review.mjs",

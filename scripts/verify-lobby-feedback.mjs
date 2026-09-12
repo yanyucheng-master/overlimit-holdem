@@ -1,3 +1,4 @@
+import lobby from "./lobby-test-helpers.js";
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import path from "node:path";
@@ -25,6 +26,11 @@ async function capture(page, name) {
 }
 
 async function layout(page) {
+  if (await page.locator("#screen-auth.active").count()) {
+    const audit = await lobby.auditLobbyLayout(page);
+    assert.equal(audit.ok, true, JSON.stringify(audit));
+    return;
+  }
   const result = await page.evaluate(() => ({
     horizontal: document.documentElement.scrollWidth > innerWidth + 1,
     vertical: document.documentElement.scrollHeight > innerHeight + 1,
@@ -55,7 +61,7 @@ async function press(page, selector, quality, { pointSelector = null, kind = "co
   const hit = await target.evaluate((node, point) => node.contains(document.elementFromPoint(point.x, point.y)), { x, y });
   assert.equal(hit, true, `covered hit target: ${selector}`);
   if (kind === "control") {
-    assert.equal(await target.evaluate((node) => Boolean(node.parentElement.closest(".protocol-card")?.classList.contains("ui-pressed"))), false, "nested button also pressed its parent card");
+    assert.equal(await target.evaluate((node) => Boolean(document.querySelector("[data-lobby-mode-card].ui-pressed"))), false, "action button also pressed a mode card");
   }
   await page.mouse.up();
   return { stableTarget: true, quality, scale: quality === "low" ? 1 : kind === "control" ? .97 : .985 };
@@ -83,29 +89,35 @@ async function exercise(page, sample) {
   const evidence = { name, viewport, quality, locale };
   await page.goto(BASE, { waitUntil: "networkidle" });
   await page.waitForFunction(() => document.getElementById("connection-banner").classList.contains("hidden"));
-  assert.equal(await page.locator(".protocol-btn").count(), 12);
+  assert.equal(await page.locator("[data-lobby-mode-card]").count(), 2);
+  assert.equal(await page.locator('[role="switch"]#lobby-overdrive').count(), 1);
+  assert.equal(await page.locator("#screen-auth [data-room-action]").count(), 3);
   await layout(page);
   await capture(page, `${name}-lobby`);
 
-  const card = '.protocol-card[data-game-mode="overdrive"][data-skill-mode="off"]';
+  const card = '[data-lobby-mode-card="abyss"]';
   evidence.cardPress = await press(page, card, quality, { pointSelector: ":scope > strong", kind: "card" });
-  assert.equal(await page.locator(card).getAttribute("aria-current"), "true");
-  const cancelled = '.protocol-card[data-game-mode="standard"][data-skill-mode="off"]';
+  assert.equal(await page.locator(card).getAttribute("aria-checked"), "true");
+  const cancelled = '[data-lobby-mode-card="off"]';
   const start = await page.locator(cancelled).locator(":scope > strong").boundingBox();
   await page.mouse.move(start.x + 15, start.y + 8);
   await page.mouse.down();
   await page.mouse.move(2, 2);
   await page.mouse.move(start.x + 15, start.y + 8);
   await page.mouse.up();
-  assert.equal(await page.locator(card).getAttribute("aria-current"), "true", "cancelled drag selected another mode");
+  assert.equal(await page.locator(card).getAttribute("aria-checked"), "true", "cancelled drag selected another mode");
   assert.equal(await page.locator(".ui-pressed").count(), 0);
   evidence.cancelledDrag = true;
 
   // Native text editing and copy selection remain available inside the lobby.
-  await page.locator("#input-name").fill("Feedback QA");
-  await page.locator("#input-name").press("ControlOrMeta+A");
-  assert.equal(await page.locator("#input-name").evaluate((input) => input.selectionEnd - input.selectionStart), 11);
-  await page.locator("#input-name").press("ArrowRight");
+  await page.locator("#btn-edit-name").click();
+  await page.locator("#nickname-input").fill("Feedback QA");
+  await page.locator("#nickname-input").press("ControlOrMeta+A");
+  assert.equal(await page.locator("#nickname-input").evaluate((input) => input.selectionEnd - input.selectionStart), 11);
+  await page.locator("#nickname-input").press("ArrowRight");
+  await page.locator("#btn-save-name").click();
+  await page.locator("#nickname-modal").waitFor({ state: "hidden" });
+  await page.locator("#brand-title").scrollIntoViewIfNeeded();
   assert.equal(await page.locator("#brand-title").evaluate((node) => getComputedStyle(node).userSelect), "none");
   const title = await page.locator("#brand-title").boundingBox();
   await page.mouse.move(title.x + 2, title.y + title.height / 2);
@@ -220,8 +232,9 @@ async function exercise(page, sample) {
   evidence.tutorialAndSelection = true;
 
   // One direct room action must reach the existing waiting-room flow once.
-  const create = '.protocol-card[data-game-mode="standard"][data-skill-mode="off"] [data-room-action="create"]';
-  evidence.nestedButton = await press(page, create, quality);
+  await lobby.selectLobbyMode(page, "standard", "off");
+  const create = '#screen-auth [data-room-action="create"]';
+  evidence.independentAction = await press(page, create, quality);
   await page.waitForSelector("#screen-wait.active");
   assert.ok((await page.locator("#wait-room-id").textContent()).trim().length >= 6);
   assert.equal(await page.locator("#screen-game [data-ui-feedback]").count(), 0);
@@ -238,6 +251,7 @@ async function touchScroll(browser) {
     });
     const page = await context.newPage();
     await page.goto(BASE, { waitUntil: "networkidle" });
+    await page.locator('[data-lobby-mode-card="abyss"]').tap();
     await page.locator("#btn-open-skill-lab").tap();
     await page.waitForFunction(() => document.querySelectorAll("#skill-lab-catalog .skill-card").length > 0);
     await stable(page);

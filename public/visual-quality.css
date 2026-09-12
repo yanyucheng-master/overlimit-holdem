@@ -30,8 +30,7 @@ html[data-animation="low"] .modal-panel {
 }
 
 html[data-animation="low"] button:hover,
-html[data-animation="low"] button:active,
-html[data-animation="low"] .protocol-card:hover {
+html[data-animation="low"] button:active {
   transform: none !important;
 }
 

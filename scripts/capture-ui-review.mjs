@@ -1,3 +1,4 @@
+import lobby from "./lobby-test-helpers.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "playwright";
@@ -28,32 +29,20 @@ async function captureDesktop(browser) {
   await page.screenshot({ path: path.join(OUTPUT, "desktop-settings.png"), fullPage: true });
   await page.click("#btn-close-settings");
 
-  await page.click("#btn-open-skill-lab");
+  await lobby.openLobbyLab(page);
   await page.waitForSelector("#screen-skill-lab.active");
   await page.waitForTimeout(250);
   await page.screenshot({ path: path.join(OUTPUT, "desktop-skill-lab.png"), fullPage: true });
 
   await page.click("#btn-back-skill-lab");
   await page.waitForSelector("#screen-auth.active");
-  await page.evaluate(() => {
-    document
-      .querySelector(
-        '.protocol-card[data-game-mode="standard"][data-skill-mode="off"] .protocol-btn[data-room-action="create"]'
-      )
-      ?.click();
-  });
+  await lobby.startLobbyAction(page, "standard", "off", "create");
   await page.waitForSelector("#screen-wait.active", { timeout: 10000 });
   await page.waitForTimeout(400);
   await page.screenshot({ path: path.join(OUTPUT, "desktop-wait.png"), fullPage: true });
   await page.click("#btn-back-wait");
   await page.waitForSelector("#screen-auth.active");
-  await page.evaluate(() => {
-    document
-      .querySelector(
-        '.protocol-card[data-game-mode="standard"][data-skill-mode="abyss"] .protocol-btn[data-room-action="solo"]'
-      )
-      ?.click();
-  });
+  await lobby.startLobbyAction(page, "standard", "abyss", "solo");
   await page.waitForSelector("#screen-game.active", { timeout: 15000 });
   await page.waitForTimeout(600);
   await page.screenshot({ path: path.join(OUTPUT, "desktop-game.png"), fullPage: true });
@@ -77,33 +66,21 @@ async function captureMobile(browser) {
   await page.screenshot({ path: path.join(OUTPUT, "mobile-settings.png"), fullPage: true });
   await page.click("#btn-close-settings");
 
-  await page.click("#btn-open-skill-lab");
+  await lobby.openLobbyLab(page);
   await page.waitForSelector("#screen-skill-lab.active");
   await page.waitForTimeout(250);
   await page.screenshot({ path: path.join(OUTPUT, "mobile-skill-lab.png"), fullPage: true });
   await page.click("#btn-back-skill-lab");
   await page.waitForSelector("#screen-auth.active");
 
-  await page.evaluate(() => {
-    document
-      .querySelector(
-        '.protocol-card[data-game-mode="standard"][data-skill-mode="off"] .protocol-btn[data-room-action="create"]'
-      )
-      ?.click();
-  });
+  await lobby.startLobbyAction(page, "standard", "off", "create");
   await page.waitForSelector("#screen-wait.active", { timeout: 10000 });
   await page.waitForTimeout(400);
   await page.screenshot({ path: path.join(OUTPUT, "mobile-wait.png"), fullPage: true });
   await page.click("#btn-back-wait");
   await page.waitForSelector("#screen-auth.active");
 
-  await page.evaluate(() => {
-    document
-      .querySelector(
-        '.protocol-card[data-game-mode="overdrive"][data-skill-mode="abyss"] .protocol-btn[data-room-action="solo"]'
-      )
-      ?.click();
-  });
+  await lobby.startLobbyAction(page, "overdrive", "abyss", "solo");
   await page.waitForSelector("#screen-game.active", { timeout: 20000 });
   await page.waitForTimeout(1400);
   await page.screenshot({ path: path.join(OUTPUT, "mobile-game.png"), fullPage: true });
@@ -120,13 +97,7 @@ async function captureCompactGame(browser, width, height, filename) {
   });
   const page = await context.newPage();
   await primeLoadout(page);
-  await page.evaluate(() => {
-    document
-      .querySelector(
-        '.protocol-card[data-game-mode="standard"][data-skill-mode="abyss"] .protocol-btn[data-room-action="solo"]'
-      )
-      ?.click();
-  });
+  await lobby.startLobbyAction(page, "standard", "abyss", "solo");
   await page.waitForSelector("#screen-game.active", { timeout: 20000 });
   await page.waitForTimeout(1400);
   await page.screenshot({ path: path.join(OUTPUT, filename), fullPage: true });

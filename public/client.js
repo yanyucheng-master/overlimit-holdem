@@ -393,9 +393,6 @@ const el = {
   btnOpenRules: byId("btn-open-rules"),
   btnSettingsRules: byId("btn-settings-rules"),
   btnOpenQuickStart: byId("btn-open-quickstart"),
-  quickStartEntry: document.querySelector(".quickstart-entry"),
-  quickStartEntryState: byId("quickstart-entry-state"),
-  quickStartEntryAction: byId("quickstart-entry-action"),
   quickStartModal: byId("quickstart-modal"),
   quickStartViewport: byId("quickstart-viewport"),
   quickStartTrack: byId("quickstart-track"),
@@ -477,10 +474,25 @@ const el = {
   settleChipTotal: byId("settle-chip-total"),
   settleOppEnergy: byId("settle-opp-energy"),
   settleNext: byId("settle-next"),
-  selectedModeTag: byId("selected-mode-tag"),
-  protocolSummary: byId("protocol-summary"),
-  inputName: byId("input-name"),
   inputRoom: byId("input-room"),
+  lobbyNavigation: byId("lobby-navigation"),
+  lobbyModeCards: [...document.querySelectorAll("[data-lobby-mode-card]")],
+  lobbyActions: [...document.querySelectorAll("[data-room-action]")],
+  lobbyOverdrive: byId("lobby-overdrive"),
+  lobbyOverdriveState: byId("lobby-overdrive-state"),
+  lobbyLoadout: byId("lobby-loadout"),
+  lobbyLoadoutSkills: byId("lobby-loadout-skills"),
+  lobbyLoadoutStatus: byId("lobby-loadout-status"),
+  lobbyLoadoutMeter: byId("lobby-loadout-meter"),
+  lobbyPlayerName: byId("lobby-player-name"),
+  nicknameModal: byId("nickname-modal"),
+  nicknameInput: byId("nickname-input"),
+  btnEditName: byId("btn-edit-name"),
+  btnSaveName: byId("btn-save-name"),
+  btnCloseName: byId("btn-close-name"),
+  lobbyJoinModal: byId("lobby-join-modal"),
+  btnOpenJoin: byId("btn-open-join"),
+  btnCloseJoin: byId("btn-close-join"),
   btnJoin: byId("btn-join"),
   joinPasswordModal: byId("join-password-modal"),
   matchQueueModal: byId("match-queue-modal"),
@@ -502,7 +514,6 @@ const el = {
   btnBackSkillLab: byId("btn-back-skill-lab"),
   btnSaveLoadout: byId("btn-save-loadout"),
   btnClearLoadout: byId("btn-clear-loadout"),
-  skillPrepStatus: byId("skill-prep-status"),
   skillLabCatalog: byId("skill-lab-catalog"),
   skillLabFilters: byId("skill-lab-filters"),
   skillLabHint: byId("skill-lab-hint"),
@@ -570,7 +581,6 @@ const el = {
   fairnessResult: byId("fairness-result"),
   overdriveProfile: byId("overdrive-profile"),
   overdriveProfileLabel: byId("overdrive-profile-label"),
-  selectedSkillTag: byId("selected-skill-tag"),
   waitSkillMode: byId("wait-skill-mode"),
   waitInitialEnergy: byId("wait-initial-energy"),
   skillDraftPanel: byId("skill-draft-panel"),
@@ -652,11 +662,6 @@ const el = {
   btnRaiseOptions: byId("btn-raise-options"),
   actionButtons: document.querySelectorAll(".action-button[data-action]"),
   raisePresets: document.querySelectorAll("[data-raise-preset]"),
-  modeInputs: document.querySelectorAll('input[name="game-mode"]'),
-  skillModeInputs: document.querySelectorAll('input[name="skill-mode"]'),
-  protocolInputs: document.querySelectorAll('input[name="protocol"]'),
-  protocolCards: document.querySelectorAll(".protocol-card"),
-  protocolButtons: document.querySelectorAll(".protocol-btn"),
 };
 
 const modalLayers = [...document.querySelectorAll(".modal-layer")];
@@ -799,12 +804,13 @@ const boardPulseTimers = new Map();
 
 function refreshPendingUi(key) {
   const offline = !socket.connected;
-  if (key === "room") {
-    el.protocolButtons?.forEach((button) => {
-      button.disabled = state.uiPending.room || offline;
-      button.setAttribute("aria-busy", state.uiPending.room ? "true" : "false");
+  if (key === "room" || key === "match") {
+    const pending = state.uiPending.room || state.uiPending.match;
+    el.lobbyActions.forEach((button) => {
+      button.disabled = pending || offline;
+      button.setAttribute("aria-busy", pending ? "true" : "false");
     });
-    if (el.btnJoin) el.btnJoin.disabled = state.uiPending.room || offline;
+    if (el.btnJoin) el.btnJoin.disabled = pending || offline;
     if (el.btnJoinPasswordConfirm) el.btnJoinPasswordConfirm.disabled = state.uiPending.room || offline;
   }
   if (key === "password" && el.btnSetRoomPassword) {
@@ -1062,15 +1068,8 @@ function applyLanguage() {
     btn.setAttribute("aria-pressed", active ? "true" : "false");
   });
   rulesHandbookRendered = false;
-  updateSkillPrepUi();
-  syncProtocolUi();
-  updateQuickStartEntryState();
-  if (el.selectedModeTag) {
-    el.selectedModeTag.textContent = modeInfo(state.gameMode).code;
-  }
-  if (el.selectedSkillTag) {
-    el.selectedSkillTag.textContent = state.skillMode === "abyss" ? t("modal.skill") : t("lobby.noSkills");
-  }
+  renderLobbyLoadout();
+  syncLobbySelection();
   renderSkillLabFilters();
   if (el.skillLabHint) el.skillLabHint.textContent = skillBuildRuleText({ compact: true });
   if (el.skillLab?.classList.contains("active")) renderSkillLab();
@@ -1157,6 +1156,9 @@ function showScreen(name) {
     if (screen) screen.classList.remove("active");
   });
   if (target) target.classList.add("active");
+  const settingsParent = name === "auth" ? el.lobbyNavigation : document.body;
+  if (el.btnSettings.parentElement !== settingsParent) settingsParent.append(el.btnSettings);
+  if (name === "auth") syncLobbySelection();
   document.body.dataset.screen = name;
   window.OverlimitUIFeedback?.enterScreen(target, previous);
   if (name === "game") el.toastRegion.textContent = "";
@@ -1178,16 +1180,8 @@ function modeInfo(mode) {
 
 function setMode(mode) {
   state.gameMode = mode === GAME_MODE.OVERDRIVE ? GAME_MODE.OVERDRIVE : GAME_MODE.STANDARD;
-  const info = modeInfo(state.gameMode);
-  if (el.selectedModeTag) {
-    el.selectedModeTag.textContent = info.code;
-    el.selectedModeTag.className = "mode-pill " + state.gameMode;
-  }
-  el.modeInputs.forEach((input) => {
-    input.checked = input.value === state.gameMode;
-  });
   document.body.classList.toggle("overdrive", state.gameMode === GAME_MODE.OVERDRIVE);
-  syncProtocolUi();
+  syncLobbySelection();
 }
 
 function getMe() {
@@ -2822,7 +2816,7 @@ function emitJoin(roomId, password) {
   socket.emit("join_room", {
     roomId,
     password: password || null,
-    playerName: state.myName || undefined,
+    playerName: getEffectivePlayerName(),
     playerId: state.playerId,
     reconnectToken: state.reconnectToken || undefined,
   });
@@ -3494,19 +3488,7 @@ function syncPlayers(players) {
 }
 
 
-function selectedMode() {
-  return document.querySelector('input[name="game-mode"]:checked')?.value || GAME_MODE.STANDARD;
-}
-
-function selectedSkillMode() {
-  return document.querySelector('input[name="skill-mode"]:checked')?.value || "off";
-}
-
-function protocolValue(gameMode, skillMode) {
-  return (gameMode === GAME_MODE.OVERDRIVE ? "overdrive" : "standard") + "-" + (skillMode === "abyss" ? "abyss" : "off");
-}
-
-function protocolSummaryText(gameMode, skillMode) {
+function formatRoomLane(gameMode, skillMode) {
   const deal = gameMode === GAME_MODE.OVERDRIVE ? t("lobby.overdrive") : t("lobby.standard");
   const skill = skillMode === "abyss" ? t("lobby.overlimitSkills") : t("lobby.noSkills");
   return deal + " · " + skill;
@@ -3649,57 +3631,87 @@ function isLoadoutConfigured() {
   return validateLoadoutIds(state.savedLoadout).ok;
 }
 
-function syncProtocolUi() {
-  const value = protocolValue(state.gameMode, state.skillMode || "off");
-  el.protocolInputs?.forEach((input) => {
-    const selected = input.value === value;
-    input.checked = selected;
-    const card = input.closest(".protocol-card");
-    card?.classList.toggle("selected", selected);
-    card?.setAttribute("aria-current", selected ? "true" : "false");
-    if (card) card.tabIndex = selected ? 0 : -1;
+function syncLobbySelection() {
+  el.lobbyModeCards.forEach((card) => {
+    const selected = card.dataset.lobbyModeCard === state.skillMode;
+    card.setAttribute("aria-checked", String(selected));
+    card.tabIndex = selected ? 0 : -1;
   });
-  if (el.protocolSummary) {
-    el.protocolSummary.textContent = protocolSummaryText(state.gameMode, state.skillMode || "off");
-  }
-  updateSkillPrepUi();
+  const overdrive = state.gameMode === GAME_MODE.OVERDRIVE;
+  el.lobbyOverdrive.setAttribute("aria-checked", String(overdrive));
+  el.lobbyOverdriveState.textContent = t(overdrive ? "lobby.modifierOn" : "lobby.modifierOff");
+  renderLobbyLoadout();
 }
 
-function updateSkillPrepUi() {
+function renderLobbyLoadout() {
+  el.lobbyLoadout.classList.toggle("hidden", state.skillMode !== "abyss");
   const validation = validateLoadoutIds(state.savedLoadout);
   const ready = validation.ok;
-  const load = validation.load || 0;
   const { maxLoad } = currentSkillBuildLimits();
-  const invalidSavedBuild = state.savedLoadout.length > 0 && state.skillCatalogStatus === "ready" && !ready;
-  if (el.skillPrepStatus) {
-    el.skillPrepStatus.classList.toggle("ready", ready);
-    el.skillPrepStatus.textContent = ready
-      ? t("lobby.prepReady", { count: state.savedLoadout.length, load, maxLoad })
-      : invalidSavedBuild
-        ? t("lobby.prepInvalid")
-      : state.skillCatalogStatus === "error"
-        ? t("lobby.prepError")
-        : state.skillCatalogStatus !== "ready"
-          ? t("lobby.prepLoading")
-          : t("lobby.prepEmpty");
+  el.lobbyLoadout.classList.toggle("is-ready", ready);
+  el.lobbyLoadoutSkills.replaceChildren();
+  if (ready) {
+    for (const id of validation.skillIds) {
+      const tag = document.createElement("span");
+      tag.className = "lobby-skill-pill";
+      tag.setAttribute("role", "listitem");
+      tag.textContent = skillCopy(id, "name");
+      tag.title = tag.textContent;
+      el.lobbyLoadoutSkills.append(tag);
+    }
   }
-  el.protocolCards?.forEach((card) => {
-    const needsSkill = card.dataset.skillMode === "abyss";
-    card.classList.toggle("locked-abyss", needsSkill && !ready);
-    if (!needsSkill) return;
-    const description = card.querySelector(".protocol-desc");
-    if (!description) return;
-    const overdrive = card.dataset.gameMode === GAME_MODE.OVERDRIVE;
-    description.textContent = ready
-      ? (overdrive ? t("lobby.overdriveSkillReady") : t("lobby.skillReady"))
-      : t("lobby.skillLocked");
-    card.setAttribute("aria-description", description.textContent);
-  });
+  el.lobbyLoadoutSkills.classList.toggle("hidden", !ready);
+  el.lobbyLoadoutStatus.classList.toggle("sr-only", ready);
+  el.lobbyLoadoutStatus.textContent = ready
+    ? t("lobby.prepReady", { count: state.savedLoadout.length, load: validation.load, maxLoad })
+    : state.skillCatalogStatus === "error" ? t("lobby.prepError")
+      : state.skillCatalogStatus !== "ready" ? t("lobby.prepLoading")
+        : state.savedLoadout.length ? validation.error : t("lobby.loadoutIncomplete");
+  el.lobbyLoadoutMeter.classList.toggle("hidden", !ready);
+  el.lobbyLoadoutMeter.textContent = ready ? t("lobby.loadMeter", { load: validation.load, maxLoad }) : "";
+  el.btnOpenSkillLab.querySelector("span").textContent = t(ready ? "lobby.editLoadout" : "lobby.configure");
 }
 
-function setProtocol(gameMode, skillMode) {
-  setMode(gameMode);
-  setSkillMode(skillMode);
+function getEffectivePlayerName() {
+  return String(state.myName || "").trim() || "player1";
+}
+
+function setPlayerName(value) {
+  state.myName = String(value || "").trim() || "player1";
+  safeStorageSet("sessionStorage", STORAGE.playerName, state.myName);
+  el.lobbyPlayerName.textContent = state.myName;
+  el.lobbyPlayerName.title = state.myName;
+}
+
+const lobbyModalReturnFocus = new Map();
+function openLobbyModal(modal, input) {
+  if (!modal.classList.contains("hidden")) return;
+  lobbyModalReturnFocus.set(modal, document.activeElement);
+  setModalVisible(modal, true);
+  input.focus({ preventScroll: true });
+}
+
+function closeLobbyModal(modal, { restoreFocus = true } = {}) {
+  setModalVisible(modal, false);
+  const fallback = modal === el.nicknameModal ? el.btnEditName : el.btnOpenJoin;
+  const opener = lobbyModalReturnFocus.get(modal);
+  lobbyModalReturnFocus.delete(modal);
+  if (restoreFocus) (opener?.isConnected && !opener.closest(".hidden, [inert]") ? opener : fallback).focus({ preventScroll: true });
+}
+
+function openNicknameEditor() {
+  el.nicknameInput.value = getEffectivePlayerName();
+  openLobbyModal(el.nicknameModal, el.nicknameInput);
+  el.nicknameInput.select();
+}
+
+function saveNickname() {
+  setPlayerName(el.nicknameInput.value);
+  closeLobbyModal(el.nicknameModal);
+}
+
+function openLobbyJoin() {
+  openLobbyModal(el.lobbyJoinModal, el.inputRoom);
 }
 
 function openSkillLab(pendingAction = null) {
@@ -3719,7 +3731,7 @@ function openSkillLab(pendingAction = null) {
 
 function closeSkillLab() {
   showScreen("auth");
-  updateSkillPrepUi();
+  renderLobbyLoadout();
   requestAnimationFrame(() => {
     if (el.auth.classList.contains("active")) (skillLabReturnFocus?.isConnected ? skillLabReturnFocus : el.btnOpenSkillLab)?.focus({ preventScroll: true });
   });
@@ -3734,7 +3746,7 @@ async function ensureSkillCatalog() {
   if (state.skillCatalogStatus === "ready" && state.skillCatalog.length) return state.skillCatalog;
   if (skillCatalogPromise) return skillCatalogPromise;
   state.skillCatalogStatus = "loading";
-  updateSkillPrepUi();
+  renderLobbyLoadout();
   skillCatalogPromise = (async () => {
     try {
       const response = await fetch("/api/skills");
@@ -3758,7 +3770,7 @@ async function ensureSkillCatalog() {
       return [];
     } finally {
       skillCatalogPromise = null;
-      updateSkillPrepUi();
+      renderLobbyLoadout();
     }
   })();
   return skillCatalogPromise;
@@ -4142,7 +4154,7 @@ function saveLoadoutFromLab() {
   if (!validation.ok) return showToast(validation.error || t("lab.invalid"), "error");
   state.savedLoadout = [...validation.skillIds];
   safeStorageSet("localStorage", STORAGE.skillLoadout, JSON.stringify(state.savedLoadout));
-  updateSkillPrepUi();
+  renderLobbyLoadout();
   showToast(t("lab.saved"), "success");
   const pending = state.pendingRoomAction;
   state.pendingRoomAction = null;
@@ -4168,7 +4180,7 @@ function requireLoadoutForSkillMode(skillMode, pendingAction) {
 }
 
 function laneLabel(gameMode, skillMode) {
-  return protocolSummaryText(gameMode, skillMode);
+  return formatRoomLane(gameMode, skillMode);
 }
 
 function stopMatchWaitTimer() {
@@ -4266,18 +4278,18 @@ function cancelMatchmaking({ silent = false } = {}) {
 }
 
 function startMatchAction(gameMode, skillMode) {
-  setProtocol(gameMode, skillMode);
+  setMode(gameMode);
+  setSkillMode(skillMode);
   if (!requireLoadoutForSkillMode(skillMode, { type: "match", gameMode, skillMode })) return;
   if (!beginRealtimeRequest("match", 7000)) return;
 
   prepareManualRoomRequest();
   state.autoLoadoutSubmitted = false;
-  state.myName = (el.inputName.value || "").trim() || "player1";
+  setPlayerName(getEffectivePlayerName());
   // 入队成功后再离开大厅态，避免入队失败时卡在非大厅状态
-  safeStorageSet("sessionStorage", STORAGE.playerName, state.myName);
 
   socket.emit("match:queue", {
-    playerName: state.myName,
+    playerName: getEffectivePlayerName(),
     playerId: state.playerId,
     reconnectToken: state.reconnectToken || undefined,
     gameMode: state.gameMode,
@@ -4289,18 +4301,18 @@ function startMatchAction(gameMode, skillMode) {
 
 function startRoomAction(type, gameMode, skillMode) {
   if (state.matching) cancelMatchmaking({ silent: true });
-  setProtocol(gameMode, skillMode);
+  setMode(gameMode);
+  setSkillMode(skillMode);
   if (!requireLoadoutForSkillMode(skillMode, { type, gameMode, skillMode })) return;
   if (!beginRealtimeRequest("room", 7000)) return;
 
   prepareManualRoomRequest();
   state.autoLoadoutSubmitted = false;
-  state.myName = (el.inputName.value || "").trim() || "player1";
+  setPlayerName(getEffectivePlayerName());
   state.atLobby = false;
-  safeStorageSet("sessionStorage", STORAGE.playerName, state.myName);
   if (type === "solo") {
     socket.emit("create_solo_room", {
-      playerName: state.myName,
+      playerName: getEffectivePlayerName(),
       playerId: state.playerId,
       reconnectToken: state.reconnectToken || undefined,
       gameMode: state.gameMode,
@@ -4310,7 +4322,7 @@ function startRoomAction(type, gameMode, skillMode) {
   }
   socket.emit("create_room", {
     password: null,
-    playerName: state.myName,
+    playerName: getEffectivePlayerName(),
     playerId: state.playerId,
     reconnectToken: state.reconnectToken || undefined,
     gameMode: state.gameMode,
@@ -4319,6 +4331,7 @@ function startRoomAction(type, gameMode, skillMode) {
 }
 
 function openJoinPasswordModal(roomId) {
+  closeLobbyModal(el.lobbyJoinModal, { restoreFocus: false });
   state.pendingJoinRoomId = roomId;
   if (el.modalJoinPassword) el.modalJoinPassword.value = "";
   setModalVisible(el.joinPasswordModal, true);
@@ -4328,6 +4341,7 @@ function openJoinPasswordModal(roomId) {
 function closeJoinPasswordModal() {
   setModalVisible(el.joinPasswordModal, false);
   state.pendingJoinRoomId = null;
+  openLobbyJoin();
 }
 
 function confirmJoinWithPassword() {
@@ -4339,9 +4353,8 @@ function confirmJoinWithPassword() {
   setModalVisible(el.joinPasswordModal, false);
   prepareManualRoomRequest();
   state.autoLoadoutSubmitted = false;
-  state.myName = (el.inputName.value || "").trim() || "player2";
+  setPlayerName(getEffectivePlayerName());
   state.atLobby = false;
-  safeStorageSet("sessionStorage", STORAGE.playerName, state.myName);
   emitJoin(roomId, password);
 }
 
@@ -4358,42 +4371,47 @@ function maybeAutoSubmitLoadout() {
   socket.emit("skill:loadout:set", { skillIds: state.savedLoadout });
 }
 
-el.modeInputs.forEach((input) => input.addEventListener("change", () => setMode(input.value)));
-el.protocolCards?.forEach((card) => {
-  card.addEventListener("click", (event) => {
-    if (event.target.closest(".protocol-btn")) return;
-    setProtocol(card.dataset.gameMode || "standard", card.dataset.skillMode || "off");
-  });
+el.lobbyModeCards.forEach((card) => {
+  card.addEventListener("click", () => setSkillMode(card.dataset.lobbyModeCard));
   card.addEventListener("keydown", (event) => {
-    if (event.target !== card) return;
-    const cards = [...el.protocolCards];
-    const index = cards.indexOf(card);
-    if (["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp"].includes(event.key)) {
-      event.preventDefault();
-      const direction = ["ArrowRight", "ArrowDown"].includes(event.key) ? 1 : -1;
-      const next = cards[(index + direction + cards.length) % cards.length];
-      setProtocol(next.dataset.gameMode || "standard", next.dataset.skillMode || "off");
-      next.focus();
-    } else if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      setProtocol(card.dataset.gameMode || "standard", card.dataset.skillMode || "off");
-    }
+    const keys = ["ArrowRight", "ArrowDown", "ArrowLeft", "ArrowUp", "Home", "End"];
+    if (!keys.includes(event.key)) return; // Native buttons handle Enter and Space once.
+    event.preventDefault();
+    if (event.repeat) return;
+    const cards = el.lobbyModeCards;
+    const direction = ["ArrowRight", "ArrowDown"].includes(event.key) ? 1 : -1;
+    const index = event.key === "Home" ? 0 : event.key === "End" ? cards.length - 1
+      : (cards.indexOf(card) + direction + cards.length) % cards.length;
+    const next = cards[index];
+    setSkillMode(next.dataset.lobbyModeCard);
+    next.focus({ preventScroll: true });
   });
 });
-el.protocolButtons?.forEach((button) => {
-  button.addEventListener("click", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    const card = button.closest(".protocol-card");
-    if (!card) return;
-    const gameMode = card.dataset.gameMode || "standard";
-    const skillMode = card.dataset.skillMode || "off";
+el.lobbyOverdrive.addEventListener("click", () => {
+  setMode(state.gameMode === GAME_MODE.OVERDRIVE ? GAME_MODE.STANDARD : GAME_MODE.OVERDRIVE);
+});
+el.lobbyActions.forEach((button) => {
+  button.addEventListener("click", () => {
+    if (state.uiPending.room || state.uiPending.match) return;
+    const { gameMode, skillMode } = state;
     const action = button.dataset.roomAction;
-    if (action === "match") {
-      startMatchAction(gameMode, skillMode);
-      return;
-    }
-    startRoomAction(action === "solo" ? "solo" : "create", gameMode, skillMode);
+    if (action === "match") startMatchAction(gameMode, skillMode);
+    else startRoomAction(action, gameMode, skillMode);
+  });
+});
+el.btnEditName.addEventListener("click", openNicknameEditor);
+el.btnSaveName.addEventListener("click", saveNickname);
+el.btnCloseName.addEventListener("click", () => closeLobbyModal(el.nicknameModal));
+el.nicknameInput.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter" || event.isComposing) return;
+  event.preventDefault();
+  if (!event.repeat) saveNickname();
+});
+el.btnOpenJoin.addEventListener("click", openLobbyJoin);
+el.btnCloseJoin.addEventListener("click", () => closeLobbyModal(el.lobbyJoinModal));
+[el.nicknameModal, el.lobbyJoinModal].forEach((modal) => {
+  modal.addEventListener("click", (event) => {
+    if (event.target === modal) closeLobbyModal(modal);
   });
 });
 el.btnMatchCancel?.addEventListener("click", () => cancelMatchmaking());
@@ -4425,15 +4443,14 @@ el.btnJoin.addEventListener("click", () => {
   prepareManualRoomRequest();
   state.autoLoadoutSubmitted = false;
   state.pendingJoinRoomId = roomId;
-  state.myName = (el.inputName.value || "").trim() || "player2";
+  setPlayerName(getEffectivePlayerName());
   state.atLobby = false;
-  safeStorageSet("sessionStorage", STORAGE.playerName, state.myName);
   emitJoin(roomId, null);
 });
 el.inputRoom?.addEventListener("keydown", (event) => {
-  if (event.key !== "Enter") return;
+  if (event.key !== "Enter" || event.isComposing) return;
   event.preventDefault();
-  el.btnJoin.click();
+  if (!event.repeat) el.btnJoin.click();
 });
 el.btnJoinPasswordConfirm?.addEventListener("click", confirmJoinWithPassword);
 el.btnJoinPasswordCancel?.addEventListener("click", () => {
@@ -4795,21 +4812,9 @@ function closeQuickStartImage({ restoreFocus = true } = {}) {
   return true;
 }
 
-function updateQuickStartEntryState() {
-  if (!el.quickStartEntry) return;
-  el.quickStartEntry.classList.toggle("is-read", state.quickStartSeen);
-  if (el.quickStartEntryState) {
-    el.quickStartEntryState.textContent = state.quickStartSeen ? t("history.replay") : t("lobby.quickstartEta");
-  }
-  if (el.quickStartEntryAction) {
-    el.quickStartEntryAction.textContent = state.quickStartSeen ? t("lobby.reread") : t("lobby.startReading");
-  }
-}
-
 function rememberQuickStart() {
   state.quickStartSeen = true;
   safeStorageSet("localStorage", STORAGE.quickStart, "seen");
-  updateQuickStartEntryState();
 }
 
 function renderQuickStartPage(pageNumber) {
@@ -4884,11 +4889,7 @@ function changeQuickStartPage(delta) {
 }
 
 function finishQuickStart() {
-  closeQuickStart({ remember: true, restoreFocus: false });
-  requestAnimationFrame(() => {
-    const selected = [...(el.protocolCards || [])].find((card) => card.classList.contains("selected"));
-    (selected || el.protocolCards?.[0] || el.btnOpenQuickStart)?.focus?.();
-  });
+  closeQuickStart({ remember: true, restoreFocus: true });
 }
 
 function openRulesFromQuickStart(sectionId) {
@@ -5690,6 +5691,8 @@ document.addEventListener("keydown", (event) => {
   } else if (top === el.leaveConfirmModal) {
     top.classList.add("hidden");
     el.btnBackGame.focus();
+  } else if (top === el.nicknameModal || top === el.lobbyJoinModal) {
+    closeLobbyModal(top);
   } else if (top === el.joinPasswordModal) {
     closeJoinPasswordModal();
     el.inputRoom.focus();
@@ -5708,7 +5711,7 @@ socket.on("connect", () => {
   if (savedRoom && savedToken && !state.deliberateLeave) {
     state.roomId = savedRoom;
     state.reconnectToken = savedToken;
-    state.myName = safeStorageGet("sessionStorage", STORAGE.playerName) || state.myName;
+    setPlayerName(safeStorageGet("sessionStorage", STORAGE.playerName) || state.myName);
     state.atLobby = false;
     state.reconnecting = true;
     showScreen("wait");
@@ -5809,6 +5812,7 @@ function applyRoomJoinedPayload(payload, { fromLobby = false } = {}) {
     state.matchSource = payload.matchSource || null;
   }
   if (Array.isArray(payload.players)) state.players = payload.players;
+  if (getMe()?.name) setPlayerName(getMe().name);
   if (Object.prototype.hasOwnProperty.call(payload, "presentationBarrier")) {
     syncPresentationBarrier(payload.presentationBarrier, { restored: Boolean(payload.presentationBarrier) });
   }
@@ -6211,6 +6215,10 @@ socket.on("join_error", (payload) => {
     clearRoomSession();
     showScreen("auth");
   }
+  if (!wasReconnect) {
+    showScreen("auth");
+    openLobbyJoin();
+  }
   showToast(localizeIncoming(payload.message) || t("toast.joinFail"), "error");
 });
 socket.on("room:password_updated", (payload) => {
@@ -6230,7 +6238,7 @@ socket.on("room_fault", (payload) => {
   showToast(message, "error");
 });
 
-if (state.myName) el.inputName.value = state.myName;
+setPlayerName(state.myName);
 if (state.roomId) el.inputRoom.value = state.roomId;
 state.savedLoadout = loadSavedLoadout();
 state.selectedLoadout = [...state.savedLoadout];
@@ -6240,7 +6248,7 @@ setSkillMode("off");
 saveSettings();
 applySettings();
 applyLanguage();
-updateSkillPrepUi();
+renderLobbyLoadout();
 ensureSkillCatalog().then(() => {
   const validation = validateLoadoutIds(state.savedLoadout);
   if (state.skillCatalogStatus === "ready" && state.savedLoadout.length && !validation.ok) {
@@ -6249,7 +6257,7 @@ ensureSkillCatalog().then(() => {
   } else {
     state.selectedLoadout = [...state.savedLoadout];
   }
-  updateSkillPrepUi();
+  renderLobbyLoadout();
   renderSkillDraft();
 });
 if (hasPendingReconnect) showScreen("wait");
@@ -6260,16 +6268,9 @@ window.addEventListener("resize", syncTableRailAccessibility, { passive: true })
 /* ========== 深渊技能 UI ========== */
 function setSkillMode(mode) {
   state.skillMode = mode === "abyss" ? "abyss" : "off";
-  if (el.selectedSkillTag) {
-    el.selectedSkillTag.textContent = state.skillMode === "abyss" ? t("modal.skill") : t("lobby.noSkills");
-    el.selectedSkillTag.className = "mode-pill " + (state.skillMode === "abyss" ? "abyss" : "standard");
-  }
-  el.skillModeInputs?.forEach((input) => {
-    input.checked = input.value === state.skillMode;
-  });
   if (el.waitSkillMode) el.waitSkillMode.textContent = state.skillMode === "abyss" ? t("lobby.overlimitSkills") : t("wait.skillsOff");
   if (el.waitInitialEnergy) el.waitInitialEnergy.textContent = state.skillMode === "abyss" ? "4" : "—";
-  syncProtocolUi();
+  syncLobbySelection();
 }
 
 function loadoutLoad(ids) {
@@ -7533,9 +7534,6 @@ function toggleTableRail(target) {
   syncTableRailAccessibility();
 }
 
-el.skillModeInputs?.forEach((input) =>
-  input.addEventListener("change", () => setSkillMode(input.value))
-);
 el.btnConfirmLoadout?.addEventListener("click", () => {
   if (!beginRealtimeRequest("loadout", 5000)) return;
   socket.emit("skill:loadout:set", { skillIds: state.selectedLoadout });

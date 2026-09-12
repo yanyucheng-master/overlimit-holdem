@@ -1,0 +1,279 @@
+/* Lobby composition. The existing Salon atmosphere, logo and table skin stay
+   in their original stylesheets; only the foreground hierarchy lives here. */
+body.salon-ui:has(#screen-auth.active) { overflow-y: auto; }
+.salon-ui:has(#screen-auth.active) .app-shell {
+  max-width: 1120px;
+  --lobby-top-space: 24px;
+  --lobby-bottom-space: 20px;
+  --lobby-debug-space: 0px;
+  padding: calc(var(--safe-top) + var(--lobby-top-space)) 28px calc(var(--safe-bottom) + var(--lobby-bottom-space));
+}
+.salon-ui #screen-auth.lobby-v2.active {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100dvh - var(--safe-top) - var(--safe-bottom) - var(--lobby-top-space) - var(--lobby-bottom-space) - var(--lobby-debug-space));
+  height: auto;
+  max-height: none;
+  overflow: visible;
+  gap: 0;
+}
+.salon-ui .lobby-v2 .lobby-hero-compact {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  padding: 8px 20px 8px 4px;
+  gap: 8px 20px;
+}
+.salon-ui .lobby-v2 .lobby-logo-wrap { width: 90px; height: 90px; }
+.salon-ui .lobby-v2 .brand-title.neon-title {
+  font-size: clamp(22px, 2.3vw, 30px);
+  letter-spacing: .08em;
+  overflow-wrap: anywhere;
+}
+.salon-ui .lobby-v2 .hero-kicker { display: block; font-size: 10px; }
+html[data-locale="en-US"] .salon-ui .lobby-v2 .hero-kicker { display: none; }
+.salon-ui .lobby-navigation {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  min-width: 0;
+  flex-wrap: wrap;
+}
+.salon-ui .lobby-navigation .button,
+.salon-ui .lobby-navigation .lang-btn {
+  min-height: 44px;
+  padding: 8px 10px;
+  font-size: 13px;
+  letter-spacing: 0;
+  white-space: nowrap;
+}
+.salon-ui .lobby-navigation .lobby-lang-switch { margin: 0; gap: 0; }
+.salon-ui .lobby-navigation .lang-btn { min-width: 40px; padding-inline: 6px; }
+.salon-ui .lobby-navigation .settings-trigger {
+  position: relative;
+  inset: auto;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  margin: 0;
+  flex: 0 0 44px;
+}
+.salon-ui .lobby-main {
+  width: min(100%, 640px);
+  align-self: center;
+  margin: auto 0;
+  padding: 40px 0 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.salon-ui .lobby-main > h2 {
+  margin: 0;
+  text-align: center;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: .04em;
+}
+.salon-ui .lobby-mode-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+.salon-ui .lobby-mode-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  min-width: 0;
+  min-height: 194px;
+  padding: 26px;
+  gap: 10px;
+  border: 1px solid transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.salon-ui .lobby-mode-card[data-ui-feedback] {
+  --ui-surface-bg: linear-gradient(150deg, rgba(23, 28, 38, .68), rgba(10, 13, 20, .62));
+  --ui-surface-border: rgba(210, 203, 222, .13);
+  --ui-surface-shadow: inset 0 1px 0 rgba(255, 255, 255, .025);
+  --ui-accent: 218, 192, 134;
+  color: #aaa6a2;
+}
+.salon-ui .lobby-mode-card[data-lobby-mode-card="abyss"] { --ui-accent: 177, 144, 225; }
+.salon-ui .lobby-mode-card[aria-checked="true"] {
+  --ui-surface-bg: linear-gradient(145deg, rgba(var(--ui-accent), .13), rgba(12, 15, 23, .9));
+  --ui-surface-border: rgba(var(--ui-accent), .64);
+  --ui-surface-shadow: inset 0 1px 0 rgba(var(--ui-accent), .16), 0 8px 24px rgba(0, 0, 0, .12);
+  color: var(--bone);
+}
+.salon-ui .lobby-mode-symbol { font-size: 30px; line-height: 1; color: rgba(var(--ui-accent), .65); }
+.salon-ui .lobby-mode-card[aria-checked="true"] .lobby-mode-symbol { color: rgb(var(--ui-accent)); }
+.salon-ui .lobby-mode-card strong { font-size: 23px; line-height: 1.2; font-weight: 650; color: inherit; }
+.salon-ui .lobby-mode-desc { font-size: 14px; line-height: 1.5; }
+.salon-ui .lobby-mode-card small { font-size: 12px; line-height: 1.5; color: #96929b; }
+.salon-ui .lobby-mode-check { position: absolute; top: 16px; right: 18px; color: rgb(var(--ui-accent)); opacity: 0; }
+.salon-ui .lobby-mode-card[aria-checked="true"] .lobby-mode-check { opacity: 1; }
+.salon-ui .lobby-modifier { display: flex; align-items: center; gap: 20px; padding: 0 4px; }
+.salon-ui .lobby-modifier-copy { flex: 1; min-width: 0; }
+.salon-ui .lobby-modifier-copy strong { font-size: 15px; font-weight: 600; }
+.salon-ui .lobby-modifier-copy p { color: #a09ba1; font-size: 13px; line-height: 1.6; margin: 5px 0 0; }
+.salon-ui #lobby-overdrive {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  min-width: 92px;
+  min-height: 46px;
+  padding: 10px 14px;
+  border: 1px solid transparent;
+  font: 600 13px var(--font-ui);
+  color: #a5a0a2;
+  cursor: pointer;
+  --ui-surface-bg: rgba(20, 24, 32, .7);
+  --ui-surface-border: rgba(192, 183, 168, .2);
+  --ui-surface-shadow: none;
+}
+.salon-ui #lobby-overdrive[aria-checked="true"] {
+  color: #edc785;
+  --ui-accent: 234, 179, 102;
+  --ui-surface-bg: linear-gradient(120deg, rgba(224, 159, 60, .14), rgba(30, 25, 23, .8));
+  --ui-surface-border: rgba(223, 168, 85, .55);
+}
+.overdrive-signal { display: flex; align-items: flex-end; height: 15px; gap: 2px; }
+.overdrive-signal i { display: block; width: 3px; height: 7px; background: currentColor; opacity: .45; border-radius: 1px; }
+.overdrive-signal i:nth-child(2) { height: 11px; }
+.overdrive-signal i:nth-child(3) { height: 15px; }
+[aria-checked="true"] .overdrive-signal i { opacity: 1; }
+.salon-ui .lobby-loadout {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  min-width: 0;
+  gap: 8px 12px;
+  padding: 0 4px;
+  animation: lobby-loadout-in 160ms ease-out;
+}
+.salon-ui .lobby-loadout h3 { width: 100%; margin: 0; font-size: 12px; font-weight: 500; color: #a19aa9; }
+.salon-ui .lobby-loadout-content { flex: 1 1 180px; min-width: 0; }
+.salon-ui .lobby-loadout-skills { display: flex; flex-wrap: wrap; gap: 6px; min-width: 0; }
+.salon-ui .lobby-skill-pill {
+  display: block;
+  min-width: 0;
+  max-width: min(100%, 160px);
+  padding: 5px 9px;
+  border-radius: 7px;
+  background: rgba(167, 139, 207, .09);
+  color: #cac0d7;
+  font-size: 12px;
+  line-height: 1.4;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.salon-ui #lobby-loadout-status { margin: 0; font-size: 13px; line-height: 1.6; color: #b9a6ce; }
+.salon-ui .lobby-loadout-meter { font-size: 12px; color: #a19aa9; white-space: nowrap; }
+.salon-ui .lobby-edit-loadout { gap: 6px; padding: 8px 4px; min-height: 44px; font-size: 13px; color: #c2a8e3; }
+@keyframes lobby-loadout-in { from { opacity: 0; } to { opacity: 1; } }
+html[data-animation="low"] .salon-ui .lobby-loadout { animation: lobby-loadout-in 80ms ease-out !important; }
+.salon-ui .lobby-actions { display: flex; align-items: center; flex-direction: column; gap: 10px; padding-top: 8px; }
+.salon-ui .lobby-primary-action { min-height: 54px; width: min(100%, 310px); gap: 24px; font-size: 16px; font-weight: 700; }
+.salon-ui :is(.lobby-primary-action, .lobby-edit-loadout, #btn-open-join) { display: flex; align-items: center; justify-content: center; flex-direction: row; }
+.salon-ui .lobby-secondary-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 20px; }
+.salon-ui .lobby-secondary-actions .button { min-height: 44px; padding: 9px 12px; color: #b6b1aa; font-size: 13px; }
+.salon-ui .lobby-identity-row {
+  align-self: center;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 16px;
+  width: min(100%, 640px);
+  padding-top: 12px;
+  border-top: 1px solid rgba(196, 187, 174, .1);
+}
+.salon-ui .lobby-identity { display: flex; align-items: center; min-width: 0; gap: 4px; }
+.salon-ui #lobby-player-name { max-width: 200px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; font-size: 13px; color: #a7a2a0; }
+.salon-ui #btn-edit-name { min-height: 44px; min-width: 44px; padding: 8px; color: #aaa3ae; font-size: 18px; }
+.salon-ui #btn-open-join { min-height: 44px; padding: 8px 0 8px 8px; gap: 10px; font-size: 13px; color: #a7a2a0; }
+.salon-ui .lobby-small-panel { width: min(100%, 400px); max-height: 100%; overflow: auto; padding: 24px; }
+.salon-ui .lobby-small-panel input { width: 100%; min-width: 0; min-height: 46px; font-size: 16px; }
+.salon-ui .lobby-small-panel .modal-header h2 { font-size: 20px; }
+.salon-ui .lobby-small-panel .modal-actions .button { min-height: 44px; }
+
+/* Reserve actual space for the local-only launcher instead of adding it below
+   a lobby that already occupies the full viewport. */
+@media (max-width: 1100px) {
+  .salon-ui:has(#screen-auth.active) .app-shell:has(#btn-skill-fx-gallery:not(.hidden)) { --lobby-debug-space: 46px; }
+  .salon-ui:has(#screen-auth.active) #btn-skill-fx-gallery { position: static; display: block; margin: 8px 0 0 auto; height: 38px; }
+}
+
+@media (min-width: 701px) and (max-height: 800px) {
+  .salon-ui:has(#screen-auth.active) .app-shell { --lobby-top-space: 12px; --lobby-bottom-space: 12px; }
+  .salon-ui .lobby-v2 .lobby-logo-wrap { width: 64px; height: 64px; }
+  .salon-ui .lobby-main { padding: 12px 0; gap: 12px; }
+  .salon-ui .lobby-main > h2 { font-size: 22px; }
+  .salon-ui .lobby-mode-card { min-height: 144px; padding: 18px 22px; gap: 6px; }
+  .salon-ui .lobby-mode-symbol { font-size: 24px; }
+  .salon-ui .lobby-mode-card strong { font-size: 21px; }
+  .salon-ui .lobby-actions { padding-top: 0; gap: 4px; }
+  .salon-ui .lobby-primary-action { min-height: 50px; }
+  .salon-ui .lobby-identity-row { padding-top: 4px; }
+}
+
+@media (max-width: 700px) {
+  .salon-ui:has(#screen-auth.active) .app-shell { --lobby-top-space: 10px; --lobby-bottom-space: 10px; padding-inline: 16px; }
+  .salon-ui .lobby-v2 .lobby-hero-compact { padding: 4px 8px; gap: 0; }
+  .salon-ui .lobby-v2 .lobby-brand { flex-basis: 100%; }
+  .salon-ui .lobby-v2 .lobby-logo-wrap { width: 48px; height: 48px; }
+  .salon-ui .lobby-v2 .brand-title.neon-title { font-size: 20px; }
+  .salon-ui .lobby-navigation { width: 100%; justify-content: space-between; flex-wrap: nowrap; gap: 0; }
+  .salon-ui .lobby-navigation .button { padding: 8px 6px; font-size: 12px; }
+  .salon-ui .lobby-navigation .lang-btn { padding: 8px 4px; font-size: 12px; min-width: 34px; }
+  .salon-ui .lobby-main { padding: 12px 0; gap: 12px; }
+  .salon-ui .lobby-main > h2 { font-size: 20px; }
+  .salon-ui .lobby-mode-grid { gap: 12px; }
+  .salon-ui .lobby-mode-card { min-height: 144px; padding: 16px 12px; gap: 6px; }
+  .salon-ui .lobby-mode-card strong { font-size: 19px; }
+  .salon-ui .lobby-mode-symbol { display: none; }
+  .salon-ui .lobby-mode-desc { font-size: 13px; }
+  .salon-ui .lobby-mode-card small { font-size: 12px; }
+  .salon-ui .lobby-mode-check { top: 6px; right: 8px; font-size: 12px; }
+  .salon-ui .lobby-modifier { gap: 12px; padding-inline: 0; }
+  .salon-ui #lobby-overdrive { min-width: 82px; padding-inline: 10px; }
+  .salon-ui .lobby-loadout { display: grid; grid-template-columns: minmax(0, 1fr) auto; padding: 0; gap: 4px 10px; }
+  .salon-ui .lobby-loadout h3 { grid-column: 1; grid-row: 1; }
+  .salon-ui .lobby-loadout-content { grid-column: 1; grid-row: 2; }
+  .salon-ui .lobby-loadout-skills { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+  .salon-ui .lobby-skill-pill { padding: 4px 6px; }
+  .salon-ui .lobby-loadout-meter { grid-column: 2; grid-row: 1; text-align: right; }
+  .salon-ui .lobby-edit-loadout { grid-column: 2; grid-row: 2; justify-self: end; margin: 0; font-size: 12px; }
+  .salon-ui .lobby-actions { padding-top: 0; gap: 4px; }
+  .salon-ui .lobby-primary-action { width: min(100%, 290px); min-height: 50px; }
+  .salon-ui .lobby-secondary-actions { gap: 4px 12px; }
+  .salon-ui .lobby-identity-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0 6px; padding-top: 4px; }
+  .salon-ui #lobby-player-name { flex: 1; min-width: 0; font-size: 12px; }
+  .salon-ui #btn-edit-name { flex-shrink: 0; }
+  .salon-ui #btn-open-join { font-size: 12px; gap: 4px; padding-left: 0; white-space: nowrap; }
+}
+@media (max-width: 350px) {
+  .salon-ui .lobby-v2 .lobby-hero-compact { padding-inline: 4px; }
+  .salon-ui .lobby-navigation .button { padding-inline: 4px; }
+  .salon-ui .lobby-navigation .lang-btn { min-width: 32px; padding-inline: 3px; }
+  .salon-ui .lobby-mode-grid { gap: 10px; }
+  .salon-ui .lobby-mode-card { padding: 14px 10px; }
+  .salon-ui .lobby-mode-card strong { font-size: 18px; }
+  .salon-ui .lobby-small-panel { padding: 18px; }
+}
+
+@media (max-width: 700px) and (max-height: 740px) {
+  .salon-ui:has(#screen-auth.active) .app-shell { --lobby-top-space: 4px; --lobby-bottom-space: 4px; }
+  .salon-ui .lobby-main { padding-block: 6px; gap: 10px; }
+  .salon-ui .lobby-main > h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  .salon-ui .lobby-mode-card { min-height: 120px; padding-block: 10px; gap: 4px; }
+}

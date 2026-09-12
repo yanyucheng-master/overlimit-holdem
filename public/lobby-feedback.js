@@ -5,11 +5,11 @@
   if (!doc) return;
   const modalIds = [
     "settings-modal", "rules-handbook-modal", "quickstart-modal", "quickstart-image-modal",
-    "skill-preview-modal", "match-queue-modal", "match-continue-modal", "match-invite-modal", "join-password-modal",
+    "skill-preview-modal", "match-queue-modal", "match-continue-modal", "match-invite-modal", "join-password-modal", "nickname-modal", "lobby-join-modal",
   ];
   const scopes = ["screen-auth", "screen-skill-lab", "btn-settings", ...modalIds]
     .map((id) => doc.getElementById(id)).filter(Boolean);
-  const targetSelector = "button:not(#rules-toc-backdrop), a[href], .protocol-card, [data-quickstart-zoom], .allin-style-option";
+  const targetSelector = "button:not(#rules-toc-backdrop), a[href], [data-lobby-mode-card], [data-quickstart-zoom], .allin-style-option";
   const timers = new Map();
   const pageAnimations = new Map();
   let active = null;
@@ -33,7 +33,7 @@
       const surface = trigger.matches(".skill-card-select") ? trigger.closest(".skill-card") : trigger;
       if (!surface) continue;
       const kind = trigger.matches(".skill-card-select") ? "skill"
-        : trigger.matches(".protocol-card") ? "card"
+        : trigger.matches("[data-lobby-mode-card]") ? "card"
           : trigger.matches("[data-quickstart-zoom], .allin-style-option") ? "media" : "control";
       if (!surface.dataset.uiFeedback) {
         surface.dataset.uiFeedback = kind;
@@ -199,13 +199,13 @@
         }
       }
       for (const [trigger, previous] of selections) {
-        const selected = trigger.getAttribute("aria-pressed") || trigger.getAttribute("aria-current");
+        const selected = trigger.getAttribute("aria-checked") || trigger.getAttribute("aria-pressed") || trigger.getAttribute("aria-current");
         if (selected === previous || !["true", "page"].includes(selected)) continue;
         const hit = resolve(trigger);
         if (hit) pulse(hit.surface, true);
       }
     });
-    observer.observe(scope, { subtree: true, childList: true, attributes: true, attributeFilter: ["aria-current", "aria-pressed"], attributeOldValue: true });
+    observer.observe(scope, { subtree: true, childList: true, attributes: true, attributeFilter: ["aria-current", "aria-pressed", "aria-checked"], attributeOldValue: true });
   });
 
   new MutationObserver(() => {
