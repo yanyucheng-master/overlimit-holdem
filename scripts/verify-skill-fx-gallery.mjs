@@ -6,7 +6,7 @@ import playwrightRuntime from "./playwright-runtime.js";
 const BASE = process.env.BASE_URL || "http://127.0.0.1:3002";
 const CAPTURE_DIR = process.env.SKILL_FX_CAPTURE_DIR || "";
 const EXPECTED_SKILLS = 23;
-const EXPECTED_OPTIONS = EXPECTED_SKILLS + 1;
+const EXPECTED_OPTIONS = EXPECTED_SKILLS + 9;
 const MOBILE_GALLERY_VIEWPORTS = [
   { width: 320, height: 700 },
   { width: 360, height: 800 },
@@ -890,8 +890,10 @@ async function main() {
       skill: node.dataset.skill,
       family: node.dataset.effect,
       glyph: node.querySelector(".skill-effect-glyph")?.textContent || "",
-      haloAnimation: getComputedStyle(node.querySelector(".halo-a")).animationName,
-      cardsVisible: [...node.querySelectorAll(".skill-effect-card")].some((card) => getComputedStyle(card).display !== "none"),
+      artMotion: node.querySelector(".fx-art")?.dataset.motion || "",
+      // Compare rendered geometry, independent of labels and gradient IDs.
+      geometry: [...node.querySelectorAll(".fx-art-svg path")].map((path) => path.getAttribute("d")).join("|"),
+      cardsVisible: [...node.querySelectorAll(".fx-card-piece")].some((card) => getComputedStyle(card).display !== "none"),
       stageData: Boolean(node.querySelector(".skill-effect-stage-data")),
     })));
   }
@@ -1128,7 +1130,8 @@ async function main() {
   if (lowQualityDecoration.quality !== "low" || lowQualityDecoration.stageDisplay === "none" || lowQualityDecoration.impactDisplay === "none" || lowQualityDecoration.packetDisplay !== "none") failures.push("Low quality did not preserve the reduced central director");
   if (lowQualityMotion.motion !== "reduced" || lowQualityMotion.stageDisplay === "none" || lowQualityMotion.impactDisplay === "none" || lowQualityMotion.routeDisplay !== "none" || lowQualityMotion.bodyShakes) failures.push("Low quality central stage/impact contract failed");
   if (captionless.captionDisplay !== "none" || captionless.coreDisplay === "none") failures.push("captionless graphical identity mode failed");
-  if (new Set(graphicalSignatures.map((entry) => `${entry.family}|${entry.glyph}|${entry.haloAnimation}|${entry.cardsVisible}|${entry.stageData}`)).size < 12) failures.push("core skills are not graphically distinct enough without captions");
+  if (graphicalSignatures.some((entry) => !entry.geometry || !entry.artMotion)
+    || new Set(graphicalSignatures.map((entry) => entry.geometry)).size < 12) failures.push("core skills are not graphically distinct enough without captions");
   if (!guides.stageControl || !guides.targetControl || Number(guides.stageVisible) < .5 || Number(guides.targetVisible) < .5) failures.push("Gallery stage/target guides are unavailable");
   if (Object.values(pointerSafety).some((value) => value !== "none")) failures.push("an FX layer blocks pointer input");
   if (!fairnessCompletion.accepted || fairnessCompletion.addedInstances !== 1 || fairnessCompletion.removedInstances !== 1

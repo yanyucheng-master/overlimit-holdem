@@ -4,6 +4,7 @@
   if (!root || !root.document) return;
   const profilesApi = root.OVERLIMIT_SKILL_FX;
   const managerApi = root.OverlimitSkillFx;
+  const artApi = root.OverlimitSkillFxArt;
   if (!profilesApi || !managerApi) return;
 
   const byId = (id) => document.getElementById(id);
@@ -57,15 +58,30 @@
     return `${name} / ${profile.english} · ${profile.tier}`;
   }
 
+  const protocolNames = {
+    PROTOCOL_HIGH_CARD: ["高牌", "High Card"], PROTOCOL_PAIR: ["对子", "Pair"],
+    PROTOCOL_TWO_PAIR: ["两对", "Two Pair"], PROTOCOL_TRIPS: ["三条", "Three of a Kind"],
+    PROTOCOL_STRAIGHT: ["顺子", "Straight"], PROTOCOL_FLUSH: ["同花", "Flush"],
+    PROTOCOL_FULL_HOUSE: ["葫芦", "Full House"], PROTOCOL_QUADS: ["四条", "Four of a Kind"],
+    PROTOCOL_STRAIGHT_FLUSH: ["同花顺", "Straight Flush"],
+  };
+  function protocolOptionLabel(id) {
+    const english = document.documentElement.lang?.startsWith("en");
+    return `${english ? "Protocol" : "协议"} · ${protocolNames[id][english ? 1 : 0]} · FX3`;
+  }
+
   function relocalizeGallery() {
     [...controls.skill.options].forEach((option) => {
-      if (option.value === "PROTOCOL_PAIR") {
-        option.textContent = tt("modal.galleryProtocol");
+      if (Object.hasOwn(protocolNames, option.value)) {
+        option.textContent = protocolOptionLabel(option.value);
         return;
       }
       const profile = profilesApi.SKILL_FX_PROFILES[option.value];
       if (profile) option.textContent = skillOptionLabel(profile);
     });
+    const english = document.documentElement.lang?.startsWith("en");
+    byId("btn-preview-endgame-declare").textContent = english ? "Endgame · Declare" : "终局 · 宣告";
+    byId("btn-preview-endgame-execution").textContent = english ? "Endgame · Execute" : "终局 · 执行";
   }
 
   Object.values(profilesApi.SKILL_FX_PROFILES).forEach((profile) => {
@@ -74,10 +90,12 @@
     option.textContent = skillOptionLabel(profile);
     controls.skill.appendChild(option);
   });
-  const protocolOption = document.createElement("option");
-  protocolOption.value = "PROTOCOL_PAIR";
-  protocolOption.textContent = tt("modal.galleryProtocol");
-  controls.skill.appendChild(protocolOption);
+  Object.keys(protocolNames).forEach((id) => {
+    const option = document.createElement("option");
+    option.value = id;
+    option.textContent = protocolOptionLabel(id);
+    controls.skill.appendChild(option);
+  });
 
   const anchor = (name) => stage.querySelector(`[data-fx-gallery-anchor="${name}"]`);
   const targetMarker = byId("skill-fx-gallery-target-marker");
@@ -163,14 +181,49 @@
     if (Number.isFinite(height)) targetMarker.style.height = `${Math.max(24, Math.min(120, height))}px`;
   }
 
-  function replay() {
-    manager.clear({ keepStates: true });
+  let cinematicPreview = null;
+  let cinematicTimer = null;
+  function clearCinematicPreview() {
+    if (cinematicTimer !== null) clearTimeout(cinematicTimer);
+    cinematicTimer = null;
+    cinematicPreview?.remove();
+    cinematicPreview = null;
+  }
+  function syncQuality() {
     gallerySettings.quality = managerApi.normalizeQuality(controls.quality.value);
     const setting = byId("setting-animation");
     if (setting && setting.value !== gallerySettings.quality) {
       setting.value = gallerySettings.quality;
       setting.dispatchEvent(new Event("change", { bubbles: true }));
     }
+  }
+  function previewEndgame(kind = "declare") {
+    clearCinematicPreview();
+    manager.clear();
+    syncQuality();
+    const execution = kind === "execution";
+    const source = byId(execution ? "flash-endgame-kill" : "flash-endgame-declare");
+    if (!source || !artApi) return false;
+    cinematicPreview = source.cloneNode(true);
+    cinematicPreview.removeAttribute("id");
+    cinematicPreview.classList.remove("hidden", "is-result-hold", "is-restored-hold", "is-impact-shake");
+    cinematicPreview.classList.add("skill-fx-gallery-endgame");
+    // Recreate art instead of duplicating gradient IDs from the live overlay.
+    cinematicPreview.querySelector(".fx-endgame-art")?.remove();
+    cinematicPreview.querySelectorAll("[id]").forEach((node) => node.removeAttribute("id"));
+    cinematicPreview.appendChild(artApi.createEndgame(execution));
+    cinematicPreview.dataset.previewKind = kind;
+    cinematicPreview.style.setProperty(execution ? "--egk-dur" : "--egd-dur", execution ? "2800ms" : "2600ms");
+    stage.appendChild(cinematicPreview);
+    syncAnchorGuides();
+    statusText.textContent = execution ? "ENDGAME · EXECUTION" : "ENDGAME · DECLARE";
+    cinematicTimer = setTimeout(clearCinematicPreview, execution ? 2800 : 2600);
+    return true;
+  }
+  function replay() {
+    clearCinematicPreview();
+    manager.clear({ keepStates: true });
+    syncQuality();
     const perspective = controls.perspective.value;
     const disclosure = controls.disclosure.value;
     const skillId = controls.skill.value;
@@ -229,7 +282,9 @@
         : skillId === "LOAN" && controls.variant.value === "chip"
           ? ["CREDIT +100"]
           : [],
-      effectLabel: deepBreathRefund
+      effectLabel: controls.status.value === "FAILED" ? "RESOLUTION FAILED"
+        : controls.status.value === "COUNTERED" ? "INTERRUPTED"
+        : deepBreathRefund
         ? "ENERGY RETURN +2"
         : skillId === "LOAN" && controls.variant.value === "chip"
           ? "CHIP CREDIT +100"
@@ -261,6 +316,7 @@
   }
 
   function closeGallery() {
+    clearCinematicPreview();
     manager.clear();
     modal.classList.add("hidden");
     launcher.focus();
@@ -269,7 +325,8 @@
   function syncDisclosureForProfile() {
     const profile = profilesApi.getSkillFxProfile(controls.skill.value);
     if (!profile) return;
-    if (profile.visibility === profilesApi.VISIBILITY.PUBLIC) controls.disclosure.value = "public";
+    if (profilesApi.isProtocolSkillId(controls.skill.value)
+      || profile.visibility === profilesApi.VISIBILITY.PUBLIC) controls.disclosure.value = "public";
     else if (profile.visibility === profilesApi.VISIBILITY.RESULT) controls.disclosure.value = "result";
     else controls.disclosure.value = controls.perspective.value === "self" ? "self" : "secret";
   }
@@ -278,10 +335,13 @@
   controls.close.addEventListener("click", closeGallery);
   controls.replay.addEventListener("click", replay);
   controls.stop.addEventListener("click", () => {
+    clearCinematicPreview();
     manager.clear();
     syncAnchorGuides();
     statusText.textContent = "STOPPED";
   });
+  byId("btn-preview-endgame-declare").addEventListener("click", () => previewEndgame("declare"));
+  byId("btn-preview-endgame-execution").addEventListener("click", () => previewEndgame("execution"));
   controls.skill.addEventListener("change", () => {
     syncDisclosureForProfile();
     replay();
@@ -302,10 +362,12 @@
     open: openGallery,
     close: closeGallery,
     replay,
+    previewEndgame,
     manager,
     enabled: true,
   });
 
   syncDisclosureForProfile();
+  relocalizeGallery();
   if (new URLSearchParams(root.location?.search || "").get("skillfx") === "gallery") openGallery();
 })(typeof globalThis !== "undefined" ? globalThis : this);

@@ -3644,7 +3644,10 @@ function syncLobbySelection() {
 }
 
 function renderLobbyLoadout() {
-  el.lobbyLoadout.classList.toggle("hidden", state.skillMode !== "abyss");
+  const inactive = state.skillMode !== "abyss";
+  el.lobbyLoadout.classList.toggle("is-inactive", inactive);
+  el.lobbyLoadout.inert = inactive;
+  el.lobbyLoadout.setAttribute("aria-hidden", String(inactive));
   const validation = validateLoadoutIds(state.savedLoadout);
   const ready = validation.ok;
   const { maxLoad } = currentSkillBuildLimits();

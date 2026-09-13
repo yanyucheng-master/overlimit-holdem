@@ -77,6 +77,40 @@ async function scenario(name, options, run) {
 async function selection(page) {
   return page.evaluate(() => ({ gameMode: state.gameMode, skillMode: state.skillMode }));
 }
+async function auditModeSwitch(page, skillMode) {
+  await lobby.stable(page);
+  await page.evaluate(() => {
+    const targets = [...document.querySelectorAll('.lobby-mode-grid, .lobby-modifier, #screen-auth [data-room-action], .lobby-identity-row')];
+    const bounds = (node) => {
+      const { x, y, width, height } = node.getBoundingClientRect();
+      return { x, y, width, height };
+    };
+    const audit = { baseline: targets.map(bounds), maxDelta: 0, samples: 0, frame: 0 };
+    const sample = () => {
+      targets.forEach((node, index) => {
+        const current = bounds(node);
+        for (const key of Object.keys(current)) audit.maxDelta = Math.max(audit.maxDelta, Math.abs(current[key] - audit.baseline[index][key]));
+      });
+      audit.samples++;
+      audit.frame = requestAnimationFrame(sample);
+    };
+    window.__lobbySwitchAudit = audit;
+    sample();
+  });
+  try {
+    await page.locator(`[data-lobby-mode-card="${skillMode}"]`).click();
+    await lobby.stable(page);
+    const audit = await page.evaluate(() => ({ maxDelta: window.__lobbySwitchAudit.maxDelta, samples: window.__lobbySwitchAudit.samples }));
+    check(audit.samples > 1, true, "mode switch sampled throughout feedback");
+    check(audit.maxDelta <= 0.5, true, "cards and all launch targets remain stationary: " + JSON.stringify(audit));
+    return audit;
+  } finally {
+    await page.evaluate(() => {
+      cancelAnimationFrame(window.__lobbySwitchAudit.frame);
+      delete window.__lobbySwitchAudit;
+    });
+  }
+}
 async function waitAction(page, action) {
   const event = actionEvents[action];
   await page.waitForFunction((event) => window.__lobbyOutgoing.some((item) => item.event === event), event);
@@ -106,11 +140,14 @@ try {
         gameMode: state.gameMode, skillMode: state.skillMode,
         cards: document.querySelectorAll('[role="radiogroup"] [role="radio"]').length,
         actions: document.querySelectorAll("#screen-auth [data-room-action]").length,
-        hiddenLoadout: document.getElementById("lobby-loadout").getBoundingClientRect().height,
+        reservedLoadout: document.getElementById("lobby-loadout").getBoundingClientRect().height > 0,
+        hiddenLoadout: getComputedStyle(document.getElementById("lobby-loadout")).visibility === "hidden",
+        inertLoadout: document.getElementById("lobby-loadout").inert,
+        ariaHiddenLoadout: document.getElementById("lobby-loadout").getAttribute("aria-hidden") === "true",
         classic: document.querySelector('[data-lobby-mode-card="off"]').getAttribute("aria-checked"),
         overdrive: document.getElementById("lobby-overdrive").getAttribute("aria-checked"),
       }));
-      check(initial, { gameMode: "standard", skillMode: "off", cards: 2, actions: 3, hiddenLoadout: 0, classic: "true", overdrive: "false" }, "default information architecture");
+      check(initial, { gameMode: "standard", skillMode: "off", cards: 2, actions: 3, reservedLoadout: true, hiddenLoadout: true, inertLoadout: true, ariaHiddenLoadout: true, classic: "true", overdrive: "false" }, "default information architecture and inactive reserved loadout");
       const classicLayout = await lobby.auditLobbyLayout(page);
       check(classicLayout.ok, true, JSON.stringify(classicLayout));
       const prefix = `${viewport.width}-${locale}-${quality}`;
@@ -121,16 +158,20 @@ try {
       await page.locator("#lobby-overdrive").click();
       check(await selection(page), { gameMode: "overdrive", skillMode: "off" }, "Classic Overdrive mapping");
       if (desktop) await capture(page, "desktop-classic-overdrive");
-      await page.locator('[data-lobby-mode-card="abyss"]').click();
+      const enterSkills = await auditModeSwitch(page, "abyss");
       check(await selection(page), { gameMode: "overdrive", skillMode: "abyss" }, "Skill selection retains modifier");
       const equipped = await page.evaluate(() => ({
-        visible: document.getElementById("lobby-loadout").getBoundingClientRect().height > 0,
+        visible: getComputedStyle(document.getElementById("lobby-loadout")).visibility === "visible",
+        active: !document.getElementById("lobby-loadout").inert && document.getElementById("lobby-loadout").getAttribute("aria-hidden") === "false",
+        belowActions: document.getElementById("lobby-loadout").getBoundingClientRect().top >= document.querySelector(".lobby-actions").getBoundingClientRect().bottom,
         names: [...document.querySelectorAll(".lobby-skill-pill")].map((tag) => tag.textContent),
         expected: state.savedLoadout.map((id) => skillCopy(id, "name")),
         meter: document.getElementById("lobby-loadout-meter").textContent,
         expectedMeter: t("lobby.loadMeter", { load: validateLoadoutIds(state.savedLoadout).load, maxLoad: currentSkillBuildLimits().maxLoad }),
       }));
       check(equipped.visible, true, "conditional loadout row");
+      check(equipped.active, true, "Skills loadout remains accessible");
+      check(equipped.belowActions, true, "loadout follows the complete launch action group");
       check(equipped.names, equipped.expected, "equipped names only");
       check(equipped.meter, equipped.expectedMeter, "load comes from existing validation");
       if (desktop) await capture(page, "desktop-skill-overdrive");
@@ -143,8 +184,11 @@ try {
       if (viewport.width === 390 && locale === "zh-CN" && quality === "high") await capture(page, "mobile-skill");
       if (viewport.width === 390 && locale === "en-US" && quality === "high") await capture(page, "mobile-en");
       const saved = await page.evaluate(() => ({ saved: [...state.savedLoadout], selected: [...state.selectedLoadout], storage: localStorage.getItem("abyss_skill_loadout_v2") }));
-      await page.locator('[data-lobby-mode-card="off"]').click();
-      check(await page.locator("#lobby-loadout").evaluate((row) => row.getBoundingClientRect().height), 0, "Classic leaves no loadout placeholder");
+      const returnClassic = await auditModeSwitch(page, "off");
+      check(await page.locator("#lobby-loadout").evaluate((row) => row.getBoundingClientRect().height > 0 && row.inert && row.getAttribute("aria-hidden") === "true"), true, "Classic reserves the loadout space but disables interaction and accessibility exposure");
+      check(await page.locator("#btn-open-skill-lab").isVisible(), false, "Classic does not display the loadout entry");
+      await page.keyboard.press("Tab");
+      check(await page.evaluate(() => document.getElementById("lobby-loadout").contains(document.activeElement)), false, "Classic keyboard navigation skips the inactive loadout");
       check(await page.evaluate(() => ({ saved: [...state.savedLoadout], selected: [...state.selectedLoadout], storage: localStorage.getItem("abyss_skill_loadout_v2") })), saved, "Classic preserves both loadouts and storage");
       await lobby.selectLobbyMode(page, "overdrive", "abyss");
       await page.locator("#btn-open-skill-lab").click();
@@ -159,7 +203,7 @@ try {
       await page.keyboard.press("Escape");
       await page.locator("#lobby-join-modal").waitFor({ state: "hidden" });
       check(await page.locator("#btn-open-join").evaluate((node) => node === document.activeElement), true, "Join returns focus");
-      return { classicLayout, skillLayout };
+      return { classicLayout, skillLayout, enterSkills, returnClassic };
     });
   }
 

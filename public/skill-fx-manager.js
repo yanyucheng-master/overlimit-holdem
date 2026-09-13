@@ -3,10 +3,12 @@
     || (typeof require === "function" ? require("./skill-fx-profiles") : null);
   const qualityApi = root?.OverlimitVisualQuality
     || (typeof require === "function" ? require("./visual-quality") : null);
-  const api = factory(profilesApi, qualityApi);
+  const artApi = root?.OverlimitSkillFxArt
+    || (typeof require === "function" ? require("./skill-fx-art") : null);
+  const api = factory(profilesApi, qualityApi, artApi);
   if (typeof module === "object" && module.exports) module.exports = api;
   if (root) root.OverlimitSkillFx = api;
-})(typeof globalThis !== "undefined" ? globalThis : this, function buildSkillFxManager(profilesApi, qualityApi) {
+})(typeof globalThis !== "undefined" ? globalThis : this, function buildSkillFxManager(profilesApi, qualityApi, artApi) {
   "use strict";
 
   const SHAKE_ALLOWLIST = new Set(["FAIRNESS", "DEAD_END", "BLOOD_BATTLE"]);
@@ -497,6 +499,15 @@
       const node = makeAtom("article", "skill-effect-instance");
       const revealIdentity = revealsSkillIdentity(event);
       const neutralResult = event.resultOnly === true && !revealIdentity;
+      // Art selection is downstream of disclosure. Never pass a private identity
+      // into the artwork library for an anonymous public resolution.
+      const artOptions = {
+        family: neutralResult ? "result" : profile.family,
+        skillId: neutralResult ? "RESULT" : event.skillId,
+        variant: neutralResult ? "default" : cleanToken(event.variant || event.mode || "default").toLowerCase(),
+        status: cleanToken(event.status || "SUCCESS").toLowerCase(),
+      };
+      node.dataset.art = "polished";
       const impactType = cleanToken(neutralResult
         ? (event.publicImpact || "hud")
         : (event.impact || event.impactType
@@ -551,22 +562,10 @@
       const stage = makeAtom("div", "skill-effect-stage");
       const core = makeAtom("div", "skill-effect-core");
       core.append(
-        makeAtom("i", "skill-effect-halo halo-a"),
-        makeAtom("i", "skill-effect-halo halo-b"),
-        makeAtom("i", "skill-effect-line line-a"),
-        makeAtom("i", "skill-effect-line line-b"),
-        makeAtom("i", "skill-effect-line line-c"),
-        makeAtom("i", "skill-effect-card card-a"),
-        makeAtom("i", "skill-effect-card card-b"),
-        makeAtom("i", "skill-effect-card card-c"),
+        artApi.createCore(artOptions),
         makeAtom("strong", "skill-effect-glyph", neutralResult ? "✓" : (event.glyph || profile.glyph))
       );
-      const particles = makeAtom("div", "skill-effect-particles");
-      for (let index = 0; index < 8; index += 1) {
-        const particle = makeAtom("i", `particle particle-${index + 1}`);
-        particles.appendChild(particle);
-      }
-      core.appendChild(particles);
+      node.dataset.numeric = !neutralResult && /[0-9½]/.test(String(event.glyph || profile.glyph)) ? "true" : "false";
 
       const configuredStageLines = neutralResult
         ? []
@@ -584,31 +583,39 @@
 
       const route = makeAtom("div", "skill-effect-route");
       route.append(
-        makeAtom("i", "route-line"),
+        artApi.createRoute(),
         makeAtom("i", "route-packet packet-a"),
         makeAtom("i", "route-packet packet-b")
       );
 
-      const impact = makeAtom("div", "skill-effect-impact");
-      impact.append(
-        makeAtom("i", "skill-impact-outline"),
-        makeAtom("i", "skill-impact-ring"),
-        makeAtom("i", "skill-impact-flash"),
-        makeAtom("strong", "skill-impact-glyph", neutralResult ? "✓" : impactGlyphFor({ ...profile, impact: impactType }, event))
-      );
+      const makeImpact = () => {
+        const surface = makeAtom("div", "skill-effect-impact");
+        surface.append(
+          artApi.createImpact(artOptions),
+          makeAtom("strong", "skill-impact-glyph", neutralResult ? "✓"
+            : event.impactGlyph != null ? event.impactGlyph
+              : node.dataset.numeric === "true" ? (event.glyph || profile.glyph)
+                : impactGlyphFor({ ...profile, impact: impactType }, event))
+        );
+        return surface;
+      };
+      const impact = makeImpact();
       if (isElement(event.secondaryTargetElement)) {
         node.dataset.dualTarget = "true";
-        const secondaryImpact = impact.cloneNode(true);
+        // Each SVG owns unique gradient IDs, including dual-target effects.
+        const secondaryImpact = makeImpact();
         secondaryImpact.classList.add("skill-effect-impact-secondary");
         node.appendChild(secondaryImpact);
       }
 
       const caption = makeAtom("div", "skill-effect-caption");
+      const identityProfile = profile.family === "protocol" && !neutralResult
+        ? { ...profile, id: event.skillId } : profile;
       node.dataset.identity = revealIdentity ? "revealed" : "result-only";
       node.dataset.caption = event.stageCaption === false ? "hidden" : "visible";
       caption.append(
-        makeAtom("strong", "skill-effect-title", revealIdentity ? localizedSkillName(profile) : cleanToken(event.resultTitle || profile.resultLabel)),
-        makeAtom("span", "skill-effect-kicker", revealIdentity ? localizedSkillKicker(profile) : (event.resultOnly ? "PUBLIC RESULT" : "TACTICAL RESULT")),
+        makeAtom("strong", "skill-effect-title", revealIdentity ? localizedSkillName(identityProfile) : cleanToken(event.resultTitle || profile.resultLabel)),
+        makeAtom("span", "skill-effect-kicker", revealIdentity ? localizedSkillKicker(identityProfile) : (event.resultOnly ? "PUBLIC RESULT" : "TACTICAL RESULT")),
         makeAtom("em", "skill-effect-result", cleanToken(event.effectLabel || event.safeMessage || profile.resultLabel))
       );
       if (compositeSkills.length > 1) {

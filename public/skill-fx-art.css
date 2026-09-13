@@ -1,0 +1,355 @@
+/* Authored skill materials. Scheduling and target geometry belong to the
+   manager; this layer owns only artwork, local motion and optical response. */
+.fx-art, .fx-endgame-art {
+  --fx-vapor-opacity: .16;
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  user-select: none;
+}
+.fx-art-svg, .fx-impact-art, .fx-route-art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: none;
+  fill: none;
+}
+.fx-art-svg { position: relative; }
+.fx-stop-light { stop-color: #f5fcff; }
+.fx-stop-accent { stop-color: var(--fx-accent); }
+.fx-stop-secondary { stop-color: var(--fx-secondary); }
+.fx-stop-dark { stop-color: color-mix(in srgb, var(--fx-accent) 24%, #050911); }
+.fx-metal { fill: var(--fx-metal-fill); stroke: color-mix(in srgb, var(--fx-accent) 60%, #fff); stroke-width: .7; }
+.fx-crystal { fill: var(--fx-crystal-fill); stroke: color-mix(in srgb, var(--fx-accent) 74%, #fff); stroke-width: .85; }
+.fx-facet { fill: #fff; opacity: .12; }
+.fx-edge, .fx-thread {
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke: color-mix(in srgb, var(--fx-accent) 35%, #fff);
+  stroke-width: 1.1;
+}
+.fx-thread { stroke-width: .6; opacity: .56; }
+.fx-shade { fill: #070d19; fill-opacity: .67; }
+.fx-silk { fill: var(--fx-silk-fill); }
+.fx-haze { fill: var(--fx-haze-fill); }
+.fx-shadow { fill: #040911; opacity: .7; }
+.fx-void { fill: #02050e; fill-opacity: .88; }
+.fx-glint { fill: #effcff; fill-opacity: .8; }
+.fx-vapor {
+  position: absolute;
+  inset: -13%;
+  display: block;
+  background: linear-gradient(155deg, var(--fx-secondary), var(--fx-accent) 57%, #fff);
+  -webkit-mask: url("./assets/skill-fx-vapor-v1.png") center / contain no-repeat;
+  mask: url("./assets/skill-fx-vapor-v1.png") center / contain no-repeat;
+  opacity: .24;
+  mix-blend-mode: screen;
+  pointer-events: none;
+}
+
+/* Retire the old generic frames and crosshair flashes. */
+.skill-effect-instance[data-art="polished"] .skill-effect-atmosphere::before,
+.skill-effect-instance[data-art="polished"] .skill-effect-atmosphere::after,
+.skill-effect-instance[data-art="polished"] .skill-effect-impact::before,
+.skill-effect-instance[data-art="polished"] .skill-effect-impact::after { content: none; }
+.skill-effect-instance[data-art="polished"] { --fx-art-size: 226px; }
+.skill-effect-instance[data-art="polished"][data-tier="FX1"] { --fx-art-size: 130px; }
+.skill-effect-instance[data-art="polished"][data-tier="FX3"] { --fx-art-size: 280px; }
+.skill-effect-instance[data-art="polished"][data-tier="FX4"] { --fx-art-size: 340px; }
+.skill-effect-instance[data-art="polished"][data-effect="result"] { --fx-art-size: 120px; }
+.skill-effect-instance[data-art="polished"][data-effect="intimidation"] { --fx-art-size: 240px; }
+.skill-effect-instance[data-art="polished"][data-effect="breath"][data-variant="refund"] { --fx-art-size: 138px; }
+.skill-effect-instance[data-art="polished"][data-effect][data-tier] .skill-effect-core {
+  width: var(--fx-art-size);
+  height: calc(var(--fx-art-size) * .833333);
+  filter: drop-shadow(0 2px 3px #03070dcc) drop-shadow(0 0 9px color-mix(in srgb, var(--fx-accent) 26%, transparent));
+  animation: fx-art-manifest var(--fx-manifest-ms) cubic-bezier(.16,.8,.24,1) var(--fx-anticipation-ms) both;
+}
+.skill-effect-instance[data-art="polished"][data-effect="intimidation"][data-tier] .skill-effect-core {
+  top: clamp(calc(var(--fx-art-size) * .416667 + 12px), var(--fx-stage-y), calc(100% - var(--fx-art-size) * .416667 - 12px));
+}
+.skill-effect-instance[data-art="polished"] .skill-effect-impact {
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--fx-accent) 40%, transparent));
+}
+.skill-effect-instance[data-art="polished"] .skill-effect-glyph,
+.skill-effect-instance[data-art="polished"] .skill-impact-glyph { display: none; }
+.skill-effect-instance[data-art="polished"][data-numeric="true"] .skill-effect-glyph {
+  display: block;
+  top: 79%;
+  padding: 3px 8px;
+  min-width: 0;
+  border: 0;
+  background: radial-gradient(ellipse, #07101ee6, #07101e00 74%);
+  font-size: 21px;
+  text-shadow: 0 1px 3px #030712, 0 0 10px var(--fx-accent);
+  animation: none;
+}
+.skill-effect-instance[data-art="polished"][data-numeric="true"] .skill-impact-glyph {
+  display: block;
+  top: auto;
+  bottom: -8px;
+  padding: 2px 6px;
+  border: 0;
+  background: #07101edb;
+  border-radius: 7px;
+  font-size: 14px;
+  text-shadow: 0 0 7px var(--fx-accent);
+  transform: translateX(-50%);
+}
+.skill-effect-instance[data-art="polished"] .skill-effect-stage-data {
+  inset: auto 0 -16px;
+  width: auto;
+  padding: 3px 8px;
+  background: linear-gradient(90deg, transparent, #06101adc 18% 82%, transparent);
+  text-shadow: 0 1px 3px #030711;
+  font-size: 10px;
+  transform: none;
+}
+.skill-effect-instance[data-art="polished"] .skill-effect-stage-data .skill-effect-data-line { font-size: inherit; letter-spacing: .06em; }
+.skill-effect-instance[data-art="polished"] .skill-effect-data-line { animation: fx-data-reveal var(--fx-manifest-ms) ease-out var(--fx-anticipation-ms) both; }
+.skill-effect-instance[data-art="polished"][data-effect="perception"] .skill-effect-stage-data {
+  bottom: -24px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5px 10px;
+  text-align: center;
+}
+.skill-effect-instance[data-art="polished"][data-effect="perception"] .skill-effect-data-line { position: static; }
+.skill-effect-instance[data-art="polished"][data-effect="disguise"] .skill-effect-data-line { animation-name: fx-data-veil; }
+.skill-effect-instance[data-art="polished"][data-effect="disguise"] .skill-effect-stage-data { display: flex; justify-content: center; gap: 8px; }
+.skill-effect-instance[data-art="polished"][data-effect="disguise"] .skill-effect-data-line { opacity: .75; }
+.skill-effect-instance[data-art="polished"][data-effect="perception"]:has(.skill-effect-stage-data) :is(.skill-effect-kicker, .skill-effect-result) { display: none; }
+.skill-effect-instance[data-art="polished"][data-effect="perception"]:has(.skill-effect-stage-data) .skill-effect-caption { top: calc(var(--fx-stage-y) + var(--fx-art-size) * .3); }
+.skill-effect-instance[data-art="polished"] .skill-effect-caption {
+  top: clamp(56px, calc(var(--fx-stage-y) + var(--fx-art-size) * .48 + 34px), calc(100% - 52px));
+}
+.skill-effect-instance[data-art="polished"][data-effect="protocol"] .skill-effect-caption {
+  top: clamp(52px, calc(var(--fx-stage-y) - var(--fx-art-size) * .43 - 30px), calc(100% - 52px));
+}
+.skill-effect-instance[data-art="polished"][data-effect="protocol"] .skill-effect-kicker { display: none; }
+.skill-effect-instance[data-art="polished"][data-context="settlement"][data-composite] .skill-effect-result { display: none; }
+.skill-effect-instance[data-art="polished"][data-effect="breath"][data-variant="refund"] .skill-effect-caption {
+  top: clamp(48px, calc(var(--fx-stage-y) - 67px), calc(100% - 48px));
+}
+
+/* A curved taper and two droplets share the exact original route endpoints. */
+.skill-effect-instance[data-art="polished"] .skill-effect-route { height: 0; margin-top: 0; transform-origin: 0 0; }
+.skill-effect-instance[data-art="polished"] .fx-route-art {
+  position: absolute;
+  left: 0;
+  top: -51px;
+  height: 70px;
+  opacity: .8;
+}
+.skill-effect-instance[data-art="polished"] .skill-effect-route .route-packet {
+  top: 0;
+  width: 14px;
+  height: 5px;
+  border: 0;
+  border-radius: 80% 20% 20% 80%;
+  background: linear-gradient(90deg, transparent, var(--fx-accent), #fff);
+  box-shadow: 0 0 7px var(--fx-accent);
+  animation: fx-route-drop var(--fx-route-ms) cubic-bezier(.22,.5,.32,1) var(--fx-route-delay) both;
+  transform: none;
+}
+.skill-effect-instance[data-art="polished"] .skill-effect-route .packet-b { animation-delay: calc(var(--fx-route-delay) + 38ms); opacity: .6; }
+
+/* Independent verbs use individual transforms so authored SVG placement,
+   including card fans and rotated crystal facets, remains intact. */
+.fx-art :is(.fx-form, .fx-orbit, .fx-back, .fx-fragments, .fx-left, .fx-right),
+.fx-impact-form, .fx-endgame-art :is(.fx-form, .fx-orbit, .fx-fragments, .fx-execution-blade) {
+  transform-origin: 120px 100px;
+}
+.fx-art .fx-form { animation: fx-form-focus var(--fx-manifest-ms) ease-out var(--fx-anticipation-ms) both; }
+.fx-art .fx-orbit { animation: fx-orbit-drift var(--fx-manifest-ms) ease-out var(--fx-anticipation-ms) both; }
+.fx-art .fx-back { opacity: .75; }
+.fx-art .fx-fragments { animation: fx-fragment-release var(--fx-manifest-ms) ease-out var(--fx-anticipation-ms) both; }
+.fx-art .fx-vapor { animation: fx-vapor-arrive var(--fx-manifest-ms) ease-out var(--fx-anticipation-ms) both; }
+.fx-art:is([data-motion="inhale"], [data-motion="collapse"], [data-motion="veil"]) { --fx-vapor-opacity: .24; }
+.fx-art[data-motion="inhale"] .fx-orbit { animation-name: fx-inhale; }
+.fx-art[data-motion="assemble"] .fx-fragments { animation-name: fx-assemble; }
+.fx-art[data-motion="assemble"] .fx-orbit { animation-name: fx-iris-open; }
+.fx-art[data-motion="press"] .fx-form { animation-name: fx-press; }
+.fx-art[data-motion="ignite"] .fx-form { animation-name: fx-ignite; }
+.fx-art[data-motion="ignite"] .fx-form > .fx-piece { animation: fx-facet-light var(--fx-manifest-ms) ease-out var(--fx-anticipation-ms) both; }
+.fx-art[data-motion="ignite"] .fx-form > .fx-piece:nth-child(2) { animation-delay: calc(var(--fx-anticipation-ms) + 28ms); }
+.fx-art[data-motion="ignite"] .fx-form > .fx-piece:nth-child(3) { animation-delay: calc(var(--fx-anticipation-ms) + 56ms); }
+.fx-art[data-motion="clash"] .fx-left,
+.fx-art[data-motion="cut"] .fx-form { animation: fx-cut-left var(--fx-manifest-ms) cubic-bezier(.16,.86,.3,1) var(--fx-anticipation-ms) both; }
+.fx-art[data-motion="clash"] .fx-right { animation: fx-cut-right var(--fx-manifest-ms) cubic-bezier(.16,.86,.3,1) var(--fx-anticipation-ms) both; }
+.fx-art[data-motion="shield"] .fx-form { animation-name: fx-shield-close; }
+.fx-art[data-motion="read"] .fx-orbit { animation-name: fx-read-wave; }
+.fx-art[data-motion="iris"] .fx-orbit { animation-name: fx-iris-open; }
+.fx-art[data-motion="seal"] .fx-left,
+.fx-art[data-motion="gate"] .fx-left { animation: fx-gate-left var(--fx-manifest-ms) ease-out var(--fx-anticipation-ms) both; }
+.fx-art[data-motion="seal"] .fx-right,
+.fx-art[data-motion="gate"] .fx-right { animation: fx-gate-right var(--fx-manifest-ms) ease-out var(--fx-anticipation-ms) both; }
+.fx-art[data-motion="seal"] .fx-form { animation-name: fx-shield-close; }
+.fx-art[data-motion="balance"] .fx-form { animation-name: fx-balance; }
+.fx-art[data-motion="exchange"] .fx-left,
+.fx-art[data-motion="shuffle"] .fx-left { animation: fx-card-left var(--fx-manifest-ms) ease-in-out var(--fx-anticipation-ms) both; }
+.fx-art[data-motion="exchange"] .fx-right,
+.fx-art[data-motion="shuffle"] .fx-right { animation: fx-card-right var(--fx-manifest-ms) ease-in-out var(--fx-anticipation-ms) both; }
+.fx-art[data-motion="shuffle"] .fx-form { animation-name: fx-card-deal; }
+.fx-art[data-motion="eye"] .fx-form { animation-name: fx-eye-open; }
+.fx-art[data-motion="collapse"] .fx-fragments { animation-name: fx-assemble; }
+.fx-art[data-motion="collapse"] .fx-orbit { animation-name: fx-collapse; }
+.fx-art[data-motion="converge"] .fx-orbit { animation-name: fx-converge; }
+.fx-art[data-motion="crown"] .fx-form { animation-name: fx-crown; }
+.fx-art[data-motion="crown"] .fx-orbit { animation-name: fx-iris-open; }
+.fx-art[data-motion="transfer"] .fx-left { animation: fx-transfer-out var(--fx-manifest-ms) ease-in-out var(--fx-anticipation-ms) both; }
+.fx-art[data-motion="transfer"] .fx-right { animation: fx-transfer-in var(--fx-manifest-ms) ease-in-out var(--fx-anticipation-ms) both; }
+.fx-art[data-motion="pulse"] .fx-orbit { animation-name: fx-read-wave; }
+.fx-art[data-motion="return"] .fx-orbit { animation-name: fx-return; }
+.fx-art[data-motion="probe"] .fx-form { animation-name: fx-probe; }
+.fx-art[data-motion="veil"] .fx-left { animation: fx-veil-left var(--fx-manifest-ms) ease-in-out var(--fx-anticipation-ms) both; }
+.fx-art[data-motion="veil"] .fx-right { animation: fx-veil-right var(--fx-manifest-ms) ease-in-out var(--fx-anticipation-ms) both; }
+.fx-art[data-motion="award"] .fx-form { animation-name: fx-crown; }
+.fx-impact-form { animation: fx-impact-bloom var(--fx-impact-ms) ease-out var(--fx-impact-delay) both; }
+.fx-impact-art[data-impact-art="collapse"] .fx-impact-form { animation-name: fx-impact-collapse; }
+.fx-impact-art[data-impact-art="fracture"] .fx-impact-form { animation-name: fx-impact-fracture; }
+.fx-impact-art[data-impact-art="scan"] .fx-impact-form { animation-name: fx-impact-scan; }
+.fx-impact-art[data-impact-art="return"] .fx-impact-form { animation-name: fx-impact-return; }
+.skill-effect-instance[data-art="polished"][data-status="failed"] .fx-art-svg,
+.skill-effect-instance[data-art="polished"][data-status="countered"] .fx-art-svg {
+  animation: fx-failed-form var(--fx-manifest-ms) ease-out var(--fx-anticipation-ms) both;
+}
+.skill-effect-instance[data-art="polished"]:is([data-status="failed"], [data-status="countered"]) :is(.skill-effect-glyph, .skill-impact-glyph) { display: none; }
+.skill-effect-instance[data-art="polished"].is-counter-cut .skill-effect-stage::before {
+  height: 52px;
+  border-radius: 100% 0 100% 0;
+  background: linear-gradient(165deg, transparent 42%, #dffcff 47%, #ff608ec7 51%, transparent 60%);
+  box-shadow: none;
+}
+.skill-effect-instance[data-art="polished"].is-counter-cut .skill-effect-stage::after { content: none; }
+.skill-effect-instance[data-art="polished"].is-upgraded[data-effect][data-tier] .skill-effect-core {
+  animation: skill-effect-upgrade-pulse 520ms cubic-bezier(.16,.84,.18,1) both;
+}
+.skill-effect-instance[data-art="polished"].is-upgraded .fx-art .fx-form { animation: fx-upgrade-flare 520ms ease-out both; }
+.skill-effect-instance[data-art="polished"].is-upgraded .fx-impact-form { opacity: 1; animation: fx-upgrade-flare 520ms ease-out both; }
+
+/* ENDGAME keeps its own synchronized controller. Art never owns the window. */
+.endgame-fx { --fx-accent: #f5ca72; --fx-secondary: #ad6c91; }
+.endgame-fx .fx-endgame-art {
+  inset: auto;
+  width: min(66vmin, 550px);
+  aspect-ratio: 1.2;
+  left: 50%;
+  top: 43%;
+  transform: translate(-50%, -50%);
+  z-index: 1;
+  filter: drop-shadow(0 0 17px #ffc76830);
+}
+.endgame-fx .fx-vapor { opacity: .28; }
+.endgame-declare .fx-endgame-art .fx-form { animation: fx-endgame-crown calc(var(--egd-dur, 2600ms) * .423077) cubic-bezier(.16,.84,.2,1) both; }
+.endgame-declare .fx-endgame-art .fx-orbit { animation: fx-endgame-petals calc(var(--egd-dur, 2600ms) * .730769) ease-out both; }
+.endgame-declare .fx-endgame-art .fx-fragments { animation: fx-endgame-fragments calc(var(--egd-dur, 2600ms) * .884615) ease-out both; }
+.endgame-declare :is(.egd-grid, .egd-seal, .egd-shock, .egd-scan),
+.endgame-kill :is(.egk-slash, .egk-slash-trail, .egk-ring) { display: none; }
+.endgame-declare .egd-lockup { margin-top: min(39vmin, 320px); }
+.endgame-declare .egd-char { font-size: clamp(50px, 10vmin, 100px); }
+.endgame-kill { --fx-accent: #ff727f; --fx-secondary: #c9a1ff; }
+.endgame-kill .fx-endgame-art { width: min(86vmin, 820px); top: 43%; }
+.endgame-kill .fx-execution-blade { animation: fx-endgame-execute calc(var(--egk-dur, 2800ms) * .357143) cubic-bezier(.1,.8,.18,1) both; }
+.endgame-kill .fx-fragments { animation: fx-endgame-fragments calc(var(--egk-dur, 2800ms) * .642857) ease-out both; }
+.endgame-kill .egk-lockup { margin-top: min(40vmin, 300px); }
+.endgame-kill .egk-char { font-size: clamp(54px, 11vmin, 110px); }
+.endgame-fx.is-restored-hold .fx-vapor,
+.endgame-fx.is-restored-hold .fx-fragments { display: none; }
+.endgame-fx.is-restored-hold .fx-endgame-art,
+.endgame-fx.is-restored-hold .fx-endgame-art * { animation: none !important; }
+.skill-fx-gallery-cinematics { grid-column: 1 / -1; display: flex; gap: 6px; }
+.skill-fx-gallery-cinematics .button { flex: 1; min-height: 34px; padding: 6px 8px; font-size: 11px; }
+.skill-fx-gallery-endgame.endgame-fx { position: absolute; z-index: 9; }
+.skill-fx-gallery-endgame.endgame-fx .fx-endgame-art { width: min(60%, 320px); }
+.skill-fx-gallery-endgame.endgame-fx .egd-lockup,
+.skill-fx-gallery-endgame.endgame-fx .egk-lockup { margin-top: 180px; }
+.skill-fx-gallery-endgame.endgame-fx :is(.egd-char, .egk-char) { font-size: 48px; }
+.skill-fx-gallery-effect-layer .skill-effect-instance[data-art="polished"] .skill-effect-caption { width: calc(100% - 26px); max-width: 400px; }
+.skill-fx-gallery-effect-layer .skill-effect-instance[data-art="polished"]:not([data-effect="perception"]):not([data-presentation="pulse"]):not([data-variant="refund"]) .skill-effect-caption {
+  top: clamp(62px, calc(var(--fx-stage-y) + var(--fx-art-size) * .46 + 26px), calc(100% - 120px));
+}
+
+@media (max-width: 720px) {
+  .skill-effect-instance[data-art="polished"] { --fx-art-size: 150px; }
+  .skill-effect-instance[data-art="polished"][data-tier="FX1"] { --fx-art-size: 98px; }
+  .skill-effect-instance[data-art="polished"][data-tier="FX3"] { --fx-art-size: 188px; }
+  .skill-effect-instance[data-art="polished"][data-tier="FX4"] { --fx-art-size: 220px; }
+  .skill-effect-instance[data-art="polished"][data-effect="result"] { --fx-art-size: 90px; }
+  .skill-effect-instance[data-art="polished"][data-effect="intimidation"] { --fx-art-size: 174px; }
+  .skill-effect-instance[data-art="polished"][data-effect="breath"][data-variant="refund"] { --fx-art-size: 100px; }
+  .skill-effect-instance[data-art="polished"] .skill-effect-stage-data { font-size: 8px; }
+  .skill-effect-instance[data-art="polished"][data-numeric="true"] .skill-effect-glyph { font-size: 16px; }
+  .skill-effect-instance[data-art="polished"] .skill-effect-title { font-size: 17px; }
+  .skill-effect-instance[data-art="polished"] .fx-vapor { opacity: .18; }
+  .skill-fx-gallery-effect-layer .skill-effect-instance[data-art="polished"][data-tier="FX3"] { --fx-art-size: 170px; }
+  .skill-fx-gallery-effect-layer .skill-effect-instance[data-art="polished"][data-tier="FX4"] { --fx-art-size: 188px; }
+  .skill-fx-gallery-effect-layer .skill-effect-instance[data-art="polished"][data-effect="intimidation"] { --fx-art-size: 174px; }
+  .skill-fx-gallery-endgame.endgame-fx :is(.egd-lockup, .egk-lockup) { margin-top: 144px; }
+  .skill-fx-gallery-endgame.endgame-fx :is(.egd-char, .egk-char) { font-size: 36px; }
+}
+
+/* Low uses one opacity envelope. Nested fades would multiply opacity and make
+   etched material disappear; suppress them even under the global low policy. */
+.skill-effect-layer[data-fx-quality="low"] .skill-effect-instance[data-art="polished"] .fx-vapor,
+.skill-effect-layer[data-fx-quality="low"] .skill-effect-instance[data-art="polished"] .fx-fragments { display: none; }
+html .skill-effect-layer[data-fx-quality="low"] .skill-effect-instance[data-art="polished"] :is(.fx-art, .fx-art *, .fx-impact-art, .fx-impact-art *) {
+  animation: none !important;
+  filter: none !important;
+}
+html[data-animation="low"] .endgame-fx .fx-endgame-art,
+html[data-animation="low"] .endgame-fx .fx-endgame-art * { animation: none !important; filter: none; }
+html[data-animation="low"] .endgame-fx :is(.fx-vapor, .fx-fragments) { display: none; }
+
+@keyframes fx-art-manifest {
+  0% { opacity: 0; transform: translate(-50%,-50%) scale(.84); }
+  19% { opacity: 1; transform: translate(-50%,-50%) scale(1.025); }
+  33%, 84% { opacity: 1; transform: translate(-50%,-50%) scale(1); }
+  100% { opacity: 0; transform: translate(-50%,-50%) scale(.97); }
+}
+@keyframes fx-form-focus { 0% { scale: .74; opacity: .1; } 25%, 100% { scale: 1; opacity: 1; } }
+@keyframes fx-orbit-drift { from { rotate: -28deg; scale: .82; opacity: 0; } 26% { opacity: .9; } to { rotate: 18deg; scale: 1.04; opacity: .4; } }
+@keyframes fx-vapor-arrive { from { opacity: 0; rotate: -24deg; scale: .7; } 32% { opacity: var(--fx-vapor-opacity); } to { opacity: 0; rotate: 22deg; scale: 1.14; } }
+@keyframes fx-fragment-release { from { scale: .65; opacity: 0; } 24% { opacity: .9; } to { scale: 1.16; opacity: 0; rotate: 12deg; } }
+@keyframes fx-inhale { from { scale: 1.35; rotate: -48deg; opacity: 0; } 24% { opacity: 1; } 78% { opacity: .8; } to { scale: .5; rotate: 20deg; opacity: 0; } }
+@keyframes fx-assemble { from { scale: 1.4; rotate: -18deg; opacity: 0; } 20% { opacity: .9; } to { scale: .45; rotate: 24deg; opacity: 0; } }
+@keyframes fx-press { 0% { translate: 0 -34px; scale: 1.16 1; opacity: 0; } 27% { translate: 0 4px; scale: 1.02 .94; opacity: 1; } 43%,100% { translate: 0 0; scale: 1; } }
+@keyframes fx-ignite { 0% { scale: .25 .68; opacity: 0; } 19% { scale: 1.08 1.05; opacity: 1; } 34%,100% { scale: 1; } }
+@keyframes fx-facet-light { 0% { opacity: 0; } 14% { opacity: 1; } 38% { opacity: .8; } 66%,100% { opacity: 1; } }
+@keyframes fx-cut-left { from { translate: -76px 42px; opacity: 0; } 23% { translate: 5px -3px; opacity: 1; } 38%,100% { translate: 0 0; } }
+@keyframes fx-cut-right { from { translate: 76px -42px; opacity: 0; } 23% { translate: -5px 3px; opacity: 1; } 38%,100% { translate: 0 0; } }
+@keyframes fx-shield-close { 0% { scale: 1.2 .72; opacity: 0; } 24% { scale: .96 1.04; opacity: 1; } 40%,100% { scale: 1; } }
+@keyframes fx-read-wave { 0% { translate: -22px 10px; scale: .85; opacity: 0; } 28% { opacity: .9; } 80% { opacity: .7; } 100% { translate: 25px -10px; scale: 1.1; opacity: 0; } }
+@keyframes fx-iris-open { from { rotate: -52deg; scale: .45; opacity: 0; } 30% { opacity: 1; scale: 1; } to { rotate: 12deg; scale: .96; opacity: .75; } }
+@keyframes fx-gate-left { 0% { translate: -46px 0; opacity: 0; } 32% { translate: 3px 0; opacity: 1; } 43%,100% { translate: 0 0; } }
+@keyframes fx-gate-right { 0% { translate: 46px 0; opacity: 0; } 32% { translate: -3px 0; opacity: 1; } 43%,100% { translate: 0 0; } }
+@keyframes fx-balance { 0% { rotate: -14deg; opacity: 0; } 20% { rotate: 6deg; opacity: 1; } 36% { rotate: -2deg; } 55%,100% { rotate: 0deg; } }
+@keyframes fx-card-left { 0% { translate: 56px 0; rotate: 22deg; opacity: 0; } 24% { translate: 0 0; rotate: 0deg; opacity: 1; } 52% { translate: 28px -8px; rotate: 10deg; } 75%,100% { translate: 0 0; rotate: 0deg; } }
+@keyframes fx-card-right { 0% { translate: -56px 0; rotate: -22deg; opacity: 0; } 24% { translate: 0 0; rotate: 0deg; opacity: 1; } 52% { translate: -28px 8px; rotate: -10deg; } 75%,100% { translate: 0 0; rotate: 0deg; } }
+@keyframes fx-card-deal { 0% { translate: 0 22px; opacity: 0; } 24% { translate: 0 -8px; opacity: 1; } 50%,100% { translate: 0 0; } }
+@keyframes fx-eye-open { 0% { scale: 1 .06; opacity: 0; } 29% { scale: 1 1.06; opacity: 1; } 46%,100% { scale: 1; } }
+@keyframes fx-collapse { from { rotate: 0deg; scale: 1.24; opacity: .1; } 25% { opacity: 1; } to { rotate: 115deg; scale: .35; opacity: 0; } }
+@keyframes fx-converge { from { scale: 1.25; rotate: -15deg; opacity: 0; } 25% { opacity: .9; } to { scale: .55; rotate: 0deg; opacity: 0; } }
+@keyframes fx-crown { from { translate: 0 20px; scale: .7; opacity: 0; } 30% { translate: 0 -2px; scale: 1.03; opacity: 1; } 48%,100% { translate: 0 0; scale: 1; } }
+@keyframes fx-transfer-out { 0% { translate: -24px 0; opacity: 0; } 20% { opacity: 1; translate: 0 0; } 62%,100% { translate: 36px 4px; opacity: .35; } }
+@keyframes fx-transfer-in { 0%,16% { translate: -35px -12px; opacity: 0; } 48% { translate: 4px 1px; opacity: 1; } 62%,100% { translate: 0 0; } }
+@keyframes fx-return { from { rotate: 65deg; opacity: 0; } 28% { opacity: 1; } to { rotate: -20deg; opacity: .5; } }
+@keyframes fx-probe { 0% { translate: -26px 27px; opacity: 0; } 23% { translate: 9px -9px; opacity: 1; } 38%,100% { translate: 0 0; } }
+@keyframes fx-veil-left { 0% { translate: 32px 0; opacity: 0; } 28% { translate: 0 0; opacity: 1; } 66% { opacity: .3; } 100% { opacity: .8; } }
+@keyframes fx-veil-right { 0% { translate: -32px 0; opacity: 0; } 28% { translate: 0 0; opacity: .5; } 66% { opacity: 1; } 100% { opacity: .7; } }
+@keyframes fx-impact-bloom { from { scale: .85; opacity: .2; } 25% { scale: 1.035; opacity: 1; } 62% { scale: 1; opacity: .8; } to { scale: 1.07; opacity: 0; } }
+@keyframes fx-impact-collapse { from { scale: 1.15; opacity: 1; } to { scale: .55; rotate: 18deg; opacity: 0; } }
+@keyframes fx-impact-fracture { from { translate: -9px 7px; scale: .9; opacity: .2; } 24% { translate: 0 0; opacity: 1; } to { scale: 1.14; opacity: 0; } }
+@keyframes fx-impact-scan { from { translate: 0 -12px; opacity: 0; } 25% { opacity: 1; } to { translate: 0 10px; opacity: 0; } }
+@keyframes fx-impact-return { from { translate: 0 12px; scale: 1.16; opacity: 0; } 23% { opacity: 1; } to { translate: 0 -6px; scale: .75; opacity: 0; } }
+@keyframes fx-failed-form { 0%,30% { opacity: 1; } 68% { opacity: .45; } 100% { opacity: 0; scale: .78; } }
+@keyframes fx-upgrade-flare { 0% { scale: 1; } 22% { scale: 1.16; } 55%,100% { scale: 1; } }
+@keyframes fx-data-reveal { from { opacity: 0; } 26%,85% { opacity: .9; } to { opacity: 0; } }
+@keyframes fx-data-veil { from { opacity: 0; filter: blur(0); } 26% { opacity: .8; } 70% { opacity: .5; filter: blur(2px); } to { opacity: 0; filter: blur(4px); } }
+@keyframes fx-route-drop { 0% { left: 0; translate: -7px -2px; opacity: 0; } 16% { opacity: 1; } 50% { translate: -7px -20px; } 90% { opacity: 1; } 100% { left: 100%; translate: -7px -2px; opacity: 0; } }
+@keyframes fx-endgame-crown { from { translate: 0 -36px; scale: 1.24; opacity: 0; } 54% { translate: 0 4px; scale: .98; opacity: 1; } to { translate: 0 0; scale: 1; } }
+@keyframes fx-endgame-petals { from { rotate: -46deg; scale: .58; opacity: 0; } 45% { opacity: .9; } to { rotate: 0deg; scale: 1; opacity: .8; } }
+@keyframes fx-endgame-fragments { from { scale: .7; opacity: 0; } 28% { opacity: 1; } to { scale: 1.2; opacity: 0; } }
+@keyframes fx-endgame-execute { 0%,10% { translate: -150px 80px; scale: .75; opacity: 0; } 35% { translate: 8px -4px; scale: 1.08; opacity: 1; } 60%,100% { translate: 0 0; scale: 1; opacity: .82; } }

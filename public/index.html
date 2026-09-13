@@ -53,6 +53,7 @@
     <link rel="stylesheet" href="./table-v2.css" />
     <link rel="stylesheet" href="./skill-effects.css" />
     <link rel="stylesheet" href="./visual-quality.css" />
+    <link rel="stylesheet" href="./skill-fx-art.css" />
     <link rel="stylesheet" href="./lobby-feedback.css" />
     <link rel="stylesheet" href="./lobby-v2.css" />
   </head>
@@ -63,6 +64,7 @@
       <div class="salon-wash"></div>
       <div class="salon-vignette"></div>
     </div>
+    <div class="lobby-scenery" aria-hidden="true"></div>
 
     <div id="connection-banner" class="connection-banner hidden" role="status" aria-live="assertive">
       <span class="connection-pulse" aria-hidden="true"></span>
@@ -891,7 +893,15 @@
             </button>
           </div>
 
-          <section id="lobby-loadout" class="lobby-loadout hidden" aria-labelledby="lobby-loadout-title">
+          <div class="lobby-actions">
+            <button id="btn-find-match" type="button" class="button button-primary lobby-primary-action" data-room-action="match"><span data-i18n="lobby.findMatch">开始匹配</span><span aria-hidden="true">→</span></button>
+            <div class="lobby-secondary-actions">
+              <button type="button" class="button button-ghost" data-room-action="solo" data-i18n="lobby.practice">人机练习</button>
+              <button type="button" class="button button-ghost" data-room-action="create" data-i18n="lobby.friendMatch">好友对局</button>
+            </div>
+          </div>
+
+          <section id="lobby-loadout" class="lobby-loadout is-inactive" aria-labelledby="lobby-loadout-title" aria-hidden="true" inert>
             <h3 id="lobby-loadout-title" data-i18n="lobby.currentLoadout">当前构筑</h3>
             <div class="lobby-loadout-content">
               <div id="lobby-loadout-skills" class="lobby-loadout-skills" role="list" aria-label="已装备技能" data-i18n-attr="aria-label:lobby.equippedSkills"></div>
@@ -900,14 +910,6 @@
             <span id="lobby-loadout-meter" class="lobby-loadout-meter hidden"></span>
             <button id="btn-open-skill-lab" class="button button-ghost lobby-edit-loadout" type="button"><span data-i18n="lobby.editLoadout">编辑构筑</span><span aria-hidden="true">→</span></button>
           </section>
-
-          <div class="lobby-actions">
-            <button id="btn-find-match" type="button" class="button button-primary lobby-primary-action" data-room-action="match"><span data-i18n="lobby.findMatch">开始匹配</span><span aria-hidden="true">→</span></button>
-            <div class="lobby-secondary-actions">
-              <button type="button" class="button button-ghost" data-room-action="solo" data-i18n="lobby.practice">人机练习</button>
-              <button type="button" class="button button-ghost" data-room-action="create" data-i18n="lobby.friendMatch">好友对局</button>
-            </div>
-          </div>
         </div>
 
         <footer class="lobby-identity-row">
@@ -1454,6 +1456,10 @@
               <button id="btn-replay-skill-fx" class="button button-primary" type="button">REPLAY</button>
               <button id="btn-stop-skill-fx" class="button button-ghost" type="button">STOP</button>
             </div>
+            <div class="skill-fx-gallery-cinematics" aria-label="Endgame previews">
+              <button id="btn-preview-endgame-declare" class="button button-ghost" type="button">终局 · 宣告</button>
+              <button id="btn-preview-endgame-execution" class="button button-ghost" type="button">终局 · 执行</button>
+            </div>
             <output id="skill-fx-gallery-status-text" class="skill-fx-gallery-status-text">READY</output>
           </form>
           <div id="skill-fx-gallery-stage" class="skill-fx-gallery-stage" aria-label="技能特效预览舞台" data-i18n-attr="aria-label:modal.galleryStageAria">
@@ -1501,6 +1507,7 @@
     <script src="./rulebook-data.js"></script>
     <script src="./i18n/rulebook-en-US.js"></script>
     <script src="./skill-fx-profiles.js"></script>
+    <script src="./skill-fx-art.js"></script>
     <script src="./skill-fx-manager.js"></script>
     <script src="./skill-fx-gallery.js"></script>
     <script src="./lobby-feedback.js"></script>
