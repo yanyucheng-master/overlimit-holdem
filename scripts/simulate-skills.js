@@ -113,7 +113,7 @@ function main() {
     return counts;
   }, {});
   const report = {
-    ruleset: "abyss-skills-v2-provisional",
+    ruleset: "overlimit-skills-v1.0",
     iterations,
     catalogSize: listSkillDefinitions().length,
     legalLoadoutCount: builds.length,

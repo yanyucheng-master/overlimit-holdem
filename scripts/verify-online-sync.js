@@ -46,6 +46,9 @@ async function main() {
 
   const createdPromise = once(host, "room_created");
   const hostJoinedPromise = once(host, "room_joined");
+  // Creation emits its own room_state after room_joined. Consume that snapshot
+  // before issuing the next mutation, so it cannot satisfy the password wait.
+  const createdStatePromise = once(host, "room_state");
   host.emit("create_room", {
     playerName: "Host",
     playerId: "PHOSTSYNC",
@@ -53,7 +56,7 @@ async function main() {
     skillMode: "off",
     password: null,
   });
-  const [created, hostJoined] = await Promise.all([createdPromise, hostJoinedPromise]);
+  const [created, hostJoined, createdState] = await Promise.all([createdPromise, hostJoinedPromise, createdStatePromise]);
   results.push({
     step: "create",
     roomId: created.roomId,
@@ -66,6 +69,7 @@ async function main() {
   }
   if (hostJoined.phase !== "waiting") throw new Error("host join phase should be waiting");
   if (hostJoined.hasPassword) throw new Error("new room should have no password");
+  if (createdState.roomId !== created.roomId || createdState.hasPassword) throw new Error("creation state mismatch");
 
   const pwdUpdatedPromise = once(host, "room:password_updated");
   const hostStatePromise = once(host, "room_state");

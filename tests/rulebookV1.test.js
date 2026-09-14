@@ -88,8 +88,11 @@ describe("官方规则手册 V1.0", () => {
     expect(byName.零化).toContain("尚未发出的公共牌位置");
     expect(byName.天命).toContain("真实能量上限由 8 提高至 10");
     expect(byName.贷款).toMatch(/100.*150/);
-    expect(byName.贷款).toMatch(/获得 5.*偿还 6/);
-    expect(byName.贷款).toContain("合计最多 3 次");
+    expect(byName.贷款).toMatch(/获得最多 5.*应还 6/);
+    expect(byName.贷款).toContain("每手总共最多 2 次");
+    expect(byName.贷款).toContain("不支持部分还款");
+    expect(byName.贷款).toContain("两个完整宽限手");
+    expect(byName.贷款).toContain("违约后公平对该债务完全无效");
     expect(byName.撤退).toContain("同一行动窗口立即弃牌");
     expect(byName.绝路).toContain("负载 4");
     expect(byName.绝路).toContain("能量 5");
@@ -130,6 +133,9 @@ describe("官方规则手册 V1.0", () => {
       "NORMAL_CREDIT",
       "RESTRICTED_CREDIT",
       "DEFAULTED",
+      "信用受限",
+      "到期偿还按贷款规则执行",
+      "清除未偿状态但不退回已取得资源",
     ].forEach((term) => expect(copy).not.toContain(term));
   });
 });

@@ -52,18 +52,10 @@ const {
   expireLoanDebtsForRoom,
   isMatchOverForLoan,
   loanReuseBlocked,
-  clearResidualChipDebt,
   maskLoanPublicSummary,
-  addChipLoanTranche,
-  listChipLoans,
-  syncChipLoanState,
   LOAN_CREDIT,
   getLoanCreditState,
-  setLoanCreditState,
   getLoanQuota,
-  pendingLoanObligations,
-  ensureLoanCreditMetrics,
-  noteLoanWash,
 } = require("./skillState");
 const {
   FORTUNE_COMBOS,
@@ -79,6 +71,8 @@ const {
   getHandRankBonusValue,
   getHandRankLabel,
 } = require("../handRankBonus");
+
+const { addLoanDebt, closeLoanHand, adjustLoanInterest, repaymentEligibility, getLoanSummary } = require("./loanState");
 
 const ACTIVE_PHASES = new Set(["pre_flop", "flop", "turn", "river"]);
 const CARD_CODE_RE = /^[SHCD](?:[2-9TJQKA])$/;
@@ -294,10 +288,10 @@ function sanitizeSkillEventForReveal(entry = {}) {
 }
 
 function isPrivateOnlyRevealSkillEvent(entry = {}) {
-  // Deep Breath is personal resource planning. Its identity and even its
-  // occurrence stay in the server-side private audit instead of the public
+  // Deep Breath and the Energy Loan branch are private resource planning.
+  // Their identity and occurrence stay in the server-side private audit, not public
   // hand reveal; Clairvoyance still reads the authoritative live action log.
-  return entry.skillId === "DEEP_BREATH" && entry.secret === true;
+  return ["DEEP_BREATH", "LOAN"].includes(entry.skillId) && entry.secret === true;
 }
 
 function sanitizeSkillTransformForReveal(entry = {}) {
@@ -373,6 +367,7 @@ function beginHandSkills(room) {
   room.players.forEach(resetPlayerSkillsForHand);
   room.players.forEach((player) => {
     const runtime = player.skillRuntime;
+    runtime.loanHandNo = room.handNo;
     if (
       hasEquipped(player, "DESPERATION") &&
       canTriggerNewSkillEvent(player, "DESPERATION", room) &&
@@ -437,11 +432,6 @@ function clearPersistentSkillState(room) {
     runtime.probeActive = false;
     runtime.disguiseActive = false;
     runtime.alertPromptPending = false;
-    runtime.chipLoan = null;
-    runtime.chipLoans = [];
-    runtime.energyLoan = null;
-    runtime.energyDebt = 0;
-    clearResidualChipDebt(runtime);
     runtime.confirmedPublicSkills = (runtime.confirmedPublicSkills || [])
       .filter((id) => !CLEARED_PUBLIC_EFFECTS.has(id));
   });
@@ -470,39 +460,11 @@ function countPersistentRuntimeFlags(runtime) {
   ].filter(Boolean).length;
 }
 
-function snapshotLoanFields(runtime) {
-  if (!runtime) return null;
-  return {
-    chipLoan: runtime.chipLoan ? { ...runtime.chipLoan } : null,
-    chipLoans: listChipLoans(runtime).map((loan) => ({ ...loan })),
-    energyLoan: runtime.energyLoan ? { ...runtime.energyLoan } : null,
-    energyDebt: Number(runtime.energyDebt) || 0,
-    chipDebt: Number(runtime.chipDebt) || 0,
-    chipDebtLenderId: runtime.chipDebtLenderId || null,
-  };
-}
-
-function restoreLoanFields(runtime, snapshot) {
-  if (!runtime || !snapshot) return;
-  runtime.chipLoan = snapshot.chipLoan;
-  runtime.chipLoans = Array.isArray(snapshot.chipLoans) ? snapshot.chipLoans.map((loan) => ({ ...loan })) : [];
-  runtime.energyLoan = snapshot.energyLoan;
-  runtime.energyDebt = snapshot.energyDebt;
-  runtime.chipDebt = snapshot.chipDebt;
-  runtime.chipDebtLenderId = snapshot.chipDebtLenderId || null;
-}
-
 class SkillEngine {
-  constructor({ gameEngine, random = Math.random, perceptionTuning = null, experiment = null } = {}) {
+  constructor({ gameEngine, random = Math.random, perceptionTuning = null } = {}) {
     this.gameEngine = gameEngine;
     this.random = typeof random === "function" ? random : Math.random;
     this.perceptionTuning = perceptionTuning;
-    this.experiment = {
-      fairnessClearsLoanDebt: true,
-      fairnessLocksFuture: true,
-      loanCreditRestrictionV2: true,
-      ...(experiment || {}),
-    };
   }
 
   perceptionChance(room, player) {
@@ -533,7 +495,7 @@ class SkillEngine {
       this.emitToPlayer(viewer, "skill:state", {
         skillMode: room.skillMode,
         room: getPublicRoomSkillSnapshot(room, viewer),
-        self: getSelfSkillSummary(viewer),
+        self: getSelfSkillSummary(viewer, room),
         players: room.players.map((player) => ({
           playerId: player.playerId,
           ...getPublicSkillSummary(player),
@@ -690,15 +652,12 @@ class SkillEngine {
   }
 
   endHand(room, { reason, winner, tie = false } = {}) {
-    if (!isSkillEnabled(room.skillMode)) return;
+    if (!isSkillEnabled(room.skillMode) || room.skillState?.handEndRecoverySettled) return;
+    room.skillState.handEndRecoverySettled = true;
     revealNullifications(room);
     const fairness = Boolean(room.skillState?.fairnessActive);
     if (isMatchOverForLoan(room)) this.expireLoanDebts(room);
-    else {
-      this.applyLoanRepayments(room);
-      this.applyResidualChipDebt(room);
-      if (isMatchOverForLoan(room)) this.expireLoanDebts(room);
-    }
+    else room.players.forEach((player) => closeLoanHand(player.skillRuntime, room.handNo));
     room.players.forEach((player) => {
       const runtime = player.skillRuntime;
       if (!runtime) return;
@@ -726,10 +685,13 @@ class SkillEngine {
             audit: { unused: true, restored: SKILL_CONFIG.COUNTER_UNUSED_REFUND },
           });
         }
-        const lost = !tie && winner && winner.playerId !== player.playerId;
-        if (lost && !runtime.retreatTriggered && reason !== "retreat") {
-          gainEnergy(player, SKILL_CONFIG.ENERGY_LOSER_GAIN);
-        }
+        // Retreat refunds the pot as a tie, but its energy exception is asymmetric.
+        const natural = reason === "retreat"
+          ? (runtime.retreatTriggered ? 0 : SKILL_CONFIG.ENERGY_WINNER_GAIN)
+          : tie ? SKILL_CONFIG.ENERGY_TIE_GAIN
+            : winner?.playerId === player.playerId ? SKILL_CONFIG.ENERGY_WINNER_GAIN
+              : winner ? SKILL_CONFIG.ENERGY_LOSER_GAIN : 0;
+        gainEnergy(player, natural);
         if (!tie && winner?.playerId === player.playerId && runtime.desperationActive) {
           gainEnergy(player, 1);
         }
@@ -741,7 +703,6 @@ class SkillEngine {
       // also makes endHand idempotent with respect to the +2 restoration.
       runtime.breathArmed = false;
       runtime.breathBroken = false;
-      this.refreshLoanCreditFromResiduals(player, room);
       // Public opponent energy updates only after every end-of-hand resource
       // settlement (restore, Fairness suppression, loans, Fortune) has finished.
       syncVisibleEnergy(player);
@@ -864,33 +825,10 @@ class SkillEngine {
       }
       const chipUses = Math.max(0, Number(runtimeLoan.loanChipUsesThisHand) || 0);
       const energyUses = Math.max(0, Number(runtimeLoan.loanEnergyUsesThisHand) || 0);
-      const quota = getLoanQuota(runtimeLoan, {
-        creditRestriction: this.experiment?.loanCreditRestrictionV2 === true,
-      });
-      const totalUses = chipUses + energyUses;
-      if (quota.maxTotal <= 0 || getLoanCreditState(runtimeLoan) === LOAN_CREDIT.DEFAULTED) {
-        ensureLoanCreditMetrics(runtimeLoan).deniedByCredit += 1;
-        return { ok: false, error: "贷款信用已违约" };
-      }
-      if (totalUses >= quota.maxTotal) {
-        if (this.experiment?.loanCreditRestrictionV2 === true) {
-          ensureLoanCreditMetrics(runtimeLoan).deniedByCredit += 1;
-        }
-        return { ok: false, error: quota.maxTotal <= 1 ? "信用受限：本手贷款只能发动 1 次" : "本手贷款次数已用完" };
-      }
-      if (mode === "chip" && chipUses >= quota.maxChip) {
-        if (this.experiment?.loanCreditRestrictionV2 === true && quota.maxChip < SKILL_CONFIG.LOAN_CHIP_MAX_USES_PER_HAND) {
-          ensureLoanCreditMetrics(runtimeLoan).deniedByCredit += 1;
-        }
-        return { ok: false, error: "本手筹码贷款已用完" };
-      }
-      if (mode === "energy" && energyUses >= quota.maxEnergy) {
-        if (this.experiment?.loanCreditRestrictionV2 === true && quota.maxEnergy < SKILL_CONFIG.LOAN_ENERGY_MAX_USES_PER_HAND) {
-          ensureLoanCreditMetrics(runtimeLoan).deniedByCredit += 1;
-        }
-        return { ok: false, error: "本手能量贷款已用完" };
-      }
-      if (mode === "energy" && runtimeLoan.energyLoan) return { ok: false, error: "已有未偿还的能量贷款" };
+      const quota = getLoanQuota();
+      if (runtimeLoan.loanTotalUsesThisHand >= quota.maxTotal) return { ok: false, error: "本手贷款次数已用完" };
+      if (mode === "chip" && chipUses >= quota.maxChip) return { ok: false, error: "本手筹码贷款已用完" };
+      if (mode === "energy" && energyUses >= quota.maxEnergy) return { ok: false, error: "本手能量贷款已用完" };
       if (mode === "chip" && !opponentOf(room, player)) return { ok: false, error: "没有可贷款的对手" };
     }
     if (skill.id === "RESTART") {
@@ -936,6 +874,7 @@ class SkillEngine {
     markSkillUse(player, skill.id);
     markSkillEvent(player, skill.id);
     if (skill.id === "LOAN") {
+      player.skillRuntime.loanTotalUsesThisHand += 1;
       const mode = String(target.mode || target.branch || "").toLowerCase();
       if (mode === "chip") {
         player.skillRuntime.loanChipUsesThisHand = (Number(player.skillRuntime.loanChipUsesThisHand) || 0) + 1;
@@ -953,7 +892,7 @@ class SkillEngine {
       player.skillRuntime.lockReason = "COUNTER";
       this.recordSkill(room, player, skill, {
         status: "COUNTERED",
-        secret: skill.visibility === "SECRET",
+        secret: skill.visibility === "SECRET" || (skill.id === "LOAN" && String(target.mode || target.branch).toLowerCase() === "energy"),
         paid: true,
         cost,
         success: false,
@@ -1103,47 +1042,22 @@ class SkillEngine {
         runtime.counterArmed = true;
         return { secret: true, publicSummary: "秘密技能已结算", persistent: true, pending: true, privateResult: { message: "反制已秘密布置。" } };
       case "FAIRNESS": {
-        const experiment = this.experiment || {};
-        const loanAudit = room.players.map((candidate) => {
-          const runtime = candidate.skillRuntime || {};
-          const obligations = pendingLoanObligations(runtime);
-          return {
-            playerId: candidate.playerId,
-            chipRepay: obligations.chipPending,
-            energyRepay: obligations.energyPending,
-            chipDebt: obligations.chipDebt,
-            energyDebt: obligations.energyDebt,
-            persistents: countPersistentRuntimeFlags(runtime),
-            creditState: getLoanCreditState(runtime),
-          };
-        });
-        const savedLoans = experiment.fairnessClearsLoanDebt === false
-          ? room.players.map((candidate) => snapshotLoanFields(candidate.skillRuntime))
-          : null;
         const persistentsCleared = (room.skillState.nullifications || []).length
-          + loanAudit.reduce((sum, row) => sum + row.persistents, 0);
+          + room.players.reduce((sum, candidate) => sum + countPersistentRuntimeFlags(candidate.skillRuntime), 0);
         clearPersistentSkillState(room);
-        if (savedLoans) {
-          room.players.forEach((candidate, index) => restoreLoanFields(candidate.skillRuntime, savedLoans[index]));
-        } else if (experiment.loanCreditRestrictionV2 === true) {
-          this.applyFairnessLoanCredit(room, loanAudit);
-        }
-        if (experiment.fairnessLocksFuture !== false) {
-          room.skillState.fairnessActive = true;
-          room.players.forEach((candidate) => {
-            candidate.skillRuntime.lockedThisHand = true;
-            candidate.skillRuntime.lockReason = "FAIRNESS";
-          });
-        }
+        const loanAudit = room.players.map((candidate) => ({
+          playerId: candidate.playerId,
+          adjustedTrancheIds: adjustLoanInterest(candidate.skillRuntime),
+        }));
+        room.skillState.fairnessActive = true;
+        room.players.forEach((candidate) => {
+          candidate.skillRuntime.lockedThisHand = true;
+          candidate.skillRuntime.lockReason = "FAIRNESS";
+        });
         confirmPublicSkill(player, "FAIRNESS");
         return {
           publicSummary: `${player.name} 宣告「公平」：清除未完成技能状态，并封锁后续技能与结束恢复`,
-          audit: {
-            clearedLoanDebt: experiment.fairnessClearsLoanDebt !== false,
-            lockedFuture: experiment.fairnessLocksFuture !== false,
-            persistentsCleared,
-            loanAudit,
-          },
+          audit: { lockedFuture: true, persistentsCleared, loanAudit },
         };
       }
       case "DEAD_END": {
@@ -1443,15 +1357,11 @@ class SkillEngine {
     const runtime = player.skillRuntime;
     if (mode === "energy") {
       const gained = gainEnergy(player, SKILL_CONFIG.LOAN_ENERGY_GAIN);
-      runtime.energyLoan = {
-        repay: SKILL_CONFIG.LOAN_ENERGY_REPAY,
-        skipCurrentEnd: true,
-        originCredit: getLoanCreditState(runtime),
-      };
+      addLoanDebt(runtime, { kind: "energy", principal: gained, handNo: room.handNo });
       return {
         secret: true,
         publicSummary: "秘密技能已结算",
-        privateResult: { message: `能量贷款：立即获得 ${gained} 点能量，下一手结束偿还 ${SKILL_CONFIG.LOAN_ENERGY_REPAY}。` },
+        privateResult: { message: `能量贷款：立即获得 ${gained} 点能量，应偿还 ${SKILL_CONFIG.LOAN_ENERGY_REPAY}；可主动偿还。` },
         audit: { mode: "energy", gained, repay: SKILL_CONFIG.LOAN_ENERGY_REPAY },
       };
     }
@@ -1463,12 +1373,7 @@ class SkillEngine {
     const transferred = transferChips(room, opponent, player, take, CHIP_REASON.LOAN_TRANSFER);
     addDirectChipGain(player, transferred);
     addDirectChipGain(opponent, -transferred);
-    addChipLoanTranche(runtime, {
-      repay: SKILL_CONFIG.LOAN_CHIP_REPAY,
-      lenderId: opponent.playerId,
-      skipCurrentEnd: true,
-      originCredit: getLoanCreditState(runtime),
-    });
+    addLoanDebt(runtime, { kind: "chip", principal: transferred, lenderId: opponent.playerId, handNo: room.handNo });
     confirmPublicSkill(player, "LOAN");
     const kill = opponent.chips <= 0;
     return {
@@ -1610,135 +1515,52 @@ class SkillEngine {
     expireLoanDebtsForRoom(room);
   }
 
-  creditRestrictionOn() {
-    return this.experiment?.loanCreditRestrictionV2 === true;
-  }
-
-  applyFairnessLoanCredit(room, loanAudit) {
-    const handNo = Number(room?.handNo) || 0;
-    (room.players || []).forEach((player) => {
-      const row = (loanAudit || []).find((item) => item.playerId === player.playerId);
-      if (!row || !player.skillRuntime) return;
-      const pending = (Number(row.chipRepay) || 0) + (Number(row.energyRepay) || 0);
-      const residual = (Number(row.chipDebt) || 0) + (Number(row.energyDebt) || 0);
-      if (pending + residual <= 0) return;
-      const prev = row.creditState || getLoanCreditState(player.skillRuntime);
-      if (pending > 0) noteLoanWash(player.skillRuntime, handNo);
-      if (prev === LOAN_CREDIT.DEFAULTED && residual > 0) {
-        setLoanCreditState(player.skillRuntime, LOAN_CREDIT.RESTRICTED, { handNo });
-        return;
-      }
-      if (prev === LOAN_CREDIT.NORMAL && pending + residual > 0) {
-        setLoanCreditState(player.skillRuntime, LOAN_CREDIT.RESTRICTED, { handNo });
-        return;
-      }
-      if (prev === LOAN_CREDIT.RESTRICTED) {
-        setLoanCreditState(player.skillRuntime, LOAN_CREDIT.RESTRICTED, { handNo });
-      }
-    });
-  }
-
-  refreshLoanCreditFromResiduals(player, room) {
-    if (!this.creditRestrictionOn() || !player?.skillRuntime) return;
-    const runtime = player.skillRuntime;
-    const chipDebt = Math.max(0, Number(runtime.chipDebt) || 0);
-    const energyDebt = Math.max(0, Number(runtime.energyDebt) || 0);
-    const handNo = Number(room?.handNo) || 0;
-    if (chipDebt > 0 || energyDebt > 0) {
-      setLoanCreditState(runtime, LOAN_CREDIT.DEFAULTED, { handNo });
-      return;
-    }
-    if (getLoanCreditState(runtime) === LOAN_CREDIT.DEFAULTED) {
-      setLoanCreditState(runtime, LOAN_CREDIT.NORMAL, { handNo });
-    }
-  }
-
-  applyResidualChipDebt(room) {
-    if (!this.creditRestrictionOn()) return;
-    room.players.forEach((player) => {
-      const runtime = player.skillRuntime;
-      if (!runtime) return;
-      const due = isLegalPlayerChipAmount(runtime.chipDebt) ? runtime.chipDebt : 0;
-      if (due <= 0) {
-        runtime.chipDebt = 0;
-        runtime.chipDebtLenderId = null;
-        return;
-      }
-      const lender = room.players.find((candidate) => candidate.playerId === runtime.chipDebtLenderId)
-        || opponentOf(room, player);
-      if (!lender) return;
-      const paid = transferChips(room, player, lender, due, CHIP_REASON.LOAN_REPAYMENT);
-      if (paid <= 0) return;
-      addDirectChipGain(lender, paid);
-      addDirectChipGain(player, -paid);
-      runtime.chipDebt = due - paid;
-      if (runtime.chipDebt <= 0) runtime.chipDebtLenderId = null;
-      ensureLoanCreditMetrics(runtime).realChipRepaid += paid;
-    });
-  }
-
-  applyLoanRepayments(room) {
-    const v2 = this.creditRestrictionOn();
-    const handNo = Number(room?.handNo) || 0;
-    room.players.forEach((player) => {
-      const runtime = player.skillRuntime;
-      if (!runtime) return;
-      if (runtime.energyLoan) {
-        if (runtime.energyLoan.skipCurrentEnd) {
-          runtime.energyLoan.skipCurrentEnd = false;
-        } else {
-          const due = Number.isSafeInteger(runtime.energyLoan.repay) && runtime.energyLoan.repay > 0
-            ? runtime.energyLoan.repay
-            : 0;
-          const origin = runtime.energyLoan.originCredit || LOAN_CREDIT.NORMAL;
-          const available = Number.isSafeInteger(runtime.abyssEnergy) && runtime.abyssEnergy > 0
-            ? runtime.abyssEnergy
-            : 0;
-          const paid = Math.min(available, due);
-          runtime.abyssEnergy -= paid;
-          const remain = due - paid;
-          ensureLoanCreditMetrics(runtime).realEnergyRepaid += paid;
-          if (remain > 0) runtime.energyDebt = (Number(runtime.energyDebt) || 0) + remain;
-          if (v2) {
-            if (remain > 0) setLoanCreditState(runtime, LOAN_CREDIT.DEFAULTED, { handNo });
-            else if (origin === LOAN_CREDIT.RESTRICTED && paid === due && due > 0) {
-              setLoanCreditState(runtime, LOAN_CREDIT.NORMAL, { handNo });
-            }
-          }
-          runtime.energyLoan = null;
-        }
-      }
-      const chipLoans = listChipLoans(runtime);
-      const remaining = [];
-      chipLoans.forEach((loan) => {
-        if (loan.skipCurrentEnd) {
-          remaining.push({ ...loan, skipCurrentEnd: false });
-          return;
-        }
-        const lender = room.players.find((candidate) => candidate.playerId === loan.lenderId)
-          || opponentOf(room, player);
-        const due = isLegalPlayerChipAmount(loan.repay) ? loan.repay : 0;
-        const origin = loan.originCredit || LOAN_CREDIT.NORMAL;
-        if (!lender || due <= 0) {
-          if (due > 0 && !lender) remaining.push({ ...loan, skipCurrentEnd: false });
-          return;
-        }
-        const paid = transferChips(room, player, lender, due, CHIP_REASON.LOAN_REPAYMENT);
-        addDirectChipGain(lender, paid);
+  // Repayment is deliberately outside requestUse: no skill event, quota or turn mutation.
+  requestRepayment(room, player, payload = {}) {
+    const runtime = player?.skillRuntime;
+    const { requestId, debtId, handId } = payload;
+    if (!runtime || !room?.players?.includes(player)) return { ok: false, reason: "matchUnavailable" };
+    if (typeof requestId !== "string" || !/^[A-Za-z0-9_-]{1,64}$/.test(requestId)
+      || typeof debtId !== "string" || debtId.length > 64) return { ok: false, reason: "invalidRequest" };
+    const receipts = runtime.loanRepaymentReceipts;
+    const previous = receipts.get(requestId);
+    if (previous) return previous.debtId === debtId
+      ? { ...previous.result, duplicate: true }
+      : { ok: false, reason: "requestConflict" };
+    if (handId !== room.handId) return { ok: false, reason: "staleRequest" };
+    const debt = runtime.loanDebts.find((entry) => entry.id === debtId);
+    const reason = repaymentEligibility(room, player, debt);
+    if (reason) return { ok: false, reason };
+    if (debt.kind === "chip") {
+      const lender = room.players.find((candidate) => candidate.playerId === debt.lenderId);
+      const paid = transferChips(room, player, lender, debt.amount, CHIP_REASON.LOAN_REPAYMENT);
+      if (paid !== debt.amount) throw new Error("Loan repayment transfer invariant");
+      if (ACTIVE_PHASES.has(room.phase)) {
         addDirectChipGain(player, -paid);
-        const remain = due - paid;
-        ensureLoanCreditMetrics(runtime).realChipRepaid += paid;
-        if (remain > 0) {
-          runtime.chipDebt = (Number(runtime.chipDebt) || 0) + remain;
-          runtime.chipDebtLenderId = lender?.playerId || runtime.chipDebtLenderId || null;
-          if (v2) setLoanCreditState(runtime, LOAN_CREDIT.DEFAULTED, { handNo });
-        } else if (v2 && origin === LOAN_CREDIT.RESTRICTED && paid === due && due > 0) {
-          setLoanCreditState(runtime, LOAN_CREDIT.NORMAL, { handNo });
-        }
+        addDirectChipGain(lender, paid);
+      }
+    } else if (!spendEnergy(player, debt.amount)) {
+      return { ok: false, reason: "notEnoughEnergy" };
+    }
+    runtime.loanDebts = runtime.loanDebts.filter((entry) => entry.id !== debt.id);
+    const result = { ok: true, requestId, debtId, kind: debt.kind, paid: debt.amount };
+    receipts.set(requestId, { debtId, result });
+    // An evicted success still cannot replay: its server-generated tranche no longer exists.
+    if (receipts.size > 256) receipts.delete(receipts.keys().next().value);
+    // A zero stack during live betting may be an all-in, not a finished match.
+    if (room.phase === "end" && isMatchOverForLoan(room)) this.expireLoanDebts(room);
+    if (debt.kind === "chip") {
+      this.broadcastSkillState(room);
+      this.gameEngine?.broadcastRoomState(room);
+      this.gameEngine?.refreshLoanRepaymentActions?.(room);
+    } else {
+      this.emitToPlayer(player, "skill:state", {
+        skillMode: room.skillMode, room: getPublicRoomSkillSnapshot(room, player),
+        self: getSelfSkillSummary(player, room),
+        players: room.players.map((candidate) => ({ playerId: candidate.playerId, ...getPublicSkillSummary(candidate) })),
       });
-      runtime.chipLoans = remaining;
-      syncChipLoanState(runtime);
-    });
+    }
+    return { ...result, loan: getLoanSummary(runtime, room, player) };
   }
 
   applyHoleFortune(room) {

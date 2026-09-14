@@ -63,9 +63,11 @@ function translateMeta(items) {
       .replace(/每手最多成功提示 1 次/g, "at most one successful hint per hand")
       .replace(/每手最多成功 3 次/g, "at most 3 successes per hand")
       .replace(/牌面改良/g, "Board rewrite")
-      .replace(/次数由信用决定/g, "uses decided by credit")
+      .replace(/每手合计最多 2 次/g, "2 total uses per hand")
+      .replace(/分支可见性不同/g, "branch-dependent visibility")
       .replace(/合法下注或专属响应窗口/g, "legal betting or exclusive response window")
       .replace(/结束资源/g, "end-of-hand resource")
+      .replace(/仅翻牌前放置/g, "planted Pre-Flop only")
       .replace(/翻牌及之后/g, "Flop and later")
       .replace(/翻牌前/g, "Pre-Flop")
       .replace(/翻牌/g, "Flop")
@@ -82,7 +84,6 @@ function translateMeta(items) {
       .replace(/每手/g, "per hand")
       .replace(/本人下注回合/g, "your betting turn")
       .replace(/手牌开始判定/g, "checked at hand start")
-      .replace(/仅翻牌前放置/g, "planted Pre-Flop only")
       .replace(/可见性混合/g, "mixed visibility")
       .replace(/翻牌及之后/g, "Flop and later")
       .replace(/转牌后/g, "after Turn")
@@ -277,8 +278,8 @@ const SECTIONS = {
       </section>
       <section id="rule-energy-recovery" data-rule-entry data-rule-entry-title="Natural end-of-hand recovery">
         <h4>Natural end-of-hand recovery</h4>
-        <div class="rules-table-wrap"><table class="rules-table"><thead><tr><th>Hand result</th><th>Natural recovery</th></tr></thead><tbody><tr><th scope="row">Win</th><td>+0</td></tr><tr><th scope="row">Loss or normal Fold</th><td>+1</td></tr><tr><th scope="row">Split Pot</th><td>+0</td></tr><tr><th scope="row">Retreat Fold</th><td>+0</td></tr></tbody></table></div>
-        <p>Extra skill recovery, payment, borrowing, debt, or recovery suppression settle separately.</p>
+        <div class="rules-table-wrap"><table class="rules-table"><thead><tr><th>Hand result</th><th>Natural recovery</th></tr></thead><tbody><tr><th scope="row">Win</th><td>+1</td></tr><tr><th scope="row">Loss or normal Fold</th><td>+2</td></tr><tr><th scope="row">Split Pot</th><td>+1 each</td></tr><tr><th scope="row">Retreat Fold</th><td>user +0 / opponent +1</td></tr></tbody></table></div>
+        <p>Recovery respects your Energy cap. Fairness suppresses all recovery at this hand's end. Loan debt never collects Energy automatically.</p>
       </section>
       <section id="rule-energy-public" data-rule-entry data-rule-entry-title="Opponent public Energy">
         <h4>Opponent public Energy</h4>
@@ -318,7 +319,7 @@ const SECTIONS = {
       </section>
       <section id="rule-fairness-general" data-rule-entry data-rule-entry-title="Fairness general">
         <h4>Fairness general</h4>
-        <p>Fairness clears both players' still-live persistent, planted, and pending skill states, blocks later Active and Passive events this hand, and suppresses all end-of-hand Energy recovery this hand. It does not roll back finished information, card edits, deck edits, or direct chip transfers.</p>
+        <p>Fairness clears both players' still-live persistent, planted, and pending skill states, blocks later Active and Passive events this hand, and suppresses all end-of-hand Energy recovery this hand. It does not roll back finished information, card edits, deck edits, or direct chip transfers. Loan principal remains owed; before default only, Fairness waives interest without resetting grace or borrowing limits.</p>
       </section>
     `,
   },
@@ -397,7 +398,7 @@ const SECTIONS = {
           <thead><tr><th>Interaction</th><th>Ruling</th></tr></thead>
           <tbody>
             <tr id="interaction-fair-counter" data-rule-entry data-rule-entry-title="Fairness × Counter"><th scope="row">Fairness × Counter</th><td>Fairness cannot be Countered.</td></tr>
-            <tr id="interaction-fair-loan" data-rule-entry data-rule-entry-title="Fairness × Loan"><th scope="row">Fairness × Loan</th><td>Clears unpaid state without refunding resources already taken. If debt is actually cleared, credit enters or stays restricted. Default only rises to restricted, not straight back to normal.</td></tr>
+            <tr id="interaction-fair-loan" data-rule-entry data-rule-entry-title="Fairness × Loan"><th scope="row">Fairness × Loan</th><td>Before default, waives interest and keeps the actual principal owed. It does not unlock borrowing or reset uses or grace. Repeated Fairness does not reduce debt again. After default it has no effect on debt.</td></tr>
             <tr id="interaction-fair-retreat" data-rule-entry data-rule-entry-title="Fairness × Retreat"><th scope="row">Fairness × Retreat</th><td>Clears Retreat. The 3 Energy already paid is not refunded. A new Retreat cannot launch after Fairness.</td></tr>
             <tr id="interaction-fair-disguise" data-rule-entry data-rule-entry-title="Fairness × Disguise"><th scope="row">Fairness × Disguise</th><td>Clears Disguise. Later displays restore. Historical hidden numbers are not backfilled.</td></tr>
             <tr id="interaction-fair-endgame" data-rule-entry data-rule-entry-title="Fairness × Endgame"><th scope="row">Fairness × Endgame</th><td>Endgame cannot launch after Fairness succeeds. After Endgame closes betting there is no ordinary Fairness window. A completed Endgame seize is not rolled back.</td></tr>
@@ -428,7 +429,7 @@ const SECTIONS = {
     content: `
       <section id="rule-tie" data-rule-entry data-rule-entry-title="Split Pot">
         <h4>Split Pot</h4>
-        <p>If both final best fives are identical at Showdown, the hand is a Split Pot. Neither player gets Hand Rank Bonus, ordinary win multipliers, or the ordinary loser +1 Energy.</p>
+        <p>If both final best fives are identical at Showdown, the hand is a Split Pot. Neither player gets Hand Rank Bonus or ordinary win multipliers. Each naturally recovers 1 Energy unless Fairness suppresses recovery.</p>
         <p>Contested chips split evenly. If the Pot is odd, the leftover 1 chip goes to that hand's Big Blind.</p>
       </section>
       <section id="rule-game-over" data-rule-entry data-rule-entry-title="Match end">
@@ -438,7 +439,7 @@ const SECTIONS = {
       <section id="rule-debt-expiry" data-rule-entry data-rule-entry-title="Loan debt expiry">
         <h4>Loan debt expiry</h4>
         <p>If the match is already over after the current hand settles, unfinished Loans, leftover chip debt, leftover Energy debt, and Loan credit clear immediately. There is no post-match repayment, and post-match debt cannot reverse an already decided result.</p>
-        <p>If the match is still live, due repayment follows Loan rules. Repayment can zero a payer and end the match.</p>
+        <p>If the match is still live, debt remains until voluntary repayment. A repayment that would zero the payer requires the safe post-settlement window; the normal match-end check then applies.</p>
       </section>
     `,
   },

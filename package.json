@@ -12,6 +12,7 @@
     "test:watch": "jest --watch",
     "simulate:chip-economy": "node scripts/simulate-chip-economy.js",
     "simulate:overdrive": "node scripts/simulate-overdrive.js 1000",
+    "simulate:loan": "node scripts/simulate-loan-lifecycle.js 1000",
     "simulate:skills": "node scripts/simulate-skills.js 1000",
     "validate:fortune-perception": "node scripts/validate-fortune-perception-v1.js",
     "validate:fortune-debt": "node scripts/validate-fortune-debt.js",
@@ -25,6 +26,7 @@
     "capture:ui": "node scripts/capture-ui-review.mjs",
     "capture:tutorial-en": "node scripts/capture-tutorial-en.mjs",
     "verify:online": "node scripts/verify-online-sync.js",
+    "verify:loan-ui": "node scripts/verify-loan-ui.mjs",
     "verify:i18n": "node scripts/verify-i18n.mjs"
   },
   "dependencies": {

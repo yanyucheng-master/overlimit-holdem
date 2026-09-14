@@ -51,6 +51,7 @@
     <link rel="stylesheet" href="./style.css" />
     <link rel="stylesheet" href="./salon.css" />
     <link rel="stylesheet" href="./table-v2.css" />
+    <link rel="stylesheet" href="./loan-ui.css" />
     <link rel="stylesheet" href="./skill-effects.css" />
     <link rel="stylesheet" href="./visual-quality.css" />
     <link rel="stylesheet" href="./skill-fx-art.css" />
@@ -451,7 +452,7 @@
                   <span><strong>4</strong><small data-i18n="quickstart.startEnergy">初始能量</small></span>
                   <span><strong>8</strong><small data-i18n="quickstart.energyCap">普通上限</small></span>
                 </div>
-                <p class="quickstart-build-note" data-i18n="quickstart.p4note">每手失败后通常恢复 1 点能量。完整构筑不会在开局时公开给对手。</p>
+                <p class="quickstart-build-note" data-i18n="quickstart.p4note">每手获胜恢复 1 点能量，失败恢复 2 点，平局双方各恢复 1 点；公平会取消本手恢复。完整构筑不会在开局时公开给对手。</p>
               </div>
               <div class="quickstart-build-shots" aria-label="真实技能构筑和实战界面" data-i18n-attr="aria-label:quickstart.shotsAria">
                 <figure
@@ -782,6 +783,7 @@
             <p id="settle-chip-total" class="settle-chip-total"></p>
           </div>
           <div class="settle-meta-row">
+            <button id="settle-loan" class="loan-summary-button hidden" type="button" data-i18n="loan.manage">查看贷款 / 偿还</button>
             <button id="settle-opp-energy" class="settle-energy hidden" type="button" aria-controls="opponent-energy-pop">
               对方剩余能量 —
             </button>
@@ -1248,6 +1250,7 @@
                 <span id="skill-silence-flag" class="hidden" data-i18n="intel.silenceLock">技能封锁</span>
               </div>
               <div id="skill-bar" class="skill-bar" aria-label="已装备技能" data-i18n-attr="aria-label:table.equipped"></div>
+              <button id="btn-loan-debts" class="loan-summary-button hidden" type="button" aria-controls="loan-debt-modal"></button>
               <span
                 id="self-fairness-lock"
                 class="fairness-lock-badge fairness-lock-self hidden"
@@ -1348,6 +1351,17 @@
       </button>
     </main>
 
+    <div id="loan-debt-modal" class="modal-layer hidden" role="dialog" aria-modal="true" aria-labelledby="loan-debt-title">
+      <section class="modal-panel glass-panel loan-debt-panel" tabindex="-1">
+        <header class="modal-header">
+          <h2 id="loan-debt-title" data-i18n="loan.manage">查看贷款 / 偿还</h2>
+          <button id="btn-loan-close" class="icon-button" type="button" aria-label="关闭" data-i18n-attr="aria-label:common.close">×</button>
+        </header>
+        <p id="loan-debt-status" role="status"></p>
+        <div id="loan-debt-list" class="loan-debt-list"></div>
+        <p class="loan-debt-note" data-i18n="loan.repayHint">按笔完整偿还。不消耗技能次数，不推进下注行动。</p>
+      </section>
+    </div>
     <div id="skill-preview-modal" class="modal-layer hidden" role="dialog" aria-modal="true" aria-labelledby="skill-preview-title">
       <section class="modal-panel skill-preview-panel glass-panel" tabindex="-1">
         <header class="modal-header skill-preview-header">

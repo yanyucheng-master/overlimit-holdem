@@ -214,7 +214,7 @@ describe("强运负债体验与动态筹码", () => {
     expect(hit).toBe(true);
     expect(a.skillRuntime.abyssEnergy).toBe(-2);
     gainEnergy(a, SKILL_CONFIG.ENERGY_LOSER_GAIN);
-    expect(a.skillRuntime.abyssEnergy).toBe(-1);
+    expect(a.skillRuntime.abyssEnergy).toBe(0);
   });
 
   test("Fold Bot 不能访问隐藏信息", () => {

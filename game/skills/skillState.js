@@ -1,118 +1,10 @@
 const { SKILL_CONFIG } = require("../skillConfig");
 const { getSkillDefinition, listSkillDefinitions, isProtocolSkill } = require("./definitions");
 
-const LOAN_CREDIT = Object.freeze({
-  NORMAL: "NORMAL_CREDIT",
-  RESTRICTED: "RESTRICTED_CREDIT",
-  DEFAULTED: "DEFAULTED",
-});
-
-function createLoanCreditMetrics() {
-  return {
-    restrictedEntries: 0,
-    defaultedEntries: 0,
-    restores: 0,
-    washDebts: 0,
-    defaultEscapes: 0,
-    deniedByCredit: 0,
-    realChipRepaid: 0,
-    realEnergyRepaid: 0,
-    restoreHandGaps: [],
-    washHandNos: [],
-    restoreHandNos: [],
-    lastWashHandNo: null,
-    lastRestoreHandNo: null,
-    washRepayWashCycles: 0,
-    cycleHandGaps: [],
-    restrictedSinceHandNo: null,
-  };
-}
-
-function ensureLoanCreditMetrics(runtime) {
-  if (!runtime) return createLoanCreditMetrics();
-  if (!runtime.loanCreditMetrics) runtime.loanCreditMetrics = createLoanCreditMetrics();
-  return runtime.loanCreditMetrics;
-}
-
-function getLoanCreditState(runtime) {
-  const value = runtime?.loanCreditState;
-  if (value === LOAN_CREDIT.RESTRICTED || value === LOAN_CREDIT.DEFAULTED) return value;
-  return LOAN_CREDIT.NORMAL;
-}
-
-function setLoanCreditState(runtime, next, { handNo = null } = {}) {
-  if (!runtime || !next) return getLoanCreditState(runtime);
-  const prev = getLoanCreditState(runtime);
-  if (prev === next) return prev;
-  runtime.loanCreditState = next;
-  const metrics = ensureLoanCreditMetrics(runtime);
-  if (next === LOAN_CREDIT.RESTRICTED) {
-    metrics.restrictedEntries += 1;
-    metrics.restrictedSinceHandNo = handNo;
-    if (prev === LOAN_CREDIT.DEFAULTED) metrics.defaultEscapes += 1;
-  }
-  if (next === LOAN_CREDIT.DEFAULTED) {
-    metrics.defaultedEntries += 1;
-  }
-  if (next === LOAN_CREDIT.NORMAL) {
-    metrics.restores += 1;
-    metrics.lastRestoreHandNo = handNo;
-    metrics.restoreHandNos.push(handNo);
-    if (metrics.restrictedSinceHandNo != null && handNo != null) {
-      metrics.restoreHandGaps.push(Math.max(0, handNo - metrics.restrictedSinceHandNo));
-    }
-    metrics.restrictedSinceHandNo = null;
-  }
-  return next;
-}
-
-function noteLoanWash(runtime, handNo) {
-  if (!runtime) return;
-  const metrics = ensureLoanCreditMetrics(runtime);
-  metrics.washDebts += 1;
-  if (
-    metrics.lastRestoreHandNo != null
-    && metrics.lastWashHandNo != null
-    && metrics.lastRestoreHandNo >= metrics.lastWashHandNo
-    && (handNo == null || handNo >= metrics.lastRestoreHandNo)
-  ) {
-    metrics.washRepayWashCycles += 1;
-    if (handNo != null && metrics.lastWashHandNo != null) {
-      metrics.cycleHandGaps.push(Math.max(0, handNo - metrics.lastWashHandNo));
-    }
-  }
-  metrics.lastWashHandNo = handNo;
-  metrics.washHandNos.push(handNo);
-}
-
-function getLoanQuota(runtime, { creditRestriction = false } = {}) {
-  const normal = {
-    maxChip: SKILL_CONFIG.LOAN_CHIP_MAX_USES_PER_HAND,
-    maxEnergy: SKILL_CONFIG.LOAN_ENERGY_MAX_USES_PER_HAND,
-    maxTotal: SKILL_CONFIG.LOAN_CHIP_MAX_USES_PER_HAND + SKILL_CONFIG.LOAN_ENERGY_MAX_USES_PER_HAND,
-  };
-  if (!creditRestriction) return normal;
-  const state = getLoanCreditState(runtime);
-  if (state === LOAN_CREDIT.DEFAULTED) return { maxChip: 0, maxEnergy: 0, maxTotal: 0 };
-  if (state === LOAN_CREDIT.RESTRICTED) return { maxChip: 1, maxEnergy: 1, maxTotal: 1 };
-  return normal;
-}
-
-function pendingLoanObligations(runtime) {
-  const chipPending = listChipLoans(runtime).reduce((sum, loan) => sum + Math.max(0, Number(loan.repay) || 0), 0);
-  const energyPending = Math.max(0, Number(runtime?.energyLoan?.repay) || 0);
-  const chipDebt = Math.max(0, Number(runtime?.chipDebt) || 0);
-  const energyDebt = Math.max(0, Number(runtime?.energyDebt) || 0);
-  return {
-    chipPending,
-    energyPending,
-    chipDebt,
-    energyDebt,
-    pending: chipPending + energyPending,
-    residual: chipDebt + energyDebt,
-    total: chipPending + energyPending + chipDebt + energyDebt,
-  };
-}
+const {
+  LOAN_CREDIT, getLoanCreditState, getLoanQuota, getLoanSummary,
+  loanReuseBlocked, expireLoanDebts, expireLoanDebtsForRoom, isMatchOverForLoan,
+} = require("./loanState");
 
 function createEmptySkillRuntime() {
   return {
@@ -154,16 +46,13 @@ function createEmptySkillRuntime() {
     privateResults: [],
     confirmedPublicSkills: [],
     revealedSkillIds: [],
-    chipLoan: null,
-    chipLoans: [],
-    energyLoan: null,
-    energyDebt: 0,
-    chipDebt: 0,
-    chipDebtLenderId: null,
-    loanCreditState: LOAN_CREDIT.NORMAL,
-    loanCreditMetrics: createLoanCreditMetrics(),
+    loanDebts: [],
+    loanHandNo: 0,
+    loanLastClosedHandNo: -1,
+    loanRepaymentReceipts: new Map(),
     loanChipUsesThisHand: 0,
     loanEnergyUsesThisHand: 0,
+    loanTotalUsesThisHand: 0,
     alertChanceIndex: 0,
     alertPromptPending: false,
     alertPromptedThisHand: false,
@@ -186,6 +75,7 @@ function createRoomSkillState() {
     noFoldActive: false,
     contributionCap: null,
     fairnessActive: false,
+    handEndRecoverySettled: false,
     settlement: null,
     bettingClosed: false,
     endgameActive: null,
@@ -263,16 +153,10 @@ function resetPlayerSkillsForHand(player) {
     abyssEnergy: runtime.abyssEnergy,
     visibleAbyssEnergy: runtime.visibleAbyssEnergy,
     skillUsesThisGame: runtime.skillUsesThisGame,
-    chipLoan: runtime.chipLoan || null,
-    chipLoans: Array.isArray(runtime.chipLoans) ? runtime.chipLoans.map((loan) => ({ ...loan })) : [],
-    energyLoan: runtime.energyLoan || null,
-    energyDebt: Math.max(0, Number(runtime.energyDebt) || 0),
-    chipDebt: Math.max(0, Number(runtime.chipDebt) || 0),
-    chipDebtLenderId: (Math.max(0, Number(runtime.chipDebt) || 0) > 0)
-      ? (runtime.chipDebtLenderId || null)
-      : null,
-    loanCreditState: getLoanCreditState(runtime),
-    loanCreditMetrics: runtime.loanCreditMetrics || createLoanCreditMetrics(),
+    loanDebts: runtime.loanDebts || [],
+    loanHandNo: runtime.loanHandNo,
+    loanLastClosedHandNo: runtime.loanLastClosedHandNo,
+    loanRepaymentReceipts: runtime.loanRepaymentReceipts,
     alertChanceIndex: Math.max(0, Number(runtime.alertChanceIndex) || 0),
     alertPromptPending: Boolean(runtime.alertPromptPending),
     revealedSkillIds: [...(runtime.revealedSkillIds || [])],
@@ -353,19 +237,8 @@ function gainEnergy(player, amount) {
   if (!Number.isSafeInteger(amount) || amount <= 0) return 0;
   const requested = amount;
   if (!runtime || requested <= 0) return 0;
-  let remaining = requested;
-  const debt = Number.isSafeInteger(runtime.energyDebt) && runtime.energyDebt > 0
-    ? runtime.energyDebt
-    : 0;
-  if (debt > 0) {
-    const paid = Math.min(debt, remaining);
-    runtime.energyDebt = debt - paid;
-    remaining -= paid;
-    ensureLoanCreditMetrics(runtime).realEnergyRepaid += paid;
-  }
-  if (remaining <= 0) return 0;
   const before = runtime.abyssEnergy;
-  runtime.abyssEnergy = Math.min(getEnergyCap(player), before + remaining);
+  runtime.abyssEnergy = Math.min(getEnergyCap(player), before + requested);
   return runtime.abyssEnergy - before;
 }
 
@@ -427,7 +300,7 @@ function getPublicSkillSummary(player) {
   };
 }
 
-function getSelfSkillSummary(player) {
+function getSelfSkillSummary(player, room = null) {
   const runtime = player?.skillRuntime || createEmptySkillRuntime();
   return {
     equippedSkillIds: [...(runtime.equippedSkillIds || [])],
@@ -457,14 +330,11 @@ function getSelfSkillSummary(player) {
     retreatActive: Boolean(runtime.retreatActive),
     probeActive: Boolean(runtime.probeActive),
     disguiseActive: Boolean(runtime.disguiseActive),
-    energyDebt: Math.max(0, Number(runtime.energyDebt) || 0),
-    chipDebt: Math.max(0, Number(runtime.chipDebt) || 0),
-    loanCreditState: getLoanCreditState(runtime),
-    chipLoanPending: Boolean(listChipLoans(runtime).length),
-    energyLoanPending: Boolean(runtime.energyLoan),
+    loan: getLoanSummary(runtime, room, player),
+    loanTotalUsesThisHand: runtime.loanTotalUsesThisHand || 0,
     loanChipUsesThisHand: Math.max(0, Number(runtime.loanChipUsesThisHand) || 0),
     loanEnergyUsesThisHand: Math.max(0, Number(runtime.loanEnergyUsesThisHand) || 0),
-    loanQuota: getLoanQuota(runtime, { creditRestriction: true }),
+    loanQuota: getLoanQuota(),
   };
 }
 
@@ -567,69 +437,6 @@ function addDirectChipGain(player, amount) {
   player.skillRuntime.directChipGainThisHand = current + amount;
 }
 
-function listChipLoans(runtime) {
-  if (Array.isArray(runtime?.chipLoans)) return runtime.chipLoans;
-  if (runtime?.chipLoan) return [runtime.chipLoan];
-  return [];
-}
-
-function syncChipLoanState(runtime) {
-  if (!runtime) return;
-  const list = listChipLoans(runtime);
-  runtime.chipLoans = list;
-  if (!list.length) {
-    runtime.chipLoan = null;
-    return;
-  }
-  runtime.chipLoan = {
-    repay: list.reduce((sum, loan) => sum + Math.max(0, Number(loan.repay) || 0), 0),
-    lenderId: list[0].lenderId,
-    skipCurrentEnd: list.every((loan) => loan.skipCurrentEnd),
-    count: list.length,
-  };
-}
-
-function addChipLoanTranche(runtime, tranche) {
-  if (!runtime) return;
-  runtime.chipLoans = listChipLoans(runtime);
-  runtime.chipLoans.push(tranche);
-  syncChipLoanState(runtime);
-}
-
-function loanReuseBlocked(player) {
-  const runtime = player?.skillRuntime;
-  if (!runtime) return true;
-  return (Number(runtime.energyDebt) || 0) > 0 || (Number(runtime.chipDebt) || 0) > 0;
-}
-
-function expireLoanDebts(player) {
-  const runtime = player?.skillRuntime;
-  if (!runtime) return;
-  runtime.chipLoan = null;
-  runtime.chipLoans = [];
-  runtime.energyLoan = null;
-  runtime.energyDebt = 0;
-  runtime.chipDebt = 0;
-  runtime.chipDebtLenderId = null;
-  runtime.loanCreditState = LOAN_CREDIT.NORMAL;
-}
-
-function clearResidualChipDebt(runtime) {
-  if (!runtime) return;
-  runtime.chipDebt = 0;
-  runtime.chipDebtLenderId = null;
-}
-
-function expireLoanDebtsForRoom(room) {
-  (room?.players || []).forEach(expireLoanDebts);
-}
-
-function isMatchOverForLoan(room) {
-  return (room?.players || []).some((player) => (
-    player.status === "out" || (Number(player.chips) || 0) <= 0
-  ));
-}
-
 module.exports = {
   createEmptySkillRuntime, createRoomSkillState, resetPlayerSkillsForGame,
   resetPlayerSkillsForHand, resetRoomSkillsForHand,
@@ -643,9 +450,6 @@ module.exports = {
   recordPaidFailure, canTriggerNewSkillEvent, equippedProtocols,
   isChipViewHiddenFor, addDirectChipGain, loanReuseBlocked,
   expireLoanDebts, expireLoanDebtsForRoom, isMatchOverForLoan,
-  clearResidualChipDebt,
-  maskLoanPublicSummary, addChipLoanTranche, listChipLoans, syncChipLoanState,
-  LOAN_CREDIT, getLoanCreditState, setLoanCreditState, getLoanQuota,
-  pendingLoanObligations, ensureLoanCreditMetrics, noteLoanWash,
-  createLoanCreditMetrics,
+  maskLoanPublicSummary,
+  LOAN_CREDIT, getLoanCreditState, getLoanQuota,
 };

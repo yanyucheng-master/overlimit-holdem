@@ -1,4 +1,5 @@
 const socket = io();
+let loanRepaymentPending = null;
 
 const GAME_MODE = Object.freeze({
   STANDARD: "standard",
@@ -5680,7 +5681,9 @@ document.addEventListener("keydown", (event) => {
     if (isNullifyTargeting()) cancelNullifyTargeting();
     return;
   }
-  if (top === el.quickStartImageModal) {
+  if (top === byId("loan-debt-modal")) {
+    setModalVisible(top, false);
+  } else if (top === el.quickStartImageModal) {
     closeQuickStartImage();
   } else if (top === el.quickStartModal) {
     closeQuickStart();
@@ -6037,7 +6040,7 @@ socket.on("community_cards", (payload) => {
 });
 socket.on("player_turn", (payload) => {
   if (shouldIgnoreSyncEvent(payload)) return;
-  endUiRequest("action");
+  if (!payload.refreshOnly) endUiRequest("action");
   state.currentTurnPlayerId = payload.playerId;
   state.validActions = payload.playerId === state.playerId ? payload.validActions || [] : [];
   state.endgameWindow = Boolean(payload.endgameWindow);
@@ -6050,7 +6053,7 @@ socket.on("player_turn", (payload) => {
   if (payload.handId && state.commitments.has(payload.handId)) {
     state.activeCommitment = state.commitments.get(payload.handId);
   }
-  logAction(payload.playerId === state.playerId ? t("game.yourTurnLog") : t("game.oppActing"));
+  if (!payload.refreshOnly) logAction(payload.playerId === state.playerId ? t("game.yourTurnLog") : t("game.oppActing"));
   renderState();
 });
 socket.on("action_made", (payload) => {
@@ -6352,6 +6355,7 @@ function skillAvailability(def, skills, me) {
   else if (!me || me.status === "folded" || me.status === "out") reason = "skill.exited";
   else if (Number(skills?.abyssEnergy || 0) < 0) reason = "skill.negative";
   else if (skills?.lockedThisHand || state.skillState?.fairnessActive) reason = "skill.locked";
+  else if (def.id === "LOAN" && skills?.loan?.borrowingLocked) reason = "loan.locked";
   else if (Array.isArray(def.allowedPhases) && def.allowedPhases.length && !def.allowedPhases.includes(state.phase)) reason = "skill.badStreet";
   else if (def.requiresActionTurn && state.currentTurnPlayerId !== state.playerId && !(def.id === "ENDGAME" && state.skillState?.endgameWindow?.playerId === state.playerId)) reason = "skill.waitTurn";
   else if (def.requiresActionTurn && me?.isAllIn && !(def.id === "ENDGAME" && state.skillState?.endgameWindow?.playerId === state.playerId)) reason = "skill.allInNoTurn";
@@ -6741,7 +6745,7 @@ function syncSkillFxStates() {
   addSelf(self.retreatActive, "retreat", "EXIT", "cyan");
   addSelf(self.probeActive, "probe", "PROBE", "gold");
   addSelf(self.disguiseActive, "disguise-self", "MASK", "violet");
-  addSelf(self.energyLoanPending || self.chipLoanPending || Number(self.energyDebt) > 0 || Number(self.chipDebt) > 0,
+  addSelf(Boolean(self.loan?.tranches?.length),
     "loan", "DEBT", "gold");
   addTable(room.noFoldActive, "intimidation", "NO FOLD", "red");
   addTable(room.disguiseActive, "disguise", "MASKED", "violet");
@@ -6795,8 +6799,90 @@ function renderSkillFeed() {
   });
 }
 
+function openLoanDebts() {
+  renderLoanDebts();
+  setModalVisible(byId("loan-debt-modal"), true);
+}
+
+function renderLoanDebts() {
+  const loan = state.skillSelf?.loan;
+  const debts = loan?.tranches || [];
+  const visible = state.skillMode === "abyss" && debts.length > 0;
+  const summary = byId("btn-loan-debts");
+  summary.classList.toggle("hidden", !visible);
+  byId("settle-loan").classList.toggle("hidden", !visible);
+  summary.textContent = t(loan?.borrowingLocked ? "loan.lockedSummary" : "loan.summary", {
+    chips: loan?.chipDebt || 0, energy: loan?.energyDebt || 0,
+  });
+  summary.title = t(loan?.borrowingLocked ? "loan.locked" : "loan.sameHand");
+  summary.setAttribute("aria-label", summary.textContent + ". " + summary.title);
+  const status = byId("loan-debt-status");
+  status.textContent = t(!debts.length ? "loan.available" : loan.state === "DEFAULTED" ? "loan.defaulted" : loan.borrowingLocked ? "loan.locked" : "loan.sameHand");
+  status.classList.toggle("is-defaulted", loan?.state === "DEFAULTED");
+  const list = byId("loan-debt-list");
+  const signature = JSON.stringify([currentLocale(), debts, loanRepaymentPending, socket.connected]);
+  if (list.dataset.signature === signature) return;
+  list.dataset.signature = signature;
+  list.replaceChildren();
+  debts.forEach((debt, index) => {
+    const row = document.createElement("div");
+    row.className = "loan-debt-row";
+    row.dataset.debtId = debt.id;
+    const title = document.createElement("strong");
+    title.textContent = t(debt.kind === "chip" ? "loan.chipDue" : "loan.energyDue", { number: index + 1, amount: debt.amount });
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "button button-primary";
+    button.textContent = t(loanRepaymentPending?.debtId === debt.id ? "loan.pending" : "loan.repay");
+    button.disabled = !debt.canRepay || Boolean(loanRepaymentPending) || !socket.connected;
+    button.setAttribute("aria-label", title.textContent + " · " + t("loan.repay"));
+    button.addEventListener("click", () => {
+      if (loanRepaymentPending || !socket.connected) return;
+      // getRandomValues also works on local-network HTTP; randomUUID requires HTTPS.
+      const requestId = "repay_" + Array.from(crypto.getRandomValues(new Uint32Array(4)), (value) => value.toString(16).padStart(8, "0")).join("");
+      loanRepaymentPending = { requestId, debtId: debt.id };
+      socket.emit("loan:repay", {
+        ...loanRepaymentPending, roomId: state.roomId,
+        handId: state.activeCommitment?.handId || null,
+      });
+      renderLoanDebts();
+    });
+    const details = document.createElement("small");
+    details.textContent = [
+      t("loan.principal", { amount: debt.principal }),
+      t(debt.defaultApplied ? "loan.penalty" : "loan.grace", { amount: debt.penalty, count: debt.graceHandsRemaining }),
+      debt.fairnessAdjusted ? t("loan.fairness") : "",
+      debt.blockedReason ? t("loan.errors." + debt.blockedReason) : "",
+    ].filter(Boolean).join(" · ");
+    row.append(title, button, details);
+    list.appendChild(row);
+  });
+}
+
+byId("btn-loan-debts").addEventListener("click", openLoanDebts);
+byId("settle-loan").addEventListener("click", openLoanDebts);
+byId("btn-loan-close").addEventListener("click", () => setModalVisible(byId("loan-debt-modal"), false));
+byId("loan-debt-modal").addEventListener("click", (event) => {
+  if (event.target === event.currentTarget) setModalVisible(event.currentTarget, false);
+});
+socket.on("loan:repayment:result", (payload) => {
+  if (shouldIgnoreSyncEvent(payload)) return;
+  if (loanRepaymentPending && payload.requestId && payload.requestId !== loanRepaymentPending.requestId) return;
+  loanRepaymentPending = null;
+  if (payload.loan) state.skillSelf = { ...(state.skillSelf || {}), loan: payload.loan };
+  renderLoanDebts();
+  showToast(payload.ok ? t("loan.repaid") : (payload.message ? localizeIncoming(payload.message) : t("loan.errors." + payload.reason)), payload.ok ? "success" : "error");
+});
+socket.on("loan:state", (payload) => {
+  if (shouldIgnoreSyncEvent(payload)) return;
+  state.skillSelf = { ...(state.skillSelf || {}), loan: payload.loan };
+  renderSkillHud();
+});
+socket.on("disconnect", () => { loanRepaymentPending = null; renderLoanDebts(); });
+
 function renderSkillHud() {
   if (!el.skillHud) return;
+  renderLoanDebts();
   const enabled = state.skillMode === "abyss";
   const fairnessLocked = Boolean(enabled && state.skillState?.fairnessActive);
   [el.selfFairnessLock, el.opponentFairnessLock].forEach((badge) => {
@@ -7271,14 +7357,13 @@ function useSkill(skillId) {
     const self = state.skillSelf || getMe()?.skills || {};
     const chipUses = Number(self.loanChipUsesThisHand || 0);
     const energyUses = Number(self.loanEnergyUsesThisHand || 0);
-    const quota = self.loanQuota || { maxChip: 2, maxEnergy: 1, maxTotal: 3 };
-    const credit = self.loanCreditState || "NORMAL_CREDIT";
+    const quota = self.loanQuota || { maxChip: 2, maxEnergy: 1, maxTotal: 2 };
     const totalUses = chipUses + energyUses;
     const totalLeft = Math.max(0, Number(quota.maxTotal) - totalUses);
     const chipLeft = Math.min(Math.max(0, Number(quota.maxChip) - chipUses), totalLeft);
     const energyLeft = Math.min(Math.max(0, Number(quota.maxEnergy) - energyUses), totalLeft);
-    if (credit === "DEFAULTED" || Number(quota.maxTotal) <= 0) {
-      showToast(t("loan.defaulted"), "error");
+    if (self.loan?.borrowingLocked) {
+      openLoanDebts();
       return;
     }
     const options = [];
@@ -7296,12 +7381,10 @@ function useSkill(skillId) {
       });
     }
     if (!options.length) {
-      showToast(credit === "RESTRICTED_CREDIT" ? t("loan.restricted") : t("loan.handCap"), "error");
+      showToast(t("loan.handCap"), "error");
       return;
     }
-    const hint = credit === "RESTRICTED_CREDIT"
-      ? t("loan.restrictedAll")
-      : t("choice.loanHint");
+    const hint = t("choice.loanHint");
     return openSkillTargetOptions({
       skillId,
       title: skillCopy("LOAN", "name"),

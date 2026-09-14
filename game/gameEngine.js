@@ -1,3 +1,4 @@
+const { getLoanSummary } = require("./skills/loanState");
 const crypto = require("crypto");
 const { createShuffledDeck } = require("../utils/deck");
 const { pickBestFive, compareEvaluatedHands } = require("./handEvaluator");
@@ -598,8 +599,8 @@ class GameEngine {
 
   syncHandResultAfterEndHand(room, handResult) {
     if (!handResult) return handResult;
-    // Loan repayment is resolved by SkillEngine.endHand and may bankrupt a
-    // player after the initial result payload was constructed.
+    // Refresh the result after all hand-end resource changes; Loan is not
+    // collected here. Voluntary settlement-window repayments are separate.
     handResult.isFinalHand = room.players.some((player) => player.chips <= 0);
     handResult.skillSettlement = room.skillState?.settlement || handResult.skillSettlement || null;
     return this.stampHandResultEnergy(room, handResult);
@@ -734,6 +735,11 @@ class GameEngine {
   broadcastRoomState(room) {
     room.players.forEach((player) => {
       this.emitToPlayer(player, "room_state", this.getRoomSnapshot(room, player));
+      if (isSkillEnabled(room.skillMode)) {
+        this.emitToPlayer(player, "loan:state", {
+          roomId: room.roomId, loan: getLoanSummary(player.skillRuntime, room, player),
+        });
+      }
     });
   }
 
@@ -941,6 +947,22 @@ class GameEngine {
   handleSkillUse(room, player, payload, options = {}) {
     if (room?.presentationBarrier) return { ok: false, error: "公共演出尚未结束" };
     return this.skillEngine.requestUse(room, player, payload || {}, options);
+  }
+
+  handleLoanRepayment(room, player, payload) {
+    return this.skillEngine.requestRepayment(room, player, payload);
+  }
+
+  refreshLoanRepaymentActions(room) {
+    if (room.presentationBarrier || !["pre_flop", "flop", "turn", "river"].includes(room.phase)) return;
+    const current = room.players[room.currentPlayerIndex];
+    if (!current) return;
+    const turn = getValidActions(room, room.currentPlayerIndex);
+    room.players.forEach((viewer) => this.emitToPlayer(viewer, "player_turn", this.maskTurnForViewer(room, viewer, {
+      playerId: current.playerId, handId: room.handId, turnId: room.turnId, refreshOnly: true,
+      validActions: turn.validActions, minRaise: turn.minRaiseTo, maxBet: turn.maxTotalBet,
+      toCall: turn.toCall, actionDeadline: room.actionDeadline || null,
+    })));
   }
 
   restorePlayerState(room, player) {
@@ -1214,7 +1236,7 @@ class GameEngine {
     });
     this.broadcastRoomState(room);
     if (turnPlayer.isBot) {
-      this.scheduleBotAction(room, room.currentPlayerIndex, turn);
+      this.scheduleBotAction(room, room.currentPlayerIndex);
     }
   }
 
@@ -1874,7 +1896,7 @@ class GameEngine {
     return { action: fallback || "check" };
   }
 
-  scheduleBotAction(room, botIndex, turn) {
+  scheduleBotAction(room, botIndex) {
     if (room.botActionTimer) clearTimeout(room.botActionTimer);
     const handId = room.handId;
     const turnId = room.turnId;
@@ -1888,6 +1910,8 @@ class GameEngine {
       const bot = room.players[botIndex];
       if (!bot || bot.playerId !== botId || !bot.isBot || bot.status !== "active" || bot.isAllIn) return;
       if (isSkillEnabled(room.skillMode)) this.skillEngine.tryBotTurnSkill(room, bot);
+      // Off-turn Loan repayment can change both stacks while this timer is pending.
+      const turn = getValidActions(room, botIndex);
       const picked = this.chooseBotAction(room, botIndex, turn);
       this.handlePlayerAction(room, botIndex, picked.action, picked.amount);
     }, 800);

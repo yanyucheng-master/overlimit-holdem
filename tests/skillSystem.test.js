@@ -167,30 +167,30 @@ describe("技能目录、构筑与隐私", () => {
 });
 
 describe("能量、深呼吸、回收与公平", () => {
-  test("胜者 +0、败者 +1、平局双方 +0；Fold 视为败局", () => {
+  test("胜者 +1、败者 +2、平局双方 +1；Fold 视为败局", () => {
     const { room, a, b, engine } = setupRoom();
     expect(a.skillRuntime.abyssEnergy).toBe(4);
     a.skillRuntime.abyssEnergy = 8;
     b.skillRuntime.abyssEnergy = 5;
     engine.skillEngine.endHand(room, { reason: "showdown", winner: a, tie: false });
     expect(a.skillRuntime.abyssEnergy).toBe(8);
-    expect(b.skillRuntime.abyssEnergy).toBe(6);
+    expect(b.skillRuntime.abyssEnergy).toBe(7);
 
     const tied = setupRoom();
     tied.a.skillRuntime.abyssEnergy = 7;
     tied.b.skillRuntime.abyssEnergy = 7;
     tied.engine.skillEngine.endHand(tied.room, { reason: "showdown", winner: null, tie: true });
-    expect(tied.a.skillRuntime.abyssEnergy).toBe(7);
-    expect(tied.b.skillRuntime.abyssEnergy).toBe(7);
+    expect(tied.a.skillRuntime.abyssEnergy).toBe(8);
+    expect(tied.b.skillRuntime.abyssEnergy).toBe(8);
   });
 
-  test("深呼吸后无技能再 Fold：恢复 2 + 败局自然 +1", () => {
+  test("深呼吸后无技能再 Fold：恢复 2 + 败局自然 +2", () => {
     const { engine, room, a, b } = setupRoom({ loadoutA: ["DEEP_BREATH", "BLOOD_BATTLE"] });
     expect(use(engine, room, a, "DEEP_BREATH", {}, "breath-fold").ok).toBe(true);
     expect(a.skillRuntime.abyssEnergy).toBe(3);
     a.skillRuntime.foldedThisHand = true;
     engine.skillEngine.endHand(room, { reason: "fold", winner: b, tie: false });
-    expect(a.skillRuntime.abyssEnergy).toBe(6);
+    expect(a.skillRuntime.abyssEnergy).toBe(7);
   });
 
   test("深呼吸后发动公平：手牌结束不恢复", () => {
@@ -217,7 +217,7 @@ describe("能量、深呼吸、回收与公平", () => {
     ];
     const before = a.skillRuntime.abyssEnergy;
     engine.skillEngine.endHand(room, { reason: "showdown", winner: a, tie: false });
-    expect(a.skillRuntime.abyssEnergy).toBe(before + 3);
+    expect(a.skillRuntime.abyssEnergy).toBe(before + 3 + 1);
     expect(a.skillRuntime.recycleUsedThisHand).toBe(true);
   });
 
@@ -348,7 +348,7 @@ describe("反制、恐吓、血战、绝境、防守、绝路", () => {
     expect(a.skillRuntime.abyssEnergy).toBe(1);
     expect(a.skillRuntime.lockedThisHand).toBe(true);
     engine.skillEngine.endHand(room, { reason: "showdown", winner: a, tie: false });
-    expect(a.skillRuntime.abyssEnergy).toBe(2);
+    expect(a.skillRuntime.abyssEnergy).toBe(3);
     expect(a.skillRuntime.recycleUsedThisHand).toBe(true);
   });
 
@@ -363,7 +363,7 @@ describe("反制、恐吓、血战、绝境、防守、绝路", () => {
     expect(b.skillRuntime.abyssEnergy).toBe(4);
     expect(b.skillRuntime.counterArmed).toBe(true);
     engine.skillEngine.endHand(room, { reason: "showdown", winner: b, tie: false });
-    expect(b.skillRuntime.abyssEnergy).toBe(5);
+    expect(b.skillRuntime.abyssEnergy).toBe(6);
     expect(b.skillRuntime.counterArmed).toBe(false);
   });
 
@@ -742,8 +742,8 @@ describe("强运、天命与协议", () => {
     a.skillRuntime.abyssEnergy = 10;
     expect(use(engine, room, a, "DESTINY", { cardCode: "S2" }, "destiny-then-fold")).toMatchObject({ status: "SUCCESS" });
     engine.skillEngine.endHand(room, { reason: "fold", winner: a, tie: false });
-    expect(a.skillRuntime.abyssEnergy).toBe(3);
-    expect(b.skillRuntime.abyssEnergy).toBe(5);
+    expect(a.skillRuntime.abyssEnergy).toBe(4);
+    expect(b.skillRuntime.abyssEnergy).toBe(6);
   });
 
   test("协议只在 Showdown 精确牌型获胜且自己没有其他倍率时触发", () => {
@@ -943,7 +943,7 @@ describe("机器人与手牌结束辅助", () => {
     a.skillRuntime.abyssEnergy = 4;
     b.skillRuntime.abyssEnergy = 4;
     endHandSkills(room, { reason: "fold", winner: a, tie: false });
-    expect(a.skillRuntime.abyssEnergy).toBe(4);
-    expect(b.skillRuntime.abyssEnergy).toBe(5);
+    expect(a.skillRuntime.abyssEnergy).toBe(5);
+    expect(b.skillRuntime.abyssEnergy).toBe(6);
   });
 });

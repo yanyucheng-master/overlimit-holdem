@@ -88,11 +88,12 @@ function emitPlayerAction(socket, turn, action, amount) {
 
 describe("socket integration", () => {
   let httpServer;
+  let appServer;
   let baseUrl;
   const clients = [];
 
   beforeAll(async () => {
-    const appServer = createAppServer({
+    appServer = createAppServer({
       reconnectTtlMs: 600,
       matchmakingAutoStart: false,
     });
@@ -277,6 +278,86 @@ describe("socket integration", () => {
     expect(firstReveal).toEqual(secondReveal);
     expect(firstReveal.commitment).toBe(commitment1.commitment);
     expect(verifyDeckCommitment(firstReveal)).toBe(true);
+  });
+
+  test("Loan repayment: authenticated private state, duplicate/replay, Fairness and real reconnect", async () => {
+    const c1 = new Client(baseUrl, { transports: ["websocket"] });
+    const c2 = new Client(baseUrl, { transports: ["websocket"] });
+    clients.push(c1, c2);
+    await Promise.all([waitFor(c1, "connect"), waitFor(c2, "connect")]);
+    const joined1 = waitFor(c1, "room_joined");
+    c1.emit("create_room", { playerName: "Loan A", playerId: "PLOANA", skillMode: "abyss" });
+    const j1 = await joined1;
+    const joined2 = waitFor(c2, "room_joined");
+    c2.emit("join_room", { roomId: j1.roomId, playerName: "Loan B", playerId: "PLOANB" });
+    const j2 = await joined2;
+    const turnP = waitFor(c1, "player_turn");
+    c1.emit("skill:loadout:set", { skillIds: ["LOAN", "DEEP_BREATH", "FAIRNESS"] });
+    c2.emit("skill:loadout:set", { skillIds: ["LOAN", "DEEP_BREATH", "FAIRNESS"] });
+    const turn = await turnP;
+    const borrower = turn.playerId === j1.playerId ? c1 : c2;
+    const observer = borrower === c1 ? c2 : c1;
+    const identity = borrower === c1 ? j1 : j2;
+    const room = appServer.roomManager.rooms.get(j1.roomId);
+    appServer.gameEngine.clearActionTimer(room);
+    const player = room.players.find((p) => p.playerId === turn.playerId);
+    const publicPackets = [];
+    observer.onAny((event, payload) => publicPackets.push({ event, payload }));
+    const debtP = waitFor(borrower, "skill:state", (p) => p.self?.loan?.tranches?.length === 1);
+    borrower.emit("skill:use", { skillId: "LOAN", target: { mode: "energy" }, requestId: "loan-secret-socket", handId: turn.handId, turnId: turn.turnId, phase: room.phase });
+    const state = await debtP;
+    const tranche = state.self.loan.tranches[0];
+    expect(tranche).toMatchObject({ principal: 5, amount: 6, defaultApplied: false });
+    const forgedP = waitFor(observer, "loan:repayment:result");
+    observer.emit("loan:repay", { roomId: room.roomId, playerId: player.playerId, debtId: tranche.id, amount: 0, requestId: "forged-owner", handId: room.handId });
+    expect(await forgedP).toMatchObject({ ok: false, reason: "debtMissing" });
+    expect(player.skillRuntime.loanDebts[0].amount).toBe(6);
+    const fairP = waitFor(borrower, "skill:state", (p) => p.self?.loan?.tranches?.[0]?.fairnessAdjusted);
+    borrower.emit("skill:use", { skillId: "FAIRNESS", requestId: "loan-fair", handId: room.handId, turnId: room.turnId, phase: room.phase });
+    expect((await fairP).self.loan.tranches[0].amount).toBe(5);
+    const { beginHandSkills } = require("../game/skills/skillEngine");
+    for (let i = 0; i < 3; i++) {
+      appServer.gameEngine.skillEngine.endHand(room, { reason: "showdown", tie: true });
+      if (i < 2) { room.handNo++; room.handId = "loan-grace-" + i; beginHandSkills(room); }
+    }
+    player.skillRuntime.abyssEnergy = 8;
+    const snapshot = JSON.parse(JSON.stringify(player.skillRuntime.loanDebts));
+    const uses = player.skillRuntime.loanTotalUsesThisHand;
+    expect(snapshot[0]).toMatchObject({ amount: 6, defaultApplied: true, fairnessAdjusted: true, penalty: 1 });
+    const disconnected = waitFor(observer, "player_disconnected");
+    borrower.close();
+    await disconnected;
+    const reconnected = new Client(baseUrl, { transports: ["websocket"] });
+    clients.push(reconnected);
+    await waitFor(reconnected, "connect");
+    const restoredP = waitFor(reconnected, "skill:state", (p) => p.self?.loan?.tranches?.[0]?.id === tranche.id);
+    reconnected.emit("join_room", { roomId: room.roomId, playerId: player.playerId, playerName: player.name, reconnectToken: identity.reconnectToken });
+    const restored = await restoredP;
+    expect(restored.self.loan.tranches[0]).toMatchObject({
+      id: tranche.id, amount: 6, principal: 5, defaultApplied: true, fairnessAdjusted: true, penalty: 1,
+    });
+    expect(player.skillRuntime.loanDebts).toEqual(snapshot);
+    expect(player.skillRuntime.loanTotalUsesThisHand).toBe(uses);
+    const index = room.currentPlayerIndex, deadline = room.actionDeadline, events = player.skillRuntime.skillEventsThisHand;
+    const repayment = { roomId: room.roomId, debtId: tranche.id, requestId: "real-repay", handId: room.handId };
+    const paidP = waitFor(reconnected, "loan:repayment:result");
+    reconnected.emit("loan:repay", repayment);
+    expect(await paidP).toMatchObject({ ok: true, paid: 6 });
+    const repeatP = waitFor(reconnected, "loan:repayment:result");
+    reconnected.emit("loan:repay", repayment);
+    expect(await repeatP).toMatchObject({ ok: true, duplicate: true });
+    const replayP = waitFor(reconnected, "loan:repayment:result");
+    reconnected.emit("loan:repay", { ...repayment, requestId: "replay-fresh-id" });
+    expect(await replayP).toMatchObject({ ok: false, reason: "debtMissing" });
+    expect(player.skillRuntime.abyssEnergy).toBe(2);
+    expect(player.skillRuntime.loanDebts).toEqual([]);
+    expect([room.currentPlayerIndex, room.actionDeadline, player.skillRuntime.skillEventsThisHand, player.skillRuntime.loanTotalUsesThisHand]).toEqual([index, deadline, events, uses]);
+    // Ignore the attacker's own failed request acknowledgement, never a debt disclosure.
+    const remote = JSON.stringify(publicPackets.filter((p) => p.event !== "loan:repayment:result"));
+    expect(remote).not.toContain(tranche.id);
+    expect(remote).not.toContain('"skillId":"LOAN"');
+    expect(remote).not.toContain('"principal":');
+    appServer.gameEngine.clearActionTimer(room);
   });
 
   test("主动技能通过 Socket 单次请求即时结算，不再创建旧式反应窗口", async () => {

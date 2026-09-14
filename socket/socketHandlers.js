@@ -516,6 +516,22 @@ function registerSocketHandlers({ io, roomManager, gameEngine, logger, matchmaki
       if (!result.ok) socket.emit("skill:failed", { message: result.error, reason: "loadout" });
     });
 
+    socket.on("loan:repay", (rawPayload = {}) => {
+      if (!allowRate("response", "loan:repayment:result")) return;
+      const payload = safePayload(rawPayload);
+      const found = roomManager.getRoomBySocket(socket.id);
+      if (!found || payload.roomId !== found.room.roomId) {
+        socket.emit("loan:repayment:result", { ok: false, reason: "matchUnavailable" });
+        return;
+      }
+      // Seat identity comes exclusively from the authenticated socket association.
+      const player = found.room.players[found.playerIndex];
+      const result = gameEngine.handleLoanRepayment(found.room, player, {
+        requestId: payload.requestId, debtId: payload.debtId, handId: payload.handId,
+      });
+      socket.emit("loan:repayment:result", { ...result, roomId: found.room.roomId, requestId: payload.requestId });
+    });
+
     socket.on("skill:use", (rawPayload = {}) => {
       if (!allowRate("skill", "skill:failed")) return;
       const payload = safePayload(rawPayload);

@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+// Retired historical experiment: its automatic-repayment/credit model is no longer a production rule.
+// Kept only as historical research, not a current balance or release validator.
+throw new Error("This historical Loan experiment is retired. Run npm run simulate:loan for the current V1.0 rules.");
+
 /**
  * Loan + Fairness 超模归因实验。
  * 正式技能规则不变。实验开关只通过 SkillEngine.experiment 传入。

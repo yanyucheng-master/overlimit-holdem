@@ -191,14 +191,16 @@ function assertIntegerEconomyState(room) {
     if (energy != null && !isSafeIntegerEnergy(energy)) {
       throw new Error(`[CHIP_ECONOMY] energy is not a safe integer: ${energy}`);
     }
-    const chipDebt = player.skillRuntime?.chipDebt;
-    if (chipDebt != null && !isSafeNonNegativeInteger(chipDebt)) {
-      throw new Error(`[CHIP_ECONOMY] chipDebt invalid: ${chipDebt}`);
+    const debts = player.skillRuntime?.loanDebts || [];
+    if (new Set(debts.map((debt) => debt.id)).size !== debts.length) {
+      throw new Error("[CHIP_ECONOMY] duplicate loan tranche");
     }
-    const energyDebt = player.skillRuntime?.energyDebt;
-    if (energyDebt != null && !isSafeNonNegativeInteger(energyDebt)) {
-      throw new Error(`[CHIP_ECONOMY] energyDebt invalid: ${energyDebt}`);
-    }
+    debts.forEach((debt) => {
+      if (!["chip", "energy"].includes(debt.kind)
+        || ![debt.principal, debt.amount, debt.penalty, debt.borrowedHandNo, debt.defaultAfterHandNo].every(isSafeNonNegativeInteger)) {
+        throw new Error("[CHIP_ECONOMY] invalid loan tranche");
+      }
+    });
   });
   return true;
 }

@@ -110,7 +110,6 @@
     "本手筹码贷款已用完": "server.chipLoanCap",
     "本手能量贷款已用完": "server.energyLoanCap",
     "本手贷款次数已用完": "loan.handCap",
-    "信用受限：本手贷款只能发动 1 次": "loan.restricted",
     "已有未偿还的能量贷款": "server.energyLoanOpen",
     "不能重复装备同名技能": "server.duplicateSkill",
     "当前技能构筑包含重复或无效技能，请重新配置。": "lab.duplicate",
@@ -230,7 +229,7 @@
     if ((m = raw.match(/^千术完成：你的底牌变为 (.+)$/))) return t("private.cheatDone", { card: m[1] });
     if ((m = raw.match(/^零化已秘密锁定第 (.+) 张公共牌。$/))) return t("private.nullifyBoard", { n: m[1] });
     if ((m = raw.match(/^天命已锁定：(.+) 将成为河牌。$/))) return t("private.destinyLock", { card: m[1] });
-    if ((m = raw.match(/^能量贷款：立即获得 (.+) 点能量，下一手结束偿还 (.+)。$/))) return t("private.energyLoan", { gained: m[1], repay: m[2] });
+    if ((m = raw.match(/^能量贷款：立即获得 (.+) 点能量，应偿还 (.+)；可主动偿还。$/))) return t("private.energyLoan", { gained: m[1], repay: m[2] });
     if ((m = raw.match(/^深呼吸：恢复 (.+) 点能量。$/))) return t("private.deepBreath", { amount: m[1] });
     if ((m = raw.match(/^强运：额外恢复 1 能量。$/))) return t("private.fortuneEnergy");
     if ((m = raw.match(/^重启完成：(.+)$/))) return t("private.restart", { detail: m[1] });

@@ -96,8 +96,8 @@ describe("对手能量可见性：逐手公开、手内冻结", () => {
     a.skillRuntime.abyssEnergy = 2;
     expect(getPublicEnergySnapshot(a)).toBe(4);
     engine.skillEngine.endHand(room, { reason: "showdown", winner: a, tie: false });
-    expect(getRealEnergy(a)).toBe(2);
-    expect(publicSkillsOf(engine, room, b, a).abyssEnergy).toBe(2);
+    expect(getRealEnergy(a)).toBe(3);
+    expect(publicSkillsOf(engine, room, b, a).abyssEnergy).toBe(3);
   });
 
   test("E02 手内不实时刷新", () => {
@@ -123,8 +123,8 @@ describe("对手能量可见性：逐手公开、手内冻结", () => {
     a.skillRuntime.abyssEnergy = 2;
     engine.skillEngine.endHand(room, { reason: "showdown", winner: a, tie: false });
     beginHandSkills(room);
-    expect(getRealEnergy(a)).toBe(2);
-    expect(publicSkillsOf(engine, room, b, a).abyssEnergy).toBe(2);
+    expect(getRealEnergy(a)).toBe(3);
+    expect(publicSkillsOf(engine, room, b, a).abyssEnergy).toBe(3);
   });
 
   test("E05 Strong Fortune -1", () => {
@@ -133,7 +133,7 @@ describe("对手能量可见性：逐手公开、手内冻结", () => {
     a.skillRuntime.fortuneResourceUsed = true;
     expect(getSelfSkillSummary(a).abyssEnergy).toBe(-1);
     engine.skillEngine.endHand(room, { reason: "showdown", winner: a, tie: false });
-    expect(getRealEnergy(a)).toBe(-1);
+    expect(getRealEnergy(a)).toBe(0);
     expect(publicSkillsOf(engine, room, b, a).abyssEnergy).toBe(0);
   });
 
@@ -143,7 +143,7 @@ describe("对手能量可见性：逐手公开、手内冻结", () => {
     a.skillRuntime.fortuneResourceUsed = true;
     expect(getSelfSkillSummary(a).abyssEnergy).toBe(-4);
     engine.skillEngine.endHand(room, { reason: "showdown", winner: a, tie: false });
-    expect(getRealEnergy(a)).toBe(-4);
+    expect(getRealEnergy(a)).toBe(-3);
     expect(publicSkillsOf(engine, room, b, a).abyssEnergy).toBe(0);
   });
 
@@ -273,17 +273,17 @@ describe("对手能量可见性：逐手公开、手内冻结", () => {
     expect(toA.self.abyssEnergy).toBe(5);
   });
 
-  test("EV15 Destiny 真实 9，普通对手快照为 8", () => {
+  test("EV15 Destiny 真实 9 恢复到 10，普通对手快照为 8", () => {
     const { engine, room, a, b } = setupRoom({
       loadoutA: ["DESTINY", "RECYCLE"],
       loadoutB: ["DEFENSE", "RECYCLE"],
     });
     a.skillRuntime.abyssEnergy = 9;
     engine.skillEngine.endHand(room, { reason: "showdown", winner: a, tie: false });
-    expect(getRealEnergy(a)).toBe(9);
+    expect(getRealEnergy(a)).toBe(10);
     expect(getPublicEnergySnapshot(a)).toBe(8);
     expect(publicSkillsOf(engine, room, b, a).abyssEnergy).toBe(8);
-    expect(getSelfSkillSummary(a).abyssEnergy).toBe(9);
+    expect(getSelfSkillSummary(a).abyssEnergy).toBe(10);
   });
 
   test("EV16 Destiny 真实 10，普通对手快照为 8", () => {

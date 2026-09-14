@@ -33,6 +33,42 @@ const HAN = /[\u4e00-\u9fff]/;
 const ALLOWED_EN_HAN_KEYS = new Set(["a11y.languageZh"]);
 
 describe("i18n contract", () => {
+  test("English rulebook generation retains the current energy and Loan rules", () => {
+    const fs = require("fs");
+    const vm = require("vm");
+    const scriptDir = path.join(__dirname, "..", "scripts");
+    let output;
+    try {
+      vm.runInNewContext(fs.readFileSync(path.join(scriptDir, "build-rulebook-en.js"), "utf8"), {
+        __dirname: scriptDir, OverlimitI18n: i18n, console: { log() {} },
+        require(id) {
+          if (id === "fs") return { writeFileSync(_path, value) { output = value; } };
+          return require(id.startsWith(".") ? path.resolve(scriptDir, id) : id);
+        },
+      });
+      expect(typeof output).toBe("string");
+      const generated = { module: { exports: {} } };
+      vm.runInNewContext(output, generated);
+      expect(generated.module.exports).toEqual(require("../public/i18n/rulebook-en-US"));
+      generated.module.exports.skills.forEach((skill) => {
+        expect(skill.meta.join(" ")).not.toMatch(HAN);
+      });
+    } finally {
+      i18n.setLocale("zh-CN", { silent: true });
+    }
+  });
+  test("Loan debt and repayment copy is translated with server amount placeholders", () => {
+    for (const locale of ["zh-CN", "en-US"]) {
+      i18n.setLocale(locale, { silent: true });
+      for (const key of ["loan.locked", "loan.repay", "loan.grace", "loan.defaulted", "loan.fairness", "loan.errors.waitSettlement"]) {
+        expect(i18n.t(key, { count: 2 })).not.toBe(key);
+      }
+      const message = incoming.localize("能量贷款：立即获得 5 点能量，应偿还 6；可主动偿还。", (key, params) => i18n.t(key, params), locale);
+      expect(message).toContain("5"); expect(message).toContain("6");
+      if (locale === "en-US") expect(message).not.toMatch(HAN);
+    }
+    i18n.setLocale("zh-CN", { silent: true });
+  });
   test("zh-CN 与 en-US key 集一致", () => {
     const zh = i18n.catalogKeys("zh-CN");
     const en = i18n.catalogKeys("en-US");

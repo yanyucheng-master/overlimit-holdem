@@ -1,3 +1,4 @@
+const { addLoanDebt, closeLoanHand } = require("../game/skills/loanState");
 const { GAME_MODE } = require("../game/gameModes");
 const { SKILL_MODE } = require("../game/skillModes");
 const { SKILL_CONFIG } = require("../game/skillConfig");
@@ -101,18 +102,20 @@ describe("Fairness load 修订", () => {
 });
 
 describe("Loan 比赛结束债务失效", () => {
-  test("L01-L03 跨手正常偿还，比赛结束前债务仍有效", () => {
+  test("L01-L03 跨手保留债务，主动完整偿还，比赛结束前债务仍有效", () => {
     const { engine, room, a, b } = setupRoom({ loadoutA: ["LOAN", "RECYCLE"], loadoutB: ["DEFENSE", "RECYCLE"] });
     expect(use(engine, room, a, "LOAN", { mode: "chip" }, "l01")).toMatchObject({ status: "SUCCESS" });
     const afterTake = a.chips;
     const chipsBAfterTake = b.chips;
     engine.skillEngine.endHand(room, { reason: "showdown", winner: a, tie: false });
-    expect(a.skillRuntime.chipLoan).toBeTruthy();
+    expect(a.skillRuntime.loanDebts).toHaveLength(1);
     expect(a.chips).toBe(afterTake);
     engine.skillEngine.endHand(room, { reason: "showdown", winner: a, tie: false });
+    expect(a.chips).toBe(afterTake);
+    expect(engine.handleLoanRepayment(room, a, { debtId: a.skillRuntime.loanDebts[0].id, requestId: "manual", handId: room.handId }).ok).toBe(true);
     expect(a.chips).toBe(afterTake - 150);
     expect(b.chips).toBe(chipsBAfterTake + 150);
-    expect(a.skillRuntime.chipLoan).toBeNull();
+    expect(a.skillRuntime.loanDebts).toHaveLength(0);
   });
 
   test("L04-L06 比赛结束后未到期债务失效且不逆转胜负", () => {
@@ -122,7 +125,7 @@ describe("Loan 比赛结束债务失效", () => {
     const chipsB = 0;
     b.chips = chipsB;
     engine.skillEngine.endHand(room, { reason: "showdown", winner: a, tie: false });
-    expect(a.skillRuntime.chipLoan).toBeNull();
+    expect(a.skillRuntime.loanDebts).toHaveLength(0);
     expect(a.chips).toBe(chipsA);
     expect(b.chips).toBe(0);
 
@@ -132,9 +135,8 @@ describe("Loan 比赛结束债务失效", () => {
     expect(energy.a.skillRuntime.abyssEnergy).toBe(7);
     energy.b.chips = 0;
     energy.engine.skillEngine.endHand(energy.room, { reason: "showdown", winner: energy.a, tie: false });
-    expect(energy.a.skillRuntime.energyLoan).toBeNull();
-    expect(energy.a.skillRuntime.energyDebt).toBe(0);
-    expect(energy.a.skillRuntime.abyssEnergy).toBe(7);
+    expect(energy.a.skillRuntime.loanDebts).toHaveLength(0);
+    expect(energy.a.skillRuntime.abyssEnergy).toBe(8);
   });
 
   test("双模式可同手；筹码同一手 2 次，能量同一手 1 次；债务未清封禁全部；伪装不公开贷款数字", () => {
@@ -142,11 +144,10 @@ describe("Loan 比赛结束债务失效", () => {
     dual.a.skillRuntime.abyssEnergy = 8;
     expect(use(dual.engine, dual.room, dual.a, "LOAN", { mode: "chip" }, "loan-both-chip")).toMatchObject({ status: "SUCCESS" });
     expect(use(dual.engine, dual.room, dual.a, "LOAN", { mode: "energy" }, "loan-both-energy")).toMatchObject({ status: "SUCCESS" });
-    expect(dual.a.skillRuntime.chipLoan).toBeTruthy();
-    expect(dual.a.skillRuntime.energyLoan).toBeTruthy();
-    expect(use(dual.engine, dual.room, dual.a, "LOAN", { mode: "chip" }, "loan-chip-2")).toMatchObject({ status: "SUCCESS" });
-    expect(dual.a.skillRuntime.chipLoan.repay).toBe(300);
-    expect(dual.a.skillRuntime.chipLoan.count).toBe(2);
+    expect(dual.a.skillRuntime.loanDebts.map((d) => d.kind)).toEqual(["chip", "energy"]);
+    expect(use(dual.engine, dual.room, dual.a, "LOAN", { mode: "chip" }, "loan-chip-2").ok).toBe(false);
+    expect(dual.a.skillRuntime.loanDebts[0].amount).toBe(150);
+    expect(dual.a.skillRuntime.loanTotalUsesThisHand).toBe(2);
     expect(use(dual.engine, dual.room, dual.a, "LOAN", { mode: "chip" }, "loan-chip-3").ok).toBe(false);
     expect(use(dual.engine, dual.room, dual.a, "LOAN", { mode: "energy" }, "loan-energy-2").ok).toBe(false);
 
@@ -157,14 +158,19 @@ describe("Loan 比赛结束债务失效", () => {
     expect(use(twoChip.engine, twoChip.room, twoChip.a, "LOAN", { mode: "chip" }, "chip-b")).toMatchObject({ status: "SUCCESS" });
     expect(twoChip.b.chips).toBe(chipsB - 200);
     twoChip.engine.skillEngine.endHand(twoChip.room, { reason: "showdown", winner: twoChip.a, tie: false });
-    expect(twoChip.a.skillRuntime.chipLoan.repay).toBe(300);
+    expect(twoChip.a.skillRuntime.loanDebts.reduce((sum, d) => sum + d.amount, 0)).toBe(300);
     const beforeRepay = twoChip.a.chips;
     twoChip.engine.skillEngine.endHand(twoChip.room, { reason: "showdown", winner: twoChip.a, tie: false });
+    expect(twoChip.a.chips).toBe(beforeRepay);
+    for (const d of [...twoChip.a.skillRuntime.loanDebts]) {
+      expect(twoChip.engine.handleLoanRepayment(twoChip.room, twoChip.a, { debtId: d.id, requestId: d.id, handId: twoChip.room.handId }).ok).toBe(true);
+    }
     expect(twoChip.a.chips).toBe(beforeRepay - 300);
-    expect(twoChip.a.skillRuntime.chipLoan).toBeNull();
+    expect(twoChip.a.skillRuntime.loanDebts).toHaveLength(0);
 
     const debt = setupRoom({ loadoutA: ["LOAN", "RECYCLE"], loadoutB: ["DEFENSE", "RECYCLE"] });
-    debt.a.skillRuntime.energyDebt = 2;
+    addLoanDebt(debt.a.skillRuntime, { kind: "energy", principal: 2, handNo: debt.room.handNo });
+    closeLoanHand(debt.a.skillRuntime, debt.room.handNo);
     expect(use(debt.engine, debt.room, debt.a, "LOAN", { mode: "chip" }, "loan-debt-chip").ok).toBe(false);
     expect(use(debt.engine, debt.room, debt.a, "LOAN", { mode: "energy" }, "loan-debt-energy").ok).toBe(false);
 
@@ -181,17 +187,18 @@ describe("Loan 比赛结束债务失效", () => {
     expect(visibleResolved.payload.publicSummary).toMatch(/100|斩杀/);
   });
 
-  test("L07 正常到期还款仍可使借款人归 0", () => {
+  test("L07 不再自动扣款，资源不足不可偿还", () => {
     const { engine, room, a } = setupRoom({ loadoutA: ["LOAN", "RECYCLE"], loadoutB: ["DEFENSE", "RECYCLE"] });
     expect(use(engine, room, a, "LOAN", { mode: "chip" }, "l07")).toMatchObject({ status: "SUCCESS" });
     engine.skillEngine.endHand(room, { reason: "showdown", winner: a, tie: false });
     a.chips = 120;
     engine.skillEngine.endHand(room, { reason: "showdown", winner: a, tie: false });
-    expect(a.chips).toBe(0);
-    expect(a.skillRuntime.chipLoan).toBeNull();
+    expect(a.chips).toBe(120);
+    expect(engine.handleLoanRepayment(room, a, { debtId: a.skillRuntime.loanDebts[0].id, requestId: "low", handId: room.handId })).toMatchObject({ ok: false, reason: "notEnoughChips" });
+    expect(a.skillRuntime.loanDebts[0].amount).toBe(150);
   });
 
-  test("到期还款导致归零时，手牌结果会立即标记为最终手", () => {
+  test("欠款不会自动造成归零或错误标记最终手", () => {
     const { engine, room, a, b, io } = setupRoom({
       loadoutA: ["LOAN", "RECYCLE"],
       loadoutB: ["DEFENSE", "RECYCLE"],
@@ -206,17 +213,17 @@ describe("Loan 比赛结束债务失效", () => {
 
     engine.settleByFold(room);
 
-    expect(a.chips).toBe(0);
-    expect(room.lastHandResult.isFinalHand).toBe(true);
+    expect(a.chips).toBe(120);
+    expect(room.lastHandResult.isFinalHand).toBe(false);
     expect(io.emits.filter((entry) => entry.event === "hand_result")).toHaveLength(2);
     io.emits.filter((entry) => entry.event === "hand_result").forEach((entry) => {
-      expect(entry.payload.isFinalHand).toBe(true);
+      expect(entry.payload.isFinalHand).toBe(false);
     });
   });
 });
 
 describe("Retreat 同窗后悔按钮", () => {
-  test("R01-R06 同窗立即 Fold，退还含盲注，无败者+1", () => {
+  test("R01-R06 同窗立即 Fold，退还含盲注，无败者+2", () => {
     const { engine, room, a, b } = setupRoom({ loadoutA: ["RETREAT", "RECYCLE"], loadoutB: ["DEFENSE", "RECYCLE"] });
     const startA = a.chips + a.totalBet;
     const startB = b.chips + b.totalBet;
@@ -238,7 +245,7 @@ describe("Retreat 同窗后悔按钮", () => {
     unused.a.skillRuntime.abyssEnergy = 6;
     expect(use(unused.engine, unused.room, unused.a, "RETREAT", {}, "r06")).toMatchObject({ status: "SUCCESS" });
     unused.engine.skillEngine.endHand(unused.room, { reason: "showdown", winner: unused.b, tie: false });
-    expect(unused.a.skillRuntime.abyssEnergy).toBe(4);
+    expect(unused.a.skillRuntime.abyssEnergy).toBe(5);
   });
 
   test("系统超时弃牌不会代玩家触发撤退，也不会给对手结算试探", () => {
@@ -601,7 +608,7 @@ describe("Endgame 结算顺序与处决", () => {
     expect(countered.room.skillState.endgameActive).toBeFalsy();
     expect(countered.room.skillState.bettingClosed).toBeFalsy();
     countered.engine.skillEngine.endHand(countered.room, { reason: "showdown", winner: countered.a, tie: false });
-    expect(countered.a.skillRuntime.abyssEnergy).toBe(4);
+    expect(countered.a.skillRuntime.abyssEnergy).toBe(5);
   });
 
   test("E14-E19 只没收对手未匹配部分，不进倍率，关闭下注并发完公共牌", () => {

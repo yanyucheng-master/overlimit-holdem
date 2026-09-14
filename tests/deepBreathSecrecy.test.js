@@ -200,14 +200,14 @@ describe("Deep Breath 秘密主动技能契约", () => {
     expect(getSelfSkillSummary(a).breathArmed).toBe(false);
     engine.skillEngine.broadcastSkillState(room);
     engine.broadcastRoomState(room);
-    expect(getRealEnergy(a)).toBe(5);
-    expect(getPublicSkillSummary(a).abyssEnergy).toBe(5);
+    expect(getRealEnergy(a)).toBe(6);
+    expect(getPublicSkillSummary(a).abyssEnergy).toBe(6);
     expect(engine.getRoomSnapshot(room, b).players.find((player) => player.playerId === a.playerId)
-      .skills.abyssEnergy).toBe(5);
+      .skills.abyssEnergy).toBe(6);
     expectNoDeepBreathIdentity(packetsFor(io, b));
     expect(JSON.stringify(packetsFor(io, b))).not.toContain("+2");
     engine.skillEngine.endHand(room, { reason: "showdown", winner: a, tie: false });
-    expect(getRealEnergy(a)).toBe(5);
+    expect(getRealEnergy(a)).toBe(6);
     expect(a.skillRuntime.privateResults.filter((result) => (
       result.skillId === "DEEP_BREATH" && result.status === "REFUNDED"
     ))).toHaveLength(1);
@@ -346,7 +346,7 @@ describe("Deep Breath 秘密主动技能契约", () => {
     expect(getRealEnergy(a)).toBe(3);
 
     engine.skillEngine.endHand(room, { reason: "showdown", winner: a, tie: false });
-    expect(getRealEnergy(a)).toBe(3);
+    expect(getRealEnergy(a)).toBe(4);
     expect(a.skillRuntime.recycleUsedThisHand).toBe(true);
     const recycleEvent = room.skillState.skillActionLog.find((entry) => (
       entry.skillId === "RECYCLE" && entry.casterId === a.playerId

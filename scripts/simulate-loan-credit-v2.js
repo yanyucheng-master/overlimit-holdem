@@ -1,4 +1,8 @@
 #!/usr/bin/env node
+// Retired historical experiment: its automatic-repayment/credit model is no longer a production rule.
+// Kept only as historical research, not a current balance or release validator.
+throw new Error("This historical Loan experiment is retired. Run npm run simulate:loan for the current V1.0 rules.");
+
 /**
  * Loan Credit Restriction V2 平衡验证。
  * 正式规则已启用贷款信用受限 V2。本脚本仍可通过

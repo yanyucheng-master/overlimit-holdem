@@ -1,5 +1,6 @@
 "use strict";
 
+const { addLoanDebt } = require("../game/skills/loanState");
 const { GAME_MODE } = require("../game/gameModes");
 const { SKILL_MODE } = require("../game/skillModes");
 const { RoomManager } = require("../game/roomManager");
@@ -211,7 +212,7 @@ describe("ECON-L Loan", () => {
     const chipsA = a.chips;
     const chipsB = b.chips;
     engine.handleSkillUse(room, a, { skillId: "LOAN", target: { mode: "chip" }, requestId: "econ-l02" });
-    expect(a.skillRuntime.chipLoan.repay).toBe(150);
+    expect(a.skillRuntime.loanDebts[0].amount).toBe(150);
     expect(a.chips - chipsA).toBe(chipsB - b.chips);
     expect(chipTotal(room)).toBe(MATCH_TOTAL_CHIPS);
   });
@@ -220,40 +221,40 @@ describe("ECON-L Loan", () => {
     const { engine, room, a, b } = setupRoom({ loadoutA: ["LOAN", "RECYCLE"], loadoutB: ["RECYCLE", "DEEP_BREATH"] });
     a.chips = 400;
     b.chips = 1600 - room.pot;
-    a.skillRuntime.chipLoans = [{ repay: 150, lenderId: b.playerId, skipCurrentEnd: false }];
-    a.skillRuntime.chipLoan = { repay: 150, lenderId: b.playerId, skipCurrentEnd: false, count: 1 };
+    const tranche = addLoanDebt(a.skillRuntime, { kind: "chip", principal: 100, lenderId: b.playerId, handNo: room.handNo });
     const before = chipTotal(room);
-    engine.skillEngine.applyLoanRepayments(room);
+    const result = engine.handleLoanRepayment(room, a, { debtId: tranche.id, requestId: "repay", handId: room.handId });
+    expect(result.ok).toBe(true);
     expect(chipTotal(room)).toBe(before);
     expect(a.chips).toBe(250);
   });
 
-  test("ECON-L04 只能偿还 80，residual 70", () => {
+  test("ECON-L04 只有 80 时拒绝整笔 150 偿还，不扣款", () => {
     const { engine, room, a, b } = setupRoom({ loadoutA: ["LOAN", "RECYCLE"], loadoutB: ["RECYCLE", "DEEP_BREATH"] });
     a.chips = 80;
     b.chips = MATCH_TOTAL_CHIPS - 80 - room.pot;
-    a.skillRuntime.chipLoans = [{ repay: 150, lenderId: b.playerId, skipCurrentEnd: false }];
-    a.skillRuntime.chipLoan = { repay: 150, lenderId: b.playerId, skipCurrentEnd: false, count: 1 };
+    const tranche = addLoanDebt(a.skillRuntime, { kind: "chip", principal: 100, lenderId: b.playerId, handNo: room.handNo });
     const before = chipTotal(room);
-    engine.skillEngine.applyLoanRepayments(room);
+    const result = engine.handleLoanRepayment(room, a, { debtId: tranche.id, requestId: "repay", handId: room.handId });
     expect(chipTotal(room)).toBe(before);
-    expect(a.chips).toBe(0);
-    expect(a.skillRuntime.chipDebt).toBe(70);
+    expect(result).toMatchObject({ ok: false, reason: "notEnoughChips" });
+    expect(a.chips).toBe(80);
+    expect(tranche.amount).toBe(150);
   });
 
-  test("ECON-L05 Fairness 清债筹码变化为 0", () => {
+  test("ECON-L05 Fairness 去利息筹码变化为 0", () => {
     const { engine, room, a, b } = setupRoom({ loadoutA: ["FAIRNESS", "RECYCLE"], loadoutB: ["LOAN", "RECYCLE"] });
     a.skillRuntime.abyssEnergy = 8;
-    a.skillRuntime.chipDebt = 70;
-    b.skillRuntime.chipDebt = 40;
+    const debtA = addLoanDebt(a.skillRuntime, { kind: "chip", principal: 70, lenderId: b.playerId, handNo: room.handNo });
+    const debtB = addLoanDebt(b.skillRuntime, { kind: "chip", principal: 40, lenderId: a.playerId, handNo: room.handNo });
     const beforeA = a.chips;
     const beforeB = b.chips;
     room.currentPlayerIndex = 0;
     expect(engine.handleSkillUse(room, a, { skillId: "FAIRNESS", target: {}, requestId: "econ-l05" })).toMatchObject({ ok: true });
     expect(a.chips).toBe(beforeA);
     expect(b.chips).toBe(beforeB);
-    expect(a.skillRuntime.chipDebt).toBe(0);
-    expect(b.skillRuntime.chipDebt).toBe(0);
+    expect(debtA.amount).toBe(70);
+    expect(debtB.amount).toBe(40);
   });
 });
 
