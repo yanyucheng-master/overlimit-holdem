@@ -85,6 +85,23 @@ function weakHole() {
 }
 
 describe("技能目录、构筑与隐私", () => {
+  test.each([
+    ["DEFENSE", 8], ["BLOOD_BATTLE", 7], ["LOAN", 7],
+    ["DESPERATION", 7], ["RETREAT", 7], ["PROBE", 6],
+  ])("绝路负载 5，与 %s 仍按通用负载规则合法", (partner, totalLoad) => {
+    expect(listSkillDefinitions().find((skill) => skill.id === "DEAD_END"))
+      .toMatchObject({ load: 5, energyCost: 5, visibility: "PUBLIC", canBeCountered: true });
+    expect(validateLoadout(["DEAD_END", partner])).toMatchObject({ ok: true, totalLoad });
+  });
+
+  test("绝路涨负载后超过 8 的旧构筑正常拒绝，没有组合豁免", () => {
+    for (const ids of [
+      ["DEAD_END", "BLOOD_BATTLE", "DESPERATION"],
+      ["DEAD_END", "DEFENSE", "DEEP_BREATH"],
+      ["DEAD_END", "DISGUISE"], ["DEAD_END", "FAIRNESS"],
+    ]) expect(validateLoadout(ids)).toMatchObject({ ok: false, reason: "LOAD_LIMIT_EXCEEDED" });
+  });
+
   test("目录包含 24 个主体技能与 9 个协议，并提供构筑摘要/简易/详细三层说明", () => {
     const catalog = listSkillDefinitions();
     expect(catalog).toHaveLength(33);
@@ -321,6 +338,65 @@ describe("能量、深呼吸、回收与公平", () => {
 });
 
 describe("反制、恐吓、血战、绝境、防守、绝路", () => {
+  test.each([["win", 1], ["loss", 2], ["tie", 1]])(
+    "防守恰好 4 能量可发动，%s 后保持新版自然恢复",
+    (outcome, recovered) => {
+      const { engine, room, a, b } = setupRoom({ loadoutA: ["DEFENSE"] });
+      expect(listSkillDefinitions().find((skill) => skill.id === "DEFENSE"))
+        .toMatchObject({ load: 3, energyCost: 4, visibility: "SECRET", canBeCountered: true });
+      expect(a.skillRuntime.abyssEnergy).toBe(4);
+      a.skillRuntime.abyssEnergy = 3;
+      expect(use(engine, room, a, "DEFENSE", {}, "insufficient-defense").ok).toBe(false);
+      expect(a.skillRuntime.abyssEnergy).toBe(3);
+      a.skillRuntime.abyssEnergy = 4;
+      expect(use(engine, room, a, "DEFENSE", {}, "exact-defense")).toMatchObject({ status: "SUCCESS" });
+      expect(a.skillRuntime.abyssEnergy).toBe(0);
+      expect(a.skillRuntime.defenseActive).toBe(true);
+      engine.skillEngine.endHand(room, {
+        reason: "showdown", winner: outcome === "win" ? a : outcome === "loss" ? b : null,
+        tie: outcome === "tie",
+      });
+      expect(a.skillRuntime.abyssEnergy).toBe(recovered);
+    }
+  );
+
+  test.each([
+    [false, false, "showdown", 50],
+    [true, false, "showdown", 101],
+    [false, true, "showdown", 50],
+    [false, true, "fold", 303],
+    [true, true, "showdown", 101],
+  ])("防守保持最终损失减半及 Fold 例外：血战=%s 绝路=%s %s", (blood, deadEnd, reason, finalTransfer) => {
+    const { engine, room, a, b } = setupRoom({ loadoutA: ["DEFENSE"], loadoutB: ["DEAD_END", "BLOOD_BATTLE"] });
+    expect(use(engine, room, a, "DEFENSE")).toMatchObject({ status: "SUCCESS" });
+    // Feed an already-settled standard net into the production modifier stage.
+    // Activation/ALL IN/Counter/Fairness paths are covered separately below.
+    a.chips = 899;
+    b.chips = 1101;
+    room.pot = 0;
+    a.skillRuntime.foldedThisHand = reason === "fold";
+    b.skillRuntime.bloodBattleActive = blood;
+    b.skillRuntime.deadEndActive = deadEnd;
+    const result = engine.skillEngine.applySettlementModifiers(room, { reason, winner: b, winnerCategory: 2 });
+    expect(result.baseTransfer).toBe(101);
+    expect(result.finalTransfer).toBe(finalTransfer);
+    expect(result.effects.some((effect) => effect.skillId === "DEAD_END")).toBe(deadEnd && reason === "fold");
+    expect(result.effects.some((effect) => effect.skillId === "DEFENSE")).toBe(reason !== "fold");
+    expect(a.chips + b.chips + room.pot).toBe(2000);
+  });
+
+  test("绝境与血战继续按通用规则相乘为 6，无组合专属限制", () => {
+    const { engine, room, a, b } = setupRoom({ loadoutA: ["DESPERATION", "BLOOD_BATTLE"] });
+    a.chips = 1100;
+    b.chips = 900;
+    room.pot = 0;
+    a.skillRuntime.desperationActive = true;
+    a.skillRuntime.bloodBattleActive = true;
+    expect(engine.skillEngine.applySettlementModifiers(room, { reason: "showdown", winner: a, winnerCategory: 2 }))
+      .toMatchObject({ multiplier: 6, baseTransfer: 100, finalTransfer: 600 });
+    expect(a.chips + b.chips).toBe(2000);
+  });
+
   test("反制抓住主动技能：目标付费失败，后续主动与新被动均锁死", () => {
     const { engine, room, a, b } = setupRoom({
       loadoutA: ["BLOOD_BATTLE", "PERCEPTION"],
@@ -794,8 +870,8 @@ describe("强运、天命与协议", () => {
     expect(SKILL_RULE_FREEZE.FORTUNE).toMatchObject({
       skillId: "FORTUNE",
       status: "FROZEN_V1",
-      variant: "soft-v1",
-      frozenAt: "2026-08-20",
+      variant: "soft-v1.1-energy",
+      frozenAt: "2026-09-15",
     });
     expect(SKILL_RULE_FREEZE.PERCEPTION).toMatchObject({
       skillId: "PERCEPTION",
@@ -806,13 +882,13 @@ describe("强运、天命与协议", () => {
     expect(FORTUNE_RULE.status).toBe("FROZEN_V1");
     expect(FORTUNE_CONFIG.status).toBe(SKILL_RULE_FREEZE.FORTUNE.status);
     expect(FORTUNE_CONFIG.variant).toBe(SKILL_RULE_FREEZE.FORTUNE.variant);
-    expect(FORTUNE_CONFIG.frozenAt).toBe("2026-08-20");
+    expect(FORTUNE_CONFIG.frozenAt).toBe("2026-09-15");
     expect(FORTUNE_COMBOS).toHaveLength(126);
     expect(new Set(FORTUNE_COMBOS.map((combo) => combo.codes.slice().sort().join("-"))).size).toBe(126);
-    expect(computeFortuneChance("hole", { disadvantage: 0, energy: 4 })).toBeCloseTo(0.0805, 3);
-    expect(computeFortuneChance("board", { disadvantage: 0, energy: 4 })).toBeCloseTo(0.0539, 3);
-    expect(computeFortuneChance("resource", { disadvantage: 0, energy: 4 })).toBeCloseTo(0.16, 3);
-    expect(computeFortuneChance("hole", { disadvantage: 1, energy: 4 })).toBeCloseTo(0.1897, 3);
+    expect(computeFortuneChance("hole", { disadvantage: 0, energy: 4 })).toBeCloseTo(0.0747, 3);
+    expect(computeFortuneChance("board", { disadvantage: 0, energy: 4 })).toBeCloseTo(0.0504, 3);
+    expect(computeFortuneChance("resource", { disadvantage: 0, energy: 4 })).toBeCloseTo(0.152, 3);
+    expect(computeFortuneChance("hole", { disadvantage: 1, energy: 4 })).toBeCloseTo(0.1527, 3);
     expect(PERCEPTION_CONFIG.status).toBe(SKILL_RULE_FREEZE.PERCEPTION.status);
     expect(PERCEPTION_CONFIG.variant).toBe("spec-25-50");
     expect(PERCEPTION_CONFIG.frozenAt).toBe("2026-08-20");

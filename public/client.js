@@ -6850,7 +6850,7 @@ function renderLoanDebts() {
     const details = document.createElement("small");
     details.textContent = [
       t("loan.principal", { amount: debt.principal }),
-      t(debt.defaultApplied ? "loan.penalty" : "loan.grace", { amount: debt.penalty, count: debt.graceHandsRemaining }),
+      t(debt.defaultApplied ? "loan.penalty" : debt.graceHandsRemaining === 0 ? "loan.finalWindow" : "loan.grace", { amount: debt.penalty, count: debt.graceHandsRemaining }),
       debt.fairnessAdjusted ? t("loan.fairness") : "",
       debt.blockedReason ? t("loan.errors." + debt.blockedReason) : "",
     ].filter(Boolean).join(" · ");

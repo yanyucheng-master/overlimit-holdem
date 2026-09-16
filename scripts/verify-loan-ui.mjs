@@ -116,7 +116,6 @@ try {
       await owner.click("#btn-skill-choice-confirm");
       await owner.waitForFunction(() => state.skillSelf?.loan?.tranches?.length === 2);
       assert.equal(player.skillRuntime.loanTotalUsesThisHand, 2);
-      const chipsBeforeRepayment = room.players.map((p) => p.chips);
       const hud = await audit(owner, false);
       await owner.screenshot({ path: path.join(output, `${label}-hud.png`) });
       await clickUser(owner, "#btn-loan-debts");
@@ -125,11 +124,39 @@ try {
       assert.equal(await owner.locator(".loan-debt-row button:disabled").count(), 1);
       await owner.screenshot({ path: path.join(output, `${label}-grace.png`) });
 
-      // Accelerated server-owned date fixture, not client-created debt state.
+      const finishForOwner = () => {
+        room.players.find((p) => p !== player).status = "folded";
+        app.gameEngine.settleByFold(room);
+        app.gameEngine.abortPendingRoomWork(room); // Keep the end window open for screenshot/user input.
+      };
+      const startNextHand = () => {
+        app.gameEngine.startHand(room);
+        app.gameEngine.clearActionTimer(room);
+      };
+      const completeGrace = () => {
+        finishForOwner(); startNextHand(); // Borrowing hand -> grace hand 1.
+        finishForOwner(); startNextHand(); // Grace hand 1 -> grace hand 2.
+        player.skillRuntime.abyssEnergy = 5;
+        finishForOwner(); // All settlement resources are now available, without default.
+      };
+      // Real settlement/start boundaries; no client-created debt or deadline changes.
       // High covers interest waived then default; Low covers ordinary default.
       if (quality === "high") loanState.adjustLoanInterest(player.skillRuntime);
-      loanState.closeLoanHand(player.skillRuntime, room.handNo + 2);
-      app.gameEngine.broadcastRoomState(room);
+      await owner.keyboard.press("Escape");
+      completeGrace();
+      await owner.locator("#hand-settle-modal:not(.hidden)").waitFor();
+      await clickUser(owner, "#settle-loan");
+      await owner.waitForFunction(() => state.skillSelf.loan.state === "DEBT_OPEN" && state.skillSelf.loan.tranches.every((d) => d.graceHandsRemaining === 0));
+      assert(player.skillRuntime.loanDebts.every((d) => !d.defaultApplied && d.penalty === 0));
+      assert.equal(player.skillRuntime.abyssEnergy, 6);
+      const finalWindow = await audit(owner, true);
+      assert.match(finalWindow.text, locale === "zh-CN" ? /最后偿还窗口/ : /Final repayment window/);
+      await owner.screenshot({ path: path.join(output, `${label}-final-window.png`) });
+      await owner.keyboard.press("Escape");
+      startNextHand();
+      await owner.locator("#screen-game.active").waitFor();
+      await owner.locator("#hand-settle-modal").waitFor({ state: "hidden" });
+      await clickUser(owner, "#btn-loan-debts");
       await owner.waitForFunction(() => state.skillSelf.loan.state === "DEFAULTED");
       const defaulted = await audit(owner, true);
       assert.match(defaulted.text, locale === "zh-CN" ? /违约/ : /default/i);
@@ -143,12 +170,13 @@ try {
       await clickUser(owner, "#btn-loan-debts");
       await owner.locator("#loan-debt-modal:not(.hidden)").waitFor();
       const chipDebt = player.skillRuntime.loanDebts.find((d) => d.kind === "chip");
+      const chipsAtDefault = room.players.map((p) => p.chips);
       await clickUser(owner, `.loan-debt-row[data-debt-id="${chipDebt.id}"] button`);
       await owner.waitForFunction(() => state.skillSelf.loan.tranches.length === 1);
-      assert.equal(player.chips, chipsBeforeRepayment[index] - chipDebt.amount);
-      assert.equal(room.players[1 - index].chips, chipsBeforeRepayment[1 - index] + chipDebt.amount);
+      assert.equal(player.chips, chipsAtDefault[index] - chipDebt.amount);
+      assert.equal(room.players[1 - index].chips, chipsAtDefault[1 - index] + chipDebt.amount);
       assert.equal(loanState.getLoanCreditState(player.skillRuntime), "DEFAULTED");
-      assert.equal(player.skillRuntime.loanTotalUsesThisHand, 2);
+      assert.equal(player.skillRuntime.loanTotalUsesThisHand, 0);
       skillState.gainEnergy(player, 8);
       app.gameEngine.skillEngine.broadcastSkillState(room);
       await owner.waitForFunction(() => state.skillSelf.loan.tranches[0].canRepay);
@@ -158,14 +186,45 @@ try {
       await owner.waitForFunction(() => state.skillSelf.loan.state === "AVAILABLE");
       assert.equal(player.skillRuntime.abyssEnergy, 8 - amount);
       assert.deepEqual(player.skillRuntime.loanDebts, []);
-      assert.equal(player.skillRuntime.loanTotalUsesThisHand, 2);
+      assert.equal(player.skillRuntime.loanTotalUsesThisHand, 0);
       assert.deepEqual({ current: room.currentPlayerIndex, turn: room.turnId, deadline: room.actionDeadline, events: player.skillRuntime.skillEventsThisHand }, before);
       await clickUser(owner, "#btn-loan-close");
       await owner.locator("#loan-debt-modal").waitFor({ state: "hidden" });
       assert.equal(await owner.locator("#btn-loan-debts").isVisible(), false);
       const total = room.players.reduce((sum, p) => sum + p.chips, room.pot);
       assert.equal(total, 2000);
-      report.scenarios.push({ label, hud, lockedHud, grace, defaulted, repayment: "PASS", secrecy: "PASS", conserved: total });
+      // A fresh secret loan: actually repay using N+2's final +1, from settlement UI.
+      player.skillRuntime.abyssEnergy = 4;
+      room.currentPlayerIndex = room.players.indexOf(player);
+      app.gameEngine.skillEngine.broadcastSkillState(room);
+      app.gameEngine.emitTurn(room);
+      app.gameEngine.clearActionTimer(room);
+      await owner.waitForFunction(() => document.querySelector('[data-skill-use-id="LOAN"]')?.disabled === false);
+      await clickUser(owner, '[data-skill-use-id="LOAN"]');
+      await owner.locator("#skill-choice-body .skill-choice-card").filter({ hasText: locale === "zh-CN" ? "能量贷款" : "Energy Loan" }).click();
+      await owner.click("#btn-skill-choice-confirm");
+      await owner.waitForFunction(() => state.skillSelf.loan.tranches.length === 1);
+      completeGrace();
+      await owner.locator("#hand-settle-modal:not(.hidden)").waitFor();
+      await clickUser(owner, "#settle-loan");
+      await owner.waitForFunction(() => state.skillSelf.loan.tranches[0]?.canRepay && state.skillSelf.loan.tranches[0]?.graceHandsRemaining === 0);
+      const finalDebt = player.skillRuntime.loanDebts[0];
+      assert.equal(finalDebt.amount, 6);
+      assert.equal(finalDebt.defaultApplied, false);
+      const opponentPlayer = room.players.find((p) => p !== player);
+      const publicEnergy = () => app.gameEngine.getRoomSnapshot(room, opponentPlayer).players.find((p) => p.playerId === player.playerId).skills.abyssEnergy;
+      assert.equal(publicEnergy(), 6);
+      await clickUser(owner, ".loan-debt-row button");
+      await owner.waitForFunction(() => state.skillSelf.loan.state === "AVAILABLE");
+      assert.equal(player.skillRuntime.abyssEnergy, 0);
+      assert.equal(publicEnergy(), 6);
+      assert.equal(await opponent.evaluate((id) => JSON.stringify(window.loanQaPackets).includes(id), finalDebt.id), false);
+      await clickUser(owner, "#btn-loan-close");
+      startNextHand();
+      await opponent.waitForFunction((id) => state.phase === "pre_flop" && state.players.find((p) => p.playerId === id)?.skills?.abyssEnergy === 0, player.playerId);
+      assert.equal(finalDebt.defaultApplied, false);
+      assert.equal(publicEnergy(), 0);
+      report.scenarios.push({ label, hud, lockedHud, grace, finalWindow, defaulted, repayment: "PASS", finalWindowRepayment: "PASS", boundarySnapshot: "PASS", secrecy: "PASS", conserved: total });
     } finally {
       if (room) app.gameEngine.closeRoom(room, "verification_complete");
       for (const context of contexts) await context.close();

@@ -49,6 +49,7 @@ function createEmptySkillRuntime() {
     loanDebts: [],
     loanHandNo: 0,
     loanLastClosedHandNo: -1,
+    skillBoundaryHandNo: 0,
     loanRepaymentReceipts: new Map(),
     loanChipUsesThisHand: 0,
     loanEnergyUsesThisHand: 0,
@@ -115,7 +116,7 @@ function getPublicEnergySnapshot(player) {
 }
 
 function getPublicEnergyDisplay(player) {
-  // Mask used only when writing the end-of-hand public snapshot.
+  // Mask used only when writing hand-end / next-hand public snapshots.
   // Opponent payloads must read getPublicEnergySnapshot(), never live energy.
   return computePublicEnergySnapshot(player);
 }
@@ -156,6 +157,7 @@ function resetPlayerSkillsForHand(player) {
     loanDebts: runtime.loanDebts || [],
     loanHandNo: runtime.loanHandNo,
     loanLastClosedHandNo: runtime.loanLastClosedHandNo,
+    skillBoundaryHandNo: runtime.skillBoundaryHandNo,
     loanRepaymentReceipts: runtime.loanRepaymentReceipts,
     alertChanceIndex: Math.max(0, Number(runtime.alertChanceIndex) || 0),
     alertPromptPending: Boolean(runtime.alertPromptPending),

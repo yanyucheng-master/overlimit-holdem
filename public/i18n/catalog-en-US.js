@@ -945,6 +945,7 @@
       "principal": "Principal {amount}",
       "penalty": "Defaulted · Penalty {amount}",
       "grace": "{count} grace hands left",
+      "finalWindow": "Final repayment window: repay the current amount before the next hand",
       "fairness": "Interest waived; principal still owed",
       "errors": {
         "matchUnavailable": "Repayment is unavailable in this match state.",

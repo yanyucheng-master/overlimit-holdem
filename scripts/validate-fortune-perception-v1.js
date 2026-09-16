@@ -950,7 +950,7 @@ function main() {
   });
 
   report.elapsedMs = Date.now() - started;
-  const outPath = path.join(__dirname, "experiments", "validate-fortune-perception-v1.out.json");
+  const outPath = process.env.VP_REPORT_PATH || path.join(__dirname, "experiments", "validate-fortune-perception-v1.out.json");
   fs.writeFileSync(outPath, JSON.stringify(report, null, 2), "utf8");
   log(`wrote ${outPath} in ${report.elapsedMs}ms`);
   process.stdout.write(`${JSON.stringify({

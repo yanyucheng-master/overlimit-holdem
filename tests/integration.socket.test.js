@@ -280,7 +280,7 @@ describe("socket integration", () => {
     expect(verifyDeckCommitment(firstReveal)).toBe(true);
   });
 
-  test("Loan repayment: authenticated private state, duplicate/replay, Fairness and real reconnect", async () => {
+  test.each([false, true])("Loan repayment: authority, replay, Fairness and real reconnect (final window=%s)", async (finalWindow) => {
     const c1 = new Client(baseUrl, { transports: ["websocket"] });
     const c2 = new Client(baseUrl, { transports: ["websocket"] });
     clients.push(c1, c2);
@@ -315,15 +315,27 @@ describe("socket integration", () => {
     const fairP = waitFor(borrower, "skill:state", (p) => p.self?.loan?.tranches?.[0]?.fairnessAdjusted);
     borrower.emit("skill:use", { skillId: "FAIRNESS", requestId: "loan-fair", handId: room.handId, turnId: room.turnId, phase: room.phase });
     expect((await fairP).self.loan.tranches[0].amount).toBe(5);
-    const { beginHandSkills } = require("../game/skills/skillEngine");
-    for (let i = 0; i < 3; i++) {
+    const { beginHandSkills, prepareNextHandSkills } = require("../game/skills/skillEngine");
+    for (let i = 0; i < 2; i++) {
       appServer.gameEngine.skillEngine.endHand(room, { reason: "showdown", tie: true });
-      if (i < 2) { room.handNo++; room.handId = "loan-grace-" + i; beginHandSkills(room); }
+      prepareNextHandSkills(room, room.handNo + 1);
+      room.handNo++; room.handId = "loan-grace-" + i; beginHandSkills(room);
     }
-    player.skillRuntime.abyssEnergy = 8;
+    player.skillRuntime.abyssEnergy = 6;
+    room.players.find((p) => p !== player).status = "folded";
+    appServer.gameEngine.settleByFold(room);
+    appServer.gameEngine.abortPendingRoomWork(room); // Hold the real end window for reconnect I/O.
+    expect(room.phase).toBe("end");
+    expect(player.skillRuntime.loanDebts[0]).toMatchObject({ amount: 5, defaultApplied: false, penalty: 0 });
+    if (!finalWindow) {
+      appServer.gameEngine.startHand(room);
+      appServer.gameEngine.clearActionTimer(room);
+      player.skillRuntime.abyssEnergy = 8;
+    }
+    const due = finalWindow ? 5 : 6;
     const snapshot = JSON.parse(JSON.stringify(player.skillRuntime.loanDebts));
     const uses = player.skillRuntime.loanTotalUsesThisHand;
-    expect(snapshot[0]).toMatchObject({ amount: 6, defaultApplied: true, fairnessAdjusted: true, penalty: 1 });
+    expect(snapshot[0]).toMatchObject({ amount: due, defaultApplied: !finalWindow, fairnessAdjusted: true, penalty: finalWindow ? 0 : 1 });
     const disconnected = waitFor(observer, "player_disconnected");
     borrower.close();
     await disconnected;
@@ -334,15 +346,16 @@ describe("socket integration", () => {
     reconnected.emit("join_room", { roomId: room.roomId, playerId: player.playerId, playerName: player.name, reconnectToken: identity.reconnectToken });
     const restored = await restoredP;
     expect(restored.self.loan.tranches[0]).toMatchObject({
-      id: tranche.id, amount: 6, principal: 5, defaultApplied: true, fairnessAdjusted: true, penalty: 1,
+      id: tranche.id, amount: due, principal: 5, defaultApplied: !finalWindow, fairnessAdjusted: true, penalty: finalWindow ? 0 : 1,
     });
+    expect(restored.self.loan.state).toBe(finalWindow ? "DEBT_OPEN" : "DEFAULTED");
     expect(player.skillRuntime.loanDebts).toEqual(snapshot);
     expect(player.skillRuntime.loanTotalUsesThisHand).toBe(uses);
     const index = room.currentPlayerIndex, deadline = room.actionDeadline, events = player.skillRuntime.skillEventsThisHand;
     const repayment = { roomId: room.roomId, debtId: tranche.id, requestId: "real-repay", handId: room.handId };
     const paidP = waitFor(reconnected, "loan:repayment:result");
     reconnected.emit("loan:repay", repayment);
-    expect(await paidP).toMatchObject({ ok: true, paid: 6 });
+    expect(await paidP).toMatchObject({ ok: true, paid: due });
     const repeatP = waitFor(reconnected, "loan:repayment:result");
     reconnected.emit("loan:repay", repayment);
     expect(await repeatP).toMatchObject({ ok: true, duplicate: true });
@@ -357,6 +370,16 @@ describe("socket integration", () => {
     expect(remote).not.toContain(tranche.id);
     expect(remote).not.toContain('"skillId":"LOAN"');
     expect(remote).not.toContain('"principal":');
+    if (finalWindow) {
+      const opponent = room.players.find((p) => p !== player);
+      expect(appServer.gameEngine.getRoomSnapshot(room, opponent).players.find((p) => p.playerId === player.playerId).skills.abyssEnergy).toBe(7);
+      const nextHandNo = room.handNo + 1;
+      const nextState = waitFor(observer, "room_state", (p) => p.phase === "pre_flop" && p.handNo === nextHandNo);
+      appServer.gameEngine.startHand(room);
+      const packet = await nextState;
+      expect(packet.players.find((p) => p.playerId === player.playerId).skills.abyssEnergy).toBe(2);
+      expect(player.skillRuntime.loanDebts).toEqual([]);
+    }
     appServer.gameEngine.clearActionTimer(room);
   });
 

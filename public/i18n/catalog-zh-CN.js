@@ -945,6 +945,7 @@
       "principal": "本金 {amount}",
       "penalty": "已违约 · 违约金 {amount}",
       "grace": "剩余 {count} 手牌",
+      "finalWindow": "最后偿还窗口：进入下一手前可按当前金额偿还",
       "fairness": "利息已免除，本金仍需偿还",
       "errors": {
         "matchUnavailable": "当前对局不可偿还",

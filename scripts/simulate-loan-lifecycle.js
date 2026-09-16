@@ -4,14 +4,14 @@
 const assert = require("node:assert/strict");
 const { RoomManager } = require("../game/roomManager");
 const { GameEngine } = require("../game/gameEngine");
-const { beginHandSkills, setPlayerLoadout } = require("../game/skills/skillEngine");
+const { beginHandSkills, prepareNextHandSkills, setPlayerLoadout } = require("../game/skills/skillEngine");
 const { getLoanCreditState, adjustLoanInterest } = require("../game/skills/loanState");
 const { chipTotal, MATCH_TOTAL_CHIPS, transferChips, CHIP_REASON } = require("../game/chipEconomy");
 const logger = { info() {}, warn() {}, error() {} };
 const eventBus = { emit() {} };
 const iterations = Number(process.argv[2] || 1000);
 assert(Number.isSafeInteger(iterations) && iterations > 0);
-let repayments = 0, defaults = 0, kills = 0;
+let repayments = 0, defaults = 0, kills = 0, finalRepaymentWindows = 0;
 
 for (let run = 0; run < iterations; run++) {
   const roomManager = new RoomManager({ logger, eventBus });
@@ -48,6 +48,17 @@ for (let run = 0; run < iterations; run++) {
     assert.equal(a.skillRuntime.abyssEnergy, Math.min(8, before + gain));
     assert.equal(chipTotal(room), chipsBefore);
     a.skillRuntime.loanDebts.forEach((d, index) => {
+      const penalty = hand >= 3 ? d.kind === "chip" ? 25 : 1 : 0;
+      assert.equal(d.amount, original[index].amount + penalty);
+    });
+    if (hand === 2) {
+      assert.equal(getLoanCreditState(a.skillRuntime), "DEBT_OPEN");
+      assert(a.skillRuntime.loanDebts.every((d) => !d.defaultApplied));
+      finalRepaymentWindows++;
+    }
+    prepareNextHandSkills(room, room.handNo + 1);
+    prepareNextHandSkills(room, room.handNo + 1);
+    a.skillRuntime.loanDebts.forEach((d, index) => {
       const penalty = hand >= 2 ? d.kind === "chip" ? 25 : 1 : 0;
       assert.equal(d.amount, original[index].amount + penalty);
     });
@@ -79,4 +90,4 @@ for (let run = 0; run < iterations; run++) {
   engine.clearActionTimer(room);
   engine.cancelPresentationBarrier(room);
 }
-console.log(JSON.stringify({ passed: true, iterations, graceHands: iterations * 12, repayments, defaults, kills }));
+console.log(JSON.stringify({ passed: true, iterations, graceHands: iterations * 12, finalRepaymentWindows, repayments, defaults, kills }));

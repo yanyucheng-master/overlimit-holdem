@@ -5,9 +5,9 @@ const { RoomManager } = require("../game/roomManager");
 const { GameEngine } = require("../game/gameEngine");
 const { getValidActions } = require("../game/pokerLogic");
 const { createDeck } = require("../utils/deck");
-const { beginHandSkills, setPlayerLoadout } = require("../game/skills/skillEngine");
+const { beginHandSkills, prepareNextHandSkills, setPlayerLoadout } = require("../game/skills/skillEngine");
 const { gainEnergy, getSelfSkillSummary, getPublicSkillSummary, getPublicRoomSkillSnapshot } = require("../game/skills/skillState");
-const { addLoanDebt, closeLoanHand, adjustLoanInterest, getLoanCreditState, getLoanQuota } = require("../game/skills/loanState");
+const { addLoanDebt, closeLoanHand, settleLoanDefaultsBeforeNextHand, adjustLoanInterest, getLoanCreditState, getLoanQuota } = require("../game/skills/loanState");
 const { transferChips, commitChipsToPot, CHIP_REASON, assertChipConservation } = require("../game/chipEconomy");
 const logger = require("../utils/logger");
 const eventBus = require("../utils/eventBus");
@@ -35,6 +35,7 @@ function finish(ctx, reason = "fold", tie = false) {
   ctx.engine.skillEngine.endHand(ctx.room, { reason, tie, winner: tie ? null : ctx.b });
 }
 function next(ctx) {
+  prepareNextHandSkills(ctx.room, ctx.room.handNo + 1);
   ctx.room.handNo++;
   ctx.room.handId = crypto.randomUUID();
   ctx.room.phase = "pre_flop";
@@ -49,6 +50,40 @@ function debt(ctx, kind = "chip", principal = kind === "chip" ? 100 : 5) {
 }
 
 describe("V1.0 voluntary Loan lifecycle", () => {
+  test.each(["energy", "chip"])("N+2 final settlement resources can repay normal %s debt before default", (kind) => {
+    jest.useFakeTimers();
+    const c = setup(["LOAN", "FAIRNESS"], ["ALERT"]);
+    try {
+      const d = debt(c, kind);
+      finish(c); next(c); finish(c); next(c);
+      expect(c.room.handNo).toBe(d.borrowedHandNo + 2);
+      if (kind === "energy") c.a.skillRuntime.abyssEnergy = 5;
+      else {
+        transferChips(c.room, c.a, c.b, c.a.chips - 100, CHIP_REASON.LOAN_TRANSFER);
+        commitChipsToPot(c.room, c.b, 25, CHIP_REASON.STANDARD_BET);
+      }
+      expect(repay(c, d).ok).toBe(false);
+      c.b.status = "folded";
+      c.engine.settleByFold(c.room);
+      expect(c.room.phase).toBe("end");
+      expect(d).toMatchObject({ amount: kind === "energy" ? 6 : 150, defaultApplied: false, penalty: 0 });
+      expect(kind === "energy" ? c.a.skillRuntime.abyssEnergy : c.a.chips).toBe(kind === "energy" ? 6 : 200);
+      expect(getSelfSkillSummary(c.a, c.room).loan).toMatchObject({ state: "DEBT_OPEN", tranches: [{ graceHandsRemaining: 0, canRepay: true }] });
+      expect(c.engine.skillEngine.validateUse(c.room, c.a, "FAIRNESS").ok).toBe(false);
+      const timer = c.room.nextHandTimer;
+      expect(repay(c, d).ok).toBe(true);
+      expect(c.room.nextHandTimer).toBe(timer);
+      expect(getLoanCreditState(c.a.skillRuntime)).toBe("AVAILABLE");
+      jest.advanceTimersToNextTimer();
+      expect(c.room.handNo).toBe(d.borrowedHandNo + 3);
+      expect(c.a.skillRuntime.loanDebts).toEqual([]);
+      expect(d.defaultApplied).toBe(false);
+      expect(() => assertChipConservation(2000, c.room.pot + c.a.chips + c.b.chips)).not.toThrow();
+    } finally {
+      c.engine.abortPendingRoomWork(c.room);
+      jest.useRealTimers();
+    }
+  });
   test.each([["chip", "chip"], ["chip", "energy"], ["energy", "chip"]])("two uses %s + %s, no third", (first, second) => {
     const c = setup();
     expect(use(c, "LOAN", first).status).toBe("SUCCESS");
@@ -91,7 +126,7 @@ describe("V1.0 voluntary Loan lifecycle", () => {
     expect(use(c, "LOAN", "energy").ok).toBe(true);
     expect(c.a.skillRuntime.loanTotalUsesThisHand).toBe(1);
   });
-  test.each(["showdown", "fold", "tie", "retreat"])("%s counts as a grace hand; default only at N+2 end", (reason) => {
+  test.each(["showdown", "fold", "tie", "retreat"])("%s counts as a grace hand; default only entering N+3", (reason) => {
     const c = setup();
     debt(c);
     finish(c); expect(c.a.skillRuntime.loanDebts[0].amount).toBe(150);
@@ -99,6 +134,9 @@ describe("V1.0 voluntary Loan lifecycle", () => {
     expect(c.a.skillRuntime.loanDebts[0].defaultApplied).toBe(false);
     expect(getSelfSkillSummary(c.a, c.room).loan.tranches[0].graceHandsRemaining).toBe(1);
     next(c); finish(c, reason, ["tie", "retreat"].includes(reason));
+    expect(c.a.skillRuntime.loanDebts[0]).toMatchObject({ amount: 150, defaultApplied: false, penalty: 0 });
+    expect(getSelfSkillSummary(c.a, c.room).loan).toMatchObject({ state: "DEBT_OPEN", tranches: [{ graceHandsRemaining: 0 }] });
+    next(c);
     expect(c.a.skillRuntime.loanDebts[0]).toMatchObject({ amount: 175, defaultApplied: true, penalty: 25 });
     for (let i = 0; i < 12; i++) { next(c); finish(c); }
     expect(c.a.skillRuntime.loanDebts[0].amount).toBe(175);
@@ -112,9 +150,51 @@ describe("V1.0 voluntary Loan lifecycle", () => {
     if (fairness) adjustLoanInterest(c.a.skillRuntime);
     closeLoanHand(c.a.skillRuntime, c.room.handNo + 2);
     closeLoanHand(c.a.skillRuntime, c.room.handNo + 2);
+    expect(c.a.skillRuntime.loanDebts.every((d) => !d.defaultApplied && d.penalty === 0)).toBe(true);
+    settleLoanDefaultsBeforeNextHand(c.a.skillRuntime, c.room.handNo + 3);
+    settleLoanDefaultsBeforeNextHand(c.a.skillRuntime, c.room.handNo + 3);
     closeLoanHand(c.a.skillRuntime, c.room.handNo + 8);
+    settleLoanDefaultsBeforeNextHand(c.a.skillRuntime, c.room.handNo + 9);
     expect(c.a.skillRuntime.loanDebts.reduce((sum, d) => sum + d.amount, 0)).toBe(total);
     expect(getLoanCreditState(c.a.skillRuntime)).toBe("DEFAULTED");
+  });
+  test.each([false, true])("real next-hand timer defaults once; duplicate end/finalize/boundary is inert (Fairness=%s)", (fairness) => {
+    jest.useFakeTimers();
+    const c = setup(["LOAN"], ["ALERT"]);
+    try {
+      debt(c); debt(c, "energy");
+      if (fairness) adjustLoanInterest(c.a.skillRuntime);
+      const dates = c.a.skillRuntime.loanDebts.map((d) => [d.borrowedHandNo, d.defaultAfterHandNo]);
+      // Preparing before both complete grace hands must not default.
+      settleLoanDefaultsBeforeNextHand(c.a.skillRuntime, c.room.handNo + 3);
+      expect(c.a.skillRuntime.loanDebts.every((d) => !d.defaultApplied)).toBe(true);
+      finish(c); next(c); finish(c); next(c);
+      c.a.skillRuntime.abyssEnergy = 5;
+      c.b.status = "folded";
+      c.engine.settleByFold(c.room);
+      const timer = c.room.nextHandTimer;
+      const start = jest.spyOn(c.engine, "startHand");
+      c.engine.skillEngine.endHand(c.room, { reason: "fold", winner: c.a });
+      c.engine.finalizeHand(c.room, 1);
+      expect(c.room.nextHandTimer).toBe(timer);
+      expect(c.a.skillRuntime.abyssEnergy).toBe(6);
+      expect(c.a.skillRuntime.loanDebts.map((d) => d.amount)).toEqual(fairness ? [100, 5] : [150, 6]);
+      jest.advanceTimersByTime(1);
+      expect(start).not.toHaveBeenCalled();
+      jest.advanceTimersToNextTimer();
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(c.room.handNo).toBe(4);
+      expect(c.a.skillRuntime.loanDebts.map((d) => d.amount)).toEqual(fairness ? [125, 6] : [175, 7]);
+      const before = getSelfSkillSummary(c.a, c.room).loan;
+      prepareNextHandSkills(c.room, c.room.handNo);
+      prepareNextHandSkills(c.room, c.room.handNo);
+      expect(getSelfSkillSummary(c.a, c.room).loan).toEqual(before);
+      expect(c.a.skillRuntime.loanDebts.map((d) => [d.borrowedHandNo, d.defaultAfterHandNo])).toEqual(dates);
+      expect(getLoanCreditState(c.a.skillRuntime)).toBe("DEFAULTED");
+      c.engine.clearActionTimer(c.room);
+      jest.advanceTimersByTime(10000);
+      expect(start).toHaveBeenCalledTimes(1);
+    } finally { c.engine.abortPendingRoomWork(c.room); jest.useRealTimers(); }
   });
   test("Fairness keeps real principal, dates and quota, cannot reduce twice or after default", () => {
     const c = setup();
@@ -129,6 +209,7 @@ describe("V1.0 voluntary Loan lifecycle", () => {
     finish(c);
     expect(getLoanCreditState(c.a.skillRuntime)).toBe("DEBT_OPEN");
     closeLoanHand(c.a.skillRuntime, original.defaultAfterHandNo);
+    settleLoanDefaultsBeforeNextHand(c.a.skillRuntime, original.defaultAfterHandNo + 1);
     adjustLoanInterest(c.a.skillRuntime);
     expect(d).toMatchObject({ amount: 125, defaultApplied: true });
   });
@@ -144,6 +225,7 @@ describe("V1.0 voluntary Loan lifecycle", () => {
     const c = setup();
     debt(c); debt(c, "energy");
     closeLoanHand(c.a.skillRuntime, c.room.handNo + 2);
+    settleLoanDefaultsBeforeNextHand(c.a.skillRuntime, c.room.handNo + 3);
     use(c, "FAIRNESS");
     expect(c.a.skillRuntime.loanDebts.map((d) => d.amount)).toEqual([175, 7]);
   });
@@ -314,6 +396,11 @@ describe("V1.0 voluntary Loan lifecycle", () => {
     c.engine.restorePlayerState(c.room, c.a);
     expect(getSelfSkillSummary(c.a, c.room)).toEqual(before);
     closeLoanHand(c.a.skillRuntime, c.room.handNo + 2);
+    const finalWindow = getSelfSkillSummary(c.a, c.room);
+    expect(finalWindow.loan.state).toBe("DEBT_OPEN");
+    c.engine.restorePlayerState(c.room, c.a);
+    expect(getSelfSkillSummary(c.a, c.room)).toEqual(finalWindow);
+    settleLoanDefaultsBeforeNextHand(c.a.skillRuntime, c.room.handNo + 3);
     const defaulted = getSelfSkillSummary(c.a, c.room);
     c.engine.restorePlayerState(c.room, c.a);
     expect(getSelfSkillSummary(c.a, c.room)).toEqual(defaulted);

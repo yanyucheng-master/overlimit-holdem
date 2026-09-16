@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * 强运 soft-v1 负债体验验证：真实跨手筹码、Fold Bot、第二技能封锁。
- * 不修改 soft-v1 概率。
+ * 强运当前正式配置的负能量体验验证：真实跨手筹码、Fold Bot、第二技能封锁。
+ * 不修改生产概率。
  */
 const fs = require("fs");
 const path = require("path");
@@ -1047,7 +1047,7 @@ function main() {
   };
 
   report.elapsedMs = Date.now() - started;
-  const outPath = path.join(__dirname, "experiments", "validate-fortune-debt.out.json");
+  const outPath = process.env.FD_REPORT_PATH || path.join(__dirname, "experiments", "validate-fortune-debt.out.json");
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(outPath, JSON.stringify(report, null, 2));
   log(`wrote ${outPath} in ${report.elapsedMs}ms`);

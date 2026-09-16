@@ -179,7 +179,8 @@ describe("P0-1 Disguise × Endgame Call-to-zero", () => {
   });
 
   test("DE05 Dead End 公开 All In 保留 Endgame 规则", () => {
-    const ctx = setupRoom({ loadoutB: ["DISGUISE", "DEAD_END"] });
+    // Isolate existing-state visibility: selecting both skills now costs 9.
+    const ctx = setupRoom({ loadoutB: ["DEAD_END"] });
     prepareCallToZero(ctx, { disguise: true, deadEnd: true });
     expect(ctx.engine.tryOpenEndgameResponseWindow(ctx.room)).toBe(true);
     expect(ctx.room.skillState.endgameWindow).toEqual({ playerId: ctx.a.playerId });

@@ -92,14 +92,14 @@ const PERCEPTION_CONFIG = Object.freeze({
 });
 
 /**
- * 强运规则冻结登记。具体概率表在 fortuneConfig.soft-v1，此处只作为规则层状态源。
- * 未解冻前不要改 soft-v1 数值、改牌费用或负债下限。
+ * 强运规则冻结登记。soft-v1.1-energy 仅校准新版自然恢复下的概率上限。
+ * 概率下限、权重、改牌费用与负能量下限沿用 soft-v1；产品版本仍为 V1.0。
  */
 const FORTUNE_RULE = Object.freeze({
   status: "FROZEN_V1",
-  variant: "soft-v1",
+  variant: "soft-v1.1-energy",
   recommended: true,
-  frozenAt: "2026-08-20",
+  frozenAt: "2026-09-15",
   freezeBasis: Object.freeze([
     "single-hand causal equity",
     "rewrite frequency",

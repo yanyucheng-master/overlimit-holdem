@@ -1,6 +1,6 @@
 /**
  * 历史对照脚本。本轮正式验证请用 scripts/validate-fortune-perception-v1.js。
- * 生产强运 = fortuneConfig.soft-v1，生产感知 = PERCEPTION_CONFIG spec-25-50。
+ * 生产强运使用 FORTUNE_CONFIG.variant，生产感知 = PERCEPTION_CONFIG spec-25-50。
  */
 const { createDeck } = require("../utils/deck");
 const { pickBestFive, compareEvaluatedHands } = require("../game/handEvaluator");
@@ -459,7 +459,7 @@ function main() {
 
   const bestFortune = fortuneReports[0];
   const conservative = fortuneReports.find((item) => item.id === "conservative");
-  const soft = fortuneReports.find((item) => item.id === "soft-v1");
+  const soft = fortuneReports.find((item) => item.id === FORTUNE_CONFIG.variant);
   const bestPerception = perceptionReports[0];
   const specPerception = perceptionReports.find((item) => item.id === "spec-25-50") || bestPerception;
   const matchCandidates = [bestFortune, conservative, soft].filter(Boolean)
@@ -497,7 +497,7 @@ function main() {
       perceptionTruth: "70%–80%",
     },
     recommended: {
-      // 脚本分会把 clutch 排第一；第一版暂定采用 soft-v1，因为 80 手 check-down 会把每手优势复利放大。
+      // 实验排名不改变生产配置；80 手 check-down 会放大每手优势的复利。
       fortune: bestFortune.id,
       perception: bestPerception.id,
       fortuneTables: bestFortune.tables,

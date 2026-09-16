@@ -101,7 +101,7 @@ npm run simulate:chip-economy
 
 对手能量逐手公开、手内冻结：
 
-- 每手结束：所有能量恢复、Loan 宽限与违约状态、Fairness 抑制、Fortune 资源效果全部处理结束后，才刷新公开快照。
+- 每手结束：所有能量恢复、Fairness 抑制、Fortune 资源效果处理结束后刷新公开快照。结束阶段的私有能量偿还不会实时更新对手数字；下一手初始化前统一重算公开快照，纳入这段偿还结果，之后再次手内冻结。
 - 下一手进行过程中：对手显示保持冻结，不实时变化。
 - 普通对手可见：`publicEnergy = clamp(realFinalEnergy, 0, 8)`。Strong Fortune 负数显示 0；Destiny 真实 9/10 显示 8。
 - 本人始终看到自己的真实当前能量，包括负数和 9/10。

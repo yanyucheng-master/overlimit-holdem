@@ -283,7 +283,7 @@ const SECTIONS = {
       </section>
       <section id="rule-energy-public" data-rule-entry data-rule-entry-title="Opponent public Energy">
         <h4>Opponent public Energy</h4>
-        <p>Opponent Energy is shown per hand and frozen during the hand: it updates after a hand finishes all resource settlement, then stays still through the next hand. Ordinary public range is 0–8; a true value below 0 shows 0, and 9 or 10 shows 8.</p>
+        <p>Opponent Energy is shown per hand and frozen during the hand: it updates after a hand finishes all resource settlement. Private Energy repayments during the settlement window do not update the opponent immediately. The snapshot refreshes again before the next hand begins, then stays frozen during that hand. Ordinary public range is 0–8; a true value below 0 shows 0, and 9 or 10 shows 8.</p>
         <p>You always see your own true Energy. Skills such as Clairvoyance can read the opponent's true current Energy.</p>
       </section>
     `,

@@ -51,6 +51,21 @@ function setupLiveRoom(loadoutA, loadoutB = ["DEEP_BREATH", "RECYCLE"], random =
 }
 
 describe("强运负债体验与动态筹码", () => {
+  test.each([
+    ["hole", 0.06, 0.16, 0.78, 0.22],
+    ["board", 0.04, 0.10, 0.74, 0.26],
+    ["resource", 0.12, 0.20, 0.40, 0.60],
+  ])("新版 %s 概率端点与权重锁定", (kind, min, max, chipWeight, energyWeight) => {
+    expect(FORTUNE_CONFIG[`${kind}Chance`]).toEqual({ min, max, chipWeight, energyWeight });
+    expect(computeFortuneChance(kind, { disadvantage: 0, energy: -4 })).toBeCloseTo(min, 12);
+    expect(computeFortuneChance(kind, { disadvantage: 1, energy: 8 })).toBeCloseTo(max, 12);
+    expect(computeFortuneChance(kind, { disadvantage: 1, energy: -4 }))
+      .toBeCloseTo(min + (max - min) * chipWeight, 12);
+    expect(computeFortuneChance(kind, { disadvantage: 0, energy: 8 }))
+      .toBeCloseTo(min + (max - min) * energyWeight, 12);
+    expect(computeFortuneChance(kind, { disadvantage: 1, energy: 10, energyCap: 10 })).toBeCloseTo(max, 12);
+  });
+
   test("真实筹码差会改变下一手强运概率", () => {
     const engine = new SkillEngine({ random: () => 0.5 });
     const a = makePlayer("A", "A", ["FORTUNE", "PERCEPTION"]);
@@ -120,7 +135,7 @@ describe("强运负债体验与动态筹码", () => {
     expect(blocked.ok).toBe(false);
     expect(canTriggerNewSkillEvent(a, "DEFENSE", room)).toBe(false);
 
-    a.skillRuntime.abyssEnergy = 3;
+    a.skillRuntime.abyssEnergy = 4;
     const restored = engine.handleSkillUse(room, a, { skillId: "DEFENSE", target: {}, requestId: "ok-def" });
     expect(restored.ok).toBe(true);
     expect(a.skillRuntime.defenseActive).toBe(true);

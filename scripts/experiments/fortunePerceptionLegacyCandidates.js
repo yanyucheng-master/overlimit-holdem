@@ -1,5 +1,5 @@
 /**
- * 历史校准候选，仅供对照实验。生产强运固定 soft-v1，感知固定 spec-25-50。
+ * 历史校准候选，仅供对照实验。生产强运以 FORTUNE_CONFIG 为准，感知固定 spec-25-50。
  */
 const LEGACY_FORTUNE_CANDIDATES = Object.freeze([
   {

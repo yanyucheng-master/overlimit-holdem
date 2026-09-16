@@ -9,6 +9,7 @@ const { createDeckCommitment } = require("./deckCommitment");
 const {
   SkillEngine,
   beginHandSkills,
+  prepareNextHandSkills,
   onStreetPhaseChanged,
   onPlayerFolded,
   autoConfirmBotLoadouts,
@@ -1048,6 +1049,7 @@ class GameEngine {
       clearTimeout(room.nextHandTimer);
       room.nextHandTimer = null;
     }
+    prepareNextHandSkills(room, room.handNo + 1);
     room.phase = "pre_flop";
     room.handNo += 1;
     room.gameMode = normalizeGameMode(room.gameMode);
@@ -1822,6 +1824,8 @@ class GameEngine {
   }
 
   finalizeHand(room, settleMs = HAND_SETTLE_MS) {
+    // Repeated finalization must not create a second next-hand boundary.
+    if (room.nextHandTimer) return;
     this.clearActionTimer(room);
     room.phase = "end";
     room.currentPlayerIndex = -1;
@@ -1832,7 +1836,9 @@ class GameEngine {
     });
     this.broadcastRoomState(room);
 
-    room.nextHandTimer = setTimeout(() => {
+    const handId = room.handId;
+    const timer = setTimeout(() => {
+      if (room.nextHandTimer !== timer || room.handId !== handId) return;
       room.nextHandTimer = null;
       const bust = room.players.find((p) => p.chips <= 0);
       if (bust) {
@@ -1867,6 +1873,7 @@ class GameEngine {
         this.broadcastRoomState(room);
       }
     }, settleMs);
+    room.nextHandTimer = timer;
     if (typeof room.nextHandTimer.unref === "function") room.nextHandTimer.unref();
   }
 

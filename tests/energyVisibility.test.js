@@ -6,6 +6,7 @@ const { createDeck } = require("../utils/deck");
 const {
   setPlayerLoadout,
   beginHandSkills,
+  prepareNextHandSkills,
   getPublicSkillSummary,
   getSelfSkillSummary,
   getPublicEnergySnapshot,
@@ -14,6 +15,7 @@ const {
 } = require("../game/skills/skillEngine");
 const logger = require("../utils/logger");
 const eventBus = require("../utils/eventBus");
+const { addLoanDebt } = require("../game/skills/loanState");
 
 const FORBIDDEN_ENERGY_KEYS = [
   "realEnergy",
@@ -91,6 +93,55 @@ function assertNoEnergyLeak(payload) {
 }
 
 describe("对手能量可见性：逐手公开、手内冻结", () => {
+  test.each([["FORTUNE", -3, 0], ["DESTINY", 9, 8], ["DESTINY", 10, 8]])("next-hand %s real %i remains publicly clamped to %i", (skill, energy, visible) => {
+    const { engine, room, a, b } = setupRoom({ loadoutA: [skill], loadoutB: ["ALERT"] });
+    try {
+      engine.skillEngine.random = () => 0.99;
+      b.status = "folded";
+      engine.settleByFold(room);
+      a.skillRuntime.abyssEnergy = energy;
+      a.skillRuntime.visibleAbyssEnergy = 4;
+      const prepareDeck = engine.skillEngine.prepareDeckForHand.bind(engine.skillEngine);
+      const deal = jest.spyOn(engine.skillEngine, "prepareDeckForHand").mockImplementation((currentRoom) => {
+        expect(a.skillRuntime.visibleAbyssEnergy).toBe(visible);
+        return prepareDeck(currentRoom);
+      });
+      engine.startHand(room);
+      expect(deal).toHaveBeenCalledTimes(1);
+      expect(getRealEnergy(a)).toBe(energy);
+      expect(publicSkillsOf(engine, room, b, a).abyssEnergy).toBe(visible);
+      assertNoEnergyLeak(publicSkillsOf(engine, room, b, a));
+      // A repeated preparation for this hand cannot leak a later private delta.
+      a.skillRuntime.abyssEnergy = 2;
+      prepareNextHandSkills(room, room.handNo);
+      expect(publicSkillsOf(engine, room, b, a).abyssEnergy).toBe(visible);
+    } finally { engine.abortPendingRoomWork(room); }
+  });
+  test("end-phase Energy repayment stays private, next startHand refreshes the frozen snapshot", () => {
+    const { io, engine, room, a, b } = setupRoom({ loadoutA: ["LOAN"], loadoutB: ["ALERT"] });
+    try {
+      const debt = addLoanDebt(a.skillRuntime, { kind: "energy", principal: 5, handNo: room.handNo });
+      a.skillRuntime.abyssEnergy = 6;
+      b.status = "folded";
+      engine.settleByFold(room);
+      expect([a.skillRuntime.abyssEnergy, a.skillRuntime.visibleAbyssEnergy]).toEqual([7, 7]);
+      io.emits.length = 0;
+      expect(engine.handleLoanRepayment(room, a, { debtId: debt.id, requestId: "end-energy-repay", handId: room.handId }).ok).toBe(true);
+      expect(a.skillRuntime.abyssEnergy).toBe(1);
+      expect(io.emits.filter((entry) => entry.target === b.socketId)).toEqual([]);
+      expect(publicSkillsOf(engine, room, b, a).abyssEnergy).toBe(7);
+      engine.restorePlayerState(room, b);
+      expect(publicSkillsOf(engine, room, b, a).abyssEnergy).toBe(7);
+      io.emits.length = 0;
+      engine.startHand(room);
+      expect(getRealEnergy(a)).toBe(1);
+      expect(publicSkillsOf(engine, room, b, a).abyssEnergy).toBe(1);
+      const remote = io.emits.filter((entry) => entry.target === b.socketId);
+      expect(JSON.stringify(remote)).not.toContain(debt.id);
+      expect(JSON.stringify(remote)).not.toContain("end-energy-repay");
+      expect(JSON.stringify(getPublicSkillSummary(a))).not.toMatch(/loan|repay|principal|Debt/i);
+    } finally { engine.abortPendingRoomWork(room); }
+  });
   test("E01 普通结算刷新", () => {
     const { engine, room, a, b } = setupRoom();
     a.skillRuntime.abyssEnergy = 2;

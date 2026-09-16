@@ -56,8 +56,15 @@ function closeLoanHand(runtime, handNo) {
   if (!runtime || !Number.isSafeInteger(handNo) || handNo <= runtime.loanLastClosedHandNo) return;
   runtime.loanHandNo = handNo;
   runtime.loanLastClosedHandNo = handNo;
+}
+
+function settleLoanDefaultsBeforeNextHand(runtime, nextHandNo) {
+  if (!runtime || !Number.isSafeInteger(nextHandNo)) return;
+  // Closing N+2 leaves its final settlement resources available for repayment.
+  // Only the authoritative boundary into N+3 can default an unpaid tranche.
   loanDebts(runtime).forEach((debt) => {
-    if (debt.defaultApplied || handNo < debt.defaultAfterHandNo) return;
+    if (debt.defaultApplied || nextHandNo <= debt.defaultAfterHandNo
+      || (runtime.loanLastClosedHandNo ?? -1) < debt.defaultAfterHandNo) return;
     debt.defaultApplied = true;
     debt.penalty = debt.kind === "chip" ? SKILL_CONFIG.LOAN_CHIP_DEFAULT_PENALTY : SKILL_CONFIG.LOAN_ENERGY_DEFAULT_PENALTY;
     debt.amount += debt.penalty;
@@ -124,5 +131,5 @@ function expireLoanDebtsForRoom(room) { (room?.players || []).forEach(expireLoan
 function isMatchOverForLoan(room) { return (room?.players || []).some((p) => p.status === "out" || p.chips <= 0); }
 
 module.exports = { LOAN_CREDIT, loanDebts, getLoanCreditState, getLoanQuota, loanReuseBlocked,
-  addLoanDebt, closeLoanHand, adjustLoanInterest, repaymentEligibility, getLoanSummary,
+  addLoanDebt, closeLoanHand, settleLoanDefaultsBeforeNextHand, adjustLoanInterest, repaymentEligibility, getLoanSummary,
   expireLoanDebts, expireLoanDebtsForRoom, isMatchOverForLoan };

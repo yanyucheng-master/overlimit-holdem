@@ -72,7 +72,7 @@ const {
   getHandRankLabel,
 } = require("../handRankBonus");
 
-const { addLoanDebt, closeLoanHand, adjustLoanInterest, repaymentEligibility, getLoanSummary } = require("./loanState");
+const { addLoanDebt, closeLoanHand, settleLoanDefaultsBeforeNextHand, adjustLoanInterest, repaymentEligibility, getLoanSummary } = require("./loanState");
 
 const ACTIVE_PHASES = new Set(["pre_flop", "flop", "turn", "river"]);
 const CARD_CODE_RE = /^[SHCD](?:[2-9TJQKA])$/;
@@ -359,6 +359,19 @@ function resolveHandStartChips(player) {
   }
   if (Number.isSafeInteger(player?.handStartChips)) return player.handStartChips;
   return null;
+}
+
+function prepareNextHandSkills(room, nextHandNo) {
+  if (!isSkillEnabled(room.skillMode) || !Number.isSafeInteger(nextHandNo)) return;
+  room.players.forEach((player) => {
+    const runtime = player.skillRuntime;
+    if (!runtime || nextHandNo <= (runtime.skillBoundaryHandNo ?? 0)) return;
+    settleLoanDefaultsBeforeNextHand(runtime, nextHandNo);
+    // End-phase repayments stay private until this shared boundary. Snapshot
+    // before any new-hand passive event, deal or client-visible state.
+    syncVisibleEnergy(player);
+    runtime.skillBoundaryHandNo = nextHandNo;
+  });
 }
 
 function beginHandSkills(room) {
@@ -657,7 +670,6 @@ class SkillEngine {
     revealNullifications(room);
     const fairness = Boolean(room.skillState?.fairnessActive);
     if (isMatchOverForLoan(room)) this.expireLoanDebts(room);
-    else room.players.forEach((player) => closeLoanHand(player.skillRuntime, room.handNo));
     room.players.forEach((player) => {
       const runtime = player.skillRuntime;
       if (!runtime) return;
@@ -704,9 +716,10 @@ class SkillEngine {
       runtime.breathArmed = false;
       runtime.breathBroken = false;
       // Public opponent energy updates only after every end-of-hand resource
-      // settlement (restore, Fairness suppression, loans, Fortune) has finished.
+      // settlement (restore, Fairness suppression, Fortune) has finished.
       syncVisibleEnergy(player);
     });
+    room.players.forEach((player) => closeLoanHand(player.skillRuntime, room.handNo));
     this.refreshSettlementChipTelemetry(room, winner);
   }
 
@@ -2037,6 +2050,7 @@ module.exports = {
   setPlayerLoadout,
   autoConfirmBotLoadouts,
   allLoadoutsConfirmed,
+  prepareNextHandSkills,
   beginHandSkills,
   onStreetPhaseChanged,
   onPlayerFolded,

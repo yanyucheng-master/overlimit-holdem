@@ -83,7 +83,7 @@ describe("Fairness load 修订", () => {
     expect(validateLoadout(["FAIRNESS", "FORTUNE"]).ok).toBe(false);
     expect(validateLoadout(["FAIRNESS", "NULLIFICATION"]).ok).toBe(false);
     expect(validateLoadout(["FAIRNESS", "COUNTER"])).toMatchObject({ ok: true, totalLoad: 8 });
-    expect(validateLoadout(["FAIRNESS", "DEAD_END"])).toMatchObject({ ok: true, totalLoad: 8 });
+    expect(validateLoadout(["FAIRNESS", "DEAD_END"])).toMatchObject({ ok: false, reason: "LOAD_LIMIT_EXCEEDED" });
     expect(validateLoadout(["FAIRNESS", "RESTART"])).toMatchObject({ ok: true, totalLoad: 8 });
     expect(validateLoadout(["FAIRNESS", "DISGUISE"])).toMatchObject({ ok: true, totalLoad: 8 });
     expect(SKILL_CONFIG.MIN_EQUIPPED_SKILLS).toBe(1);
@@ -412,9 +412,12 @@ describe("Disguise 筹码信息裁剪", () => {
     const selfViewOfA = engine.getViewPlayers(room, a).find((player) => player.playerId === a.playerId);
     expect(selfViewOfA.isAllIn).toBe(true);
 
-    const dead = setupRoom({ loadoutA: ["DISGUISE", "DEAD_END"], loadoutB: ["DEFENSE", "RECYCLE"] });
+    const dead = setupRoom({ loadoutA: ["DEAD_END"], loadoutB: ["DEFENSE", "RECYCLE"] });
     dead.a.skillRuntime.abyssEnergy = 8;
-    expect(use(dead.engine, dead.room, dead.a, "DISGUISE", {}, "d14a")).toMatchObject({ status: "SUCCESS" });
+    // The 9-load pair is no longer selectable. Keep the privacy guard against
+    // an already-present masking state without bypassing loadout validation.
+    dead.a.skillRuntime.disguiseActive = true;
+    expect(isChipViewHiddenFor(dead.room, dead.b)).toBe(true);
     dead.a.isAllIn = false;
     expect(use(dead.engine, dead.room, dead.a, "DEAD_END", {}, "d14b")).toMatchObject({ status: "SUCCESS" });
     expect(dead.room.presentationBarrier).toMatchObject({ kind: "DEAD_END_COMMIT" });

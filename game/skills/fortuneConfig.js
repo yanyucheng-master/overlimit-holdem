@@ -1,7 +1,7 @@
 const { SKILL_CONFIG, FORTUNE_RULE } = require("../skillConfig");
 
 /**
- * 当前推荐版本：soft-v1，状态以 skillConfig.FORTUNE_RULE / SKILL_RULE_FREEZE 为准。
+ * 当前推荐版本：soft-v1.1-energy，状态以 skillConfig.FORTUNE_RULE / SKILL_RULE_FREEZE 为准。
  * 公式：mix = 筹码劣势 * chipWeight + 能量比例 * energyWeight，再在 min~max 线性插值。
  * draft / clutch / conservative 只存在于 scripts/experiments，生产路径不可选。
  */
@@ -12,19 +12,19 @@ const FORTUNE_CONFIG = Object.freeze({
   nodes: Object.freeze(["HOLE_DEAL", "FLOP_DEAL", "TURN_DEAL", "RIVER_DEAL", "HAND_END_RESOURCE"]),
   holeChance: Object.freeze({
     min: 0.06,
-    max: 0.20,
+    max: 0.16,
     chipWeight: 0.78,
     energyWeight: 0.22,
   }),
   boardChance: Object.freeze({
     min: 0.04,
-    max: 0.12,
+    max: 0.10,
     chipWeight: 0.74,
     energyWeight: 0.26,
   }),
   resourceChance: Object.freeze({
     min: 0.12,
-    max: 0.22,
+    max: 0.20,
     chipWeight: 0.40,
     energyWeight: 0.60,
   }),

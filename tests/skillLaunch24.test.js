@@ -66,21 +66,21 @@ function createQueuedFxManager() {
 }
 
 describe("首发 24 技能冻结核对", () => {
-  test("感知与强运仍为 FROZEN_V1，概率未改", () => {
+  test("感知保持冻结，强运采用批准的新版能量概率校准", () => {
     expect(SKILL_RULE_FREEZE.PERCEPTION.status).toBe("FROZEN_V1");
     expect(PERCEPTION_CONFIG.baseChance).toBe(0.25);
     expect(PERCEPTION_CONFIG.maxChance).toBe(0.5);
     expect(PERCEPTION_CONFIG.truthChance).toBe(0.75);
-    expect(SKILL_RULE_FREEZE.FORTUNE).toMatchObject({ status: "FROZEN_V1", variant: "soft-v1" });
+    expect(SKILL_RULE_FREEZE.FORTUNE).toMatchObject({ status: "FROZEN_V1", variant: "soft-v1.1-energy" });
     expect(FORTUNE_RULE.status).toBe("FROZEN_V1");
     expect(FORTUNE_CONFIG.rewriteCost).toBe(3);
     expect(FORTUNE_CONFIG.minEnergy).toBe(-4);
-    expect(computeFortuneChance("hole", { disadvantage: 0, energy: 4 })).toBeCloseTo(0.0805, 3);
-    expect(computeFortuneChance("board", { disadvantage: 0, energy: 4 })).toBeCloseTo(0.0539, 3);
-    expect(computeFortuneChance("resource", { disadvantage: 0, energy: 4 })).toBeCloseTo(0.16, 3);
-    expect(computeFortuneChance("hole", { disadvantage: 1, energy: 4 })).toBeCloseTo(0.1897, 3);
-    expect(computeFortuneChance("board", { disadvantage: 1, energy: 4 })).toBeCloseTo(0.1131, 3);
-    expect(computeFortuneChance("resource", { disadvantage: 1, energy: 4 })).toBeCloseTo(0.2, 3);
+    expect(computeFortuneChance("hole", { disadvantage: 0, energy: 4 })).toBeCloseTo(0.0747, 3);
+    expect(computeFortuneChance("board", { disadvantage: 0, energy: 4 })).toBeCloseTo(0.0504, 3);
+    expect(computeFortuneChance("resource", { disadvantage: 0, energy: 4 })).toBeCloseTo(0.152, 3);
+    expect(computeFortuneChance("hole", { disadvantage: 1, energy: 4 })).toBeCloseTo(0.1527, 3);
+    expect(computeFortuneChance("board", { disadvantage: 1, energy: 4 })).toBeCloseTo(0.0948, 3);
+    expect(computeFortuneChance("resource", { disadvantage: 1, energy: 4 })).toBeCloseTo(0.184, 3);
   });
 
   test("24 主体技能均存在，构筑仍为最多 4 / 负载 8", () => {
@@ -419,7 +419,7 @@ describe("伪装", () => {
   });
 
   test("本人能看见自己 ALL IN；绝路 ALL IN 强制公开；公平清除；灵视不含筹码数字", () => {
-    const { engine, room, a, b } = setupRoom({ loadoutA: ["DISGUISE", "DEAD_END"], loadoutB: ["CLAIRVOYANCE", "RECYCLE"] });
+    const { engine, room, a, b } = setupRoom({ loadoutA: ["DISGUISE"], loadoutB: ["CLAIRVOYANCE", "RECYCLE"] });
     a.skillRuntime.abyssEnergy = 8;
     expect(use(engine, room, a, "DISGUISE", {}, "d")).toMatchObject({ status: "SUCCESS" });
     a.isAllIn = true;
@@ -428,10 +428,16 @@ describe("伪装", () => {
     const oppView = engine.getViewPlayers(room, b).find((player) => player.playerId === a.playerId);
     expect(oppView.isAllIn).toBe(false);
     a.isAllIn = false;
-    expect(use(engine, room, a, "DEAD_END", {}, "dead")).toMatchObject({ status: "SUCCESS" });
-    expect(room.presentationBarrier).toMatchObject({ kind: "DEAD_END_COMMIT" });
-    expect(engine.releasePresentationBarrier(room, room.presentationBarrier.id)).toBe(true);
-    const forced = engine.getViewPlayers(room, b).find((player) => player.playerId === a.playerId);
+    // Dead End + Disguise now exceeds load 8; separately retain the defensive
+    // presentation contract for an already-present masking state.
+    const dead = setupRoom({ loadoutA: ["DEAD_END"] });
+    dead.a.skillRuntime.abyssEnergy = 5;
+    dead.a.skillRuntime.disguiseActive = true;
+    expect(isChipViewHiddenFor(dead.room, dead.b)).toBe(true);
+    expect(use(dead.engine, dead.room, dead.a, "DEAD_END", {}, "dead")).toMatchObject({ status: "SUCCESS" });
+    expect(dead.room.presentationBarrier).toMatchObject({ kind: "DEAD_END_COMMIT" });
+    expect(dead.engine.releasePresentationBarrier(dead.room, dead.room.presentationBarrier.id)).toBe(true);
+    const forced = dead.engine.getViewPlayers(dead.room, dead.b).find((player) => player.playerId === dead.a.playerId);
     expect(forced.isAllIn).toBe(true);
 
     const fair = setupRoom({ loadoutA: ["DISGUISE", "FAIRNESS"], loadoutB: ["DEFENSE", "RECYCLE"] });
