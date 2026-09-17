@@ -27,6 +27,7 @@
     "capture:tutorial-en": "node scripts/capture-tutorial-en.mjs",
     "verify:online": "node scripts/verify-online-sync.js",
     "verify:loan-ui": "node scripts/verify-loan-ui.mjs",
+    "verify:top-secret-ui": "node scripts/verify-top-secret-ui.mjs",
     "verify:i18n": "node scripts/verify-i18n.mjs"
   },
   "dependencies": {

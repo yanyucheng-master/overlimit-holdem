@@ -613,7 +613,9 @@ async function main() {
     };
   });
 
-  const resultInstance = await selectAndReplay(page, "TOP_SECRET", {
+  // Top Secret is now private even on a successful block; use a legitimately
+  // disclosed result for the shared neutral-result geometry contract.
+  const resultInstance = await selectAndReplay(page, "DEFENSE", {
     perspective: "opponent", disclosure: "result", status: "REVEALED",
   });
   const resultOnly = await resultInstance.evaluate((node) => ({
@@ -1084,7 +1086,7 @@ async function main() {
     || deepBreathRefund.captionText.indexOf("ENERGY RETURN +2") < 0) failures.push("Deep Breath private refund result timing/caption failed");
   if (secrecy.accepted || secrecy.after !== secrecy.before || secrecy.publicVisible || secrecy.privateVisible) failures.push("opponent secret event produced a visual side channel");
   if (resultOnly.identity !== "result-only" || resultOnly.skill !== "RESULT" || resultOnly.family !== "result"
-    || resultOnly.impact !== "hud" || /绝密|TOP SECRET|ACCESS DENIED|PROTOCOL|×2/i.test(resultOnly.caption)
+    || resultOnly.impact !== "hud" || /防守|DEFENSE|DAMAGE HALVED|绝密|TOP SECRET|ACCESS DENIED|PROTOCOL|×2/i.test(resultOnly.caption)
     || resultOnly.tier !== "FX2" || resultOnly.durationMs !== 1050
     || resultOnly.title !== "RESULT CONFIRMED" || resultOnly.result !== "RESOLUTION APPLIED"
     || resultOnly.glyph !== "✓" || resultOnly.impactGlyph !== "✓" || resultOnly.stageData || resultOnly.modifiers) {
@@ -1106,8 +1108,11 @@ async function main() {
   if (eventAdmission.duplicateCopies[0] !== true || eventAdmission.duplicateCopies[1] !== false || eventAdmission.copyQueue !== 1) failures.push("public/private event copies were not merged by eventId");
   if (eventAdmission.duplicateRequestCopies[0] !== true || eventAdmission.duplicateRequestCopies[1] !== false
     || eventAdmission.requestCopyQueue !== 1) failures.push("resolved/private copies were not merged by requestId + skillId");
-  if (eventAdmission.topSecretChains.some((chain) => chain.accepted.some((value) => !value))
-    || eventAdmission.topSecretKeys.length !== 6) failures.push("Top Secret collided with a protected skill sharing its requestId");
+  if (eventAdmission.topSecretChains.some((chain) => chain.accepted[0] !== false || chain.accepted[1] !== true)
+    || eventAdmission.topSecretKeys.length !== 3
+    || eventAdmission.topSecretKeys.some((key) => key.endsWith(":TOP_SECRET"))) {
+    failures.push("Secret Guard leaked to the opponent or suppressed the attacker's own failure feedback");
+  }
   if (eventAdmission.deepBreathEvents.some((value) => !value)
     || eventAdmission.deepBreathKeys.join(",") !== "request:deep-breath-use:DEEP_BREATH,result:deep-breath-refund") failures.push("Deep Breath activation and refund identities collided");
   if (eventAdmission.loanRequests.some((value) => !value) || eventAdmission.loanQueue.join(",") !== "loan-a,loan-b") failures.push("different Loan requestIds did not both enter the FX queue");

@@ -1,6 +1,20 @@
 const { SKILL_CONFIG } = require("../skillConfig");
 const { getSkillDefinition, listSkillDefinitions, isProtocolSkill } = require("./definitions");
 
+const TOP_SECRET_STATE = Object.freeze({
+  ARMED: "ARMED",
+  DISARMED_LOCKED: "DISARMED_LOCKED",
+  ACTIVE_LOCKED: "ACTIVE_LOCKED",
+});
+
+function canDisarmTopSecret(player, room) {
+  return Boolean(hasEquipped(player, "TOP_SECRET") && player.skillRuntime?.loadoutConfirmed
+    && player.skillRuntime.topSecretState === TOP_SECRET_STATE.ARMED
+    && ["pre_flop", "flop", "turn", "river"].includes(room?.phase)
+    && !room.skillState?.fairnessActive
+    && !["folded", "out", "disconnected"].includes(player.status));
+}
+
 const {
   LOAN_CREDIT, getLoanCreditState, getLoanQuota, getLoanSummary,
   loanReuseBlocked, expireLoanDebts, expireLoanDebtsForRoom, isMatchOverForLoan,
@@ -23,9 +37,7 @@ function createEmptySkillRuntime() {
     breathBroken: false,
     recycleUsedThisHand: false,
     paidFailuresThisHand: [],
-    topSecretActive: false,
-    topSecretPaidThisHand: false,
-    topSecretRevealed: false,
+    topSecretState: null,
     counterArmed: false,
     desperationActive: false,
     bloodBattleActive: false,
@@ -164,6 +176,7 @@ function resetPlayerSkillsForHand(player) {
     revealedSkillIds: [...(runtime.revealedSkillIds || [])],
   };
   Object.assign(runtime, createEmptySkillRuntime(), persist);
+  runtime.topSecretState = hasEquipped(player, "TOP_SECRET") ? TOP_SECRET_STATE.ARMED : null;
   runtime.handStartChips = Number(player.chips) || 0;
 }
 
@@ -296,7 +309,6 @@ function getPublicSkillSummary(player) {
       runtime.bloodBattleActive ? "BLOOD_BATTLE" : null,
       runtime.defenseRevealed ? "DEFENSE" : null,
       runtime.deadEndActive ? "DEAD_END" : null,
-      runtime.topSecretRevealed ? "TOP_SECRET" : null,
       runtime.disguiseActive ? "DISGUISE" : null,
     ].filter(Boolean).filter((id, index, list) => list.indexOf(id) === index),
   };
@@ -321,7 +333,10 @@ function getSelfSkillSummary(player, room = null) {
     lockedThisHand: Boolean(runtime.lockedThisHand),
     lockReason: runtime.lockReason || null,
     breathArmed: Boolean(runtime.breathArmed),
-    topSecretActive: Boolean(runtime.topSecretActive),
+    ...(hasEquipped(player, "TOP_SECRET") ? {
+      topSecretState: runtime.topSecretState,
+      topSecretCanDisarm: canDisarmTopSecret(player, room),
+    } : {}),
     counterArmed: Boolean(runtime.counterArmed),
     desperationActive: Boolean(runtime.desperationActive),
     bloodBattleActive: Boolean(runtime.bloodBattleActive),
@@ -440,6 +455,7 @@ function addDirectChipGain(player, amount) {
 }
 
 module.exports = {
+  TOP_SECRET_STATE, canDisarmTopSecret,
   createEmptySkillRuntime, createRoomSkillState, resetPlayerSkillsForGame,
   resetPlayerSkillsForHand, resetRoomSkillsForHand,
   validateLoadout, getLoadoutLoad, pickDefaultBotLoadout, gainEnergy, spendEnergy,

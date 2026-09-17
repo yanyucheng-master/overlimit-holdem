@@ -58,6 +58,24 @@ function closeLoanHand(runtime, handNo) {
   runtime.loanLastClosedHandNo = handNo;
 }
 
+function hasFinalLoanRepaymentWindow(room, player) {
+  const runtime = player?.skillRuntime;
+  return Boolean(room?.skillMode === "abyss" && room.handId && room.handNo > 0
+    && ["end", "waiting"].includes(room.phase) && !room.rematch?.active
+    && !isEconomyFaulted(room) && room.players.length === 2
+    && room.players.includes(player) && room.players.every((p) => p.chips > 0 && p.status !== "out")
+    && room.skillState?.handEndRecoverySettled && runtime?.loanLastClosedHandNo === room.handNo
+    && loanDebts(runtime).some((debt) => !debt.defaultApplied && debt.penalty === 0
+      && debt.defaultAfterHandNo === room.handNo
+      && debt.defaultAfterHandNo === debt.borrowedHandNo + SKILL_CONFIG.LOAN_GRACE_HANDS));
+}
+
+function isFinalLoanResumePending(room) {
+  const resume = room?.finalLoanRepaymentResume;
+  return Boolean(resume && resume.handId === room.handId && resume.handNo === room.handNo
+    && ["end", "waiting"].includes(room.phase) && !resume.released);
+}
+
 function settleLoanDefaultsBeforeNextHand(runtime, nextHandNo) {
   if (!runtime || !Number.isSafeInteger(nextHandNo)) return;
   // Closing N+2 leaves its final settlement resources available for repayment.
@@ -132,4 +150,5 @@ function isMatchOverForLoan(room) { return (room?.players || []).some((p) => p.s
 
 module.exports = { LOAN_CREDIT, loanDebts, getLoanCreditState, getLoanQuota, loanReuseBlocked,
   addLoanDebt, closeLoanHand, settleLoanDefaultsBeforeNextHand, adjustLoanInterest, repaymentEligibility, getLoanSummary,
+  hasFinalLoanRepaymentWindow, isFinalLoanResumePending,
   expireLoanDebts, expireLoanDebtsForRoom, isMatchOverForLoan };

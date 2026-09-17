@@ -1,4 +1,4 @@
-const { getLoanSummary } = require("./skills/loanState");
+const { getLoanSummary, hasFinalLoanRepaymentWindow, isFinalLoanResumePending } = require("./skills/loanState");
 const crypto = require("crypto");
 const { createShuffledDeck } = require("../utils/deck");
 const { pickBestFive, compareEvaluatedHands } = require("./handEvaluator");
@@ -217,6 +217,7 @@ class GameEngine {
       clearTimeout(room.rematch.timer);
       room.rematch.timer = null;
     }
+    room.finalLoanRepaymentResume = null;
   }
 
   scheduleActionTimeout(room, playerIndex, turn, timeoutMs = ACTION_TIMEOUT_MS) {
@@ -751,6 +752,7 @@ class GameEngine {
       clearTimeout(room.nextHandTimer);
       room.nextHandTimer = null;
     }
+    room.finalLoanRepaymentResume = null;
     room.phase = "waiting";
     room.dealerIndex = 0;
     room.currentPlayerIndex = 0;
@@ -840,6 +842,7 @@ class GameEngine {
   }
 
   beginRematchVote(room, gameOverPayload) {
+    room.finalLoanRepaymentResume = null;
     this.skillEngine?.expireLoanDebts?.(room);
     this.flushDeferredHandReveals(room);
     if (room.rematch?.timer) clearTimeout(room.rematch.timer);
@@ -886,6 +889,33 @@ class GameEngine {
       this.startHand(room);
     }
     return { ok: true };
+  }
+
+  noteFinalLoanDisconnect(room, player) {
+    if (!hasFinalLoanRepaymentWindow(room, player)) return;
+    // This private, hand-scoped record is never included in socket snapshots.
+    // Keep an existing (even expired) resume: reconnects cannot mint more time.
+    if (room.finalLoanRepaymentResume?.handId === room.handId) return;
+    room.finalLoanRepaymentResume = {
+      handId: room.handId, handNo: room.handNo, resumed: false, released: false,
+      dealerAdvanced: room.phase === "waiting",
+    };
+  }
+
+  resumeFinalLoanRepaymentWindow(room) {
+    const resume = room.finalLoanRepaymentResume;
+    if (!isFinalLoanResumePending(room) || resume.resumed || room.rematch?.active
+      || isEconomyFaulted(room) || room.players.length !== 2
+      || room.players.some((p) => (!p.isBot && !p.socketId) || p.chips <= 0 || p.status === "out")) return false;
+    if (room.nextHandTimer) clearTimeout(room.nextHandTimer);
+    room.nextHandTimer = null;
+    resume.resumed = true;
+    // Reuse the existing short settlement window, once, with no client ACK.
+    // Restoring END keeps waiting repayment forbidden and does not settle twice.
+    room.phase = "end";
+    this.finalizeHand(room, HAND_SETTLE_MS);
+    room.players.forEach((player) => this.restorePlayerState(room, player));
+    return true;
   }
 
   tryStartGame(room) {
@@ -952,6 +982,10 @@ class GameEngine {
 
   handleLoanRepayment(room, player, payload) {
     return this.skillEngine.requestRepayment(room, player, payload);
+  }
+
+  handleTopSecretDisarm(room, player, payload) {
+    return this.skillEngine.requestTopSecretDisarm(room, player, payload);
   }
 
   refreshLoanRepaymentActions(room) {
@@ -1040,6 +1074,11 @@ class GameEngine {
   }
 
   startHand(room) {
+    if (!["waiting", "drafting", "end"].includes(room.phase)) return false;
+    if (isFinalLoanResumePending(room)) {
+      this.resumeFinalLoanRepaymentWindow(room);
+      return false;
+    }
     this.ensureEconomyFaultHandler(room);
     if (isEconomyFaulted(room)) return false;
     if (isSkillEnabled(room.skillMode) && !this.ensureValidMatchLoadouts(room)) return false;
@@ -1050,6 +1089,7 @@ class GameEngine {
       room.nextHandTimer = null;
     }
     prepareNextHandSkills(room, room.handNo + 1);
+    room.finalLoanRepaymentResume = null;
     room.phase = "pre_flop";
     room.handNo += 1;
     room.gameMode = normalizeGameMode(room.gameMode);
@@ -1825,7 +1865,7 @@ class GameEngine {
 
   finalizeHand(room, settleMs = HAND_SETTLE_MS) {
     // Repeated finalization must not create a second next-hand boundary.
-    if (room.nextHandTimer) return;
+    if (room.nextHandTimer || (room.phase === "waiting" && room.finalLoanRepaymentResume)) return;
     this.clearActionTimer(room);
     room.phase = "end";
     room.currentPlayerIndex = -1;
@@ -1833,6 +1873,7 @@ class GameEngine {
     room.players.forEach((player) => {
       player.streetBet = 0;
       player.hasActed = false;
+      if (!player.isBot && !player.socketId) this.noteFinalLoanDisconnect(room, player);
     });
     this.broadcastRoomState(room);
 
@@ -1840,6 +1881,8 @@ class GameEngine {
     const timer = setTimeout(() => {
       if (room.nextHandTimer !== timer || room.handId !== handId) return;
       room.nextHandTimer = null;
+      const resume = room.finalLoanRepaymentResume?.handId === handId ? room.finalLoanRepaymentResume : null;
+      if (resume?.resumed) resume.released = true;
       const bust = room.players.find((p) => p.chips <= 0);
       if (bust) {
         const winner = room.players.find((p) => p.chips > 0);
@@ -1862,7 +1905,10 @@ class GameEngine {
         });
         return;
       }
-      room.dealerIndex = otherIndex(room.dealerIndex);
+      if (!resume?.dealerAdvanced) {
+        room.dealerIndex = otherIndex(room.dealerIndex);
+        if (resume) resume.dealerAdvanced = true;
+      }
       if (
         room.players.length === 2 &&
         room.players.every((p) => (p.isBot || p.socketId) && p.chips > 0)

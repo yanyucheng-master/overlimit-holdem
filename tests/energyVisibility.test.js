@@ -1,7 +1,7 @@
 const { GAME_MODE } = require("../game/gameModes");
 const { SKILL_MODE } = require("../game/skillModes");
 const { RoomManager } = require("../game/roomManager");
-const { GameEngine } = require("../game/gameEngine");
+const { GameEngine, HAND_SETTLE_MS } = require("../game/gameEngine");
 const { createDeck } = require("../utils/deck");
 const {
   setPlayerLoadout,
@@ -93,6 +93,47 @@ function assertNoEnergyLeak(payload) {
 }
 
 describe("对手能量可见性：逐手公开、手内冻结", () => {
+  test.each([["FORTUNE", -4, 0], ["FORTUNE", -3, 0], ["FORTUNE", -1, 0], ["DESTINY", 9, 8], ["DESTINY", 10, 8]])(
+    "final-window end/waiting/reconnect/next-hand keeps %s real %i masked to %i", (skill, energy, visible) => {
+      jest.useFakeTimers();
+      const { io, engine, roomManager, room, a, b } = setupRoom({ loadoutA: ["LOAN", skill], loadoutB: ["ALERT"] });
+      try {
+        engine.skillEngine.random = () => 0.99;
+        const debt = addLoanDebt(a.skillRuntime, { kind: "energy", principal: 5, handNo: room.handNo });
+        for (let i = 0; i < 2; i++) {
+          b.status = "folded"; engine.settleByFold(room);
+          jest.advanceTimersByTime(HAND_SETTLE_MS);
+        }
+        b.status = "folded"; engine.settleByFold(room);
+        // Fixture the settled real balance (including Fortune's allowed negatives).
+        a.skillRuntime.abyssEnergy = energy;
+        syncVisibleEnergy(a);
+        function assertMasked() {
+          expect(publicSkillsOf(engine, room, b, a).abyssEnergy).toBe(visible);
+          expect(getSelfSkillSummary(a).abyssEnergy).toBe(energy);
+          engine.broadcastRoomState(room); engine.restorePlayerState(room, b);
+          const remote = io.emits.filter((entry) => entry.target === b.socketId);
+          expect(JSON.stringify(remote)).not.toContain(debt.id);
+          expect(JSON.stringify(remote)).not.toContain('"principal":');
+          assertNoEnergyLeak(publicSkillsOf(engine, room, b, a));
+          io.emits.length = 0;
+        }
+        assertMasked();
+        roomManager.markDisconnected(a.socketId, (r, p) => engine.resolveDisconnectTimeout(r, p));
+        engine.noteFinalLoanDisconnect(room, a);
+        jest.advanceTimersByTime(HAND_SETTLE_MS);
+        expect(room.phase).toBe("waiting"); assertMasked();
+        roomManager.joinRoom({ roomId: room.roomId, playerId: a.playerId, reconnectToken: a.reconnectToken, socketId: "masked-rejoin" });
+        expect(engine.resumeFinalLoanRepaymentWindow(room)).toBe(true);
+        expect(room.phase).toBe("end"); assertMasked();
+        jest.advanceTimersByTime(HAND_SETTLE_MS);
+        expect(room.handNo).toBe(4); assertMasked();
+      } finally {
+        roomManager.destroyRoom(room.roomId);
+        jest.useRealTimers();
+      }
+    }
+  );
   test.each([["FORTUNE", -3, 0], ["DESTINY", 9, 8], ["DESTINY", 10, 8]])("next-hand %s real %i remains publicly clamped to %i", (skill, energy, visible) => {
     const { engine, room, a, b } = setupRoom({ loadoutA: [skill], loadoutB: ["ALERT"] });
     try {

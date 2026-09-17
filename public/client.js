@@ -2381,6 +2381,8 @@ function announceSkillResolved(payload) {
 }
 
 function announcePrivateSkillResult(payload) {
+  // Secret Guard lives on its private HUD control, never the central FX stage.
+  if (payload?.skillId === "TOP_SECRET") return;
   if (!isLiveSkillFxEvent(payload) || !payload?.skillId || payload.skillId === "ENDGAME") return;
   if (!el.game?.classList.contains("active")) return;
   const message = String(payload.message || "").trim();
@@ -6738,7 +6740,6 @@ function syncSkillFxStates() {
   addSelf(self.breathArmed, "deep-breath", "BREATH", "cyan");
   addSelf(self.defenseActive, "defense", "DEF", "cyan");
   addSelf(self.counterArmed, "counter", "COUNTER", "violet");
-  addSelf(self.topSecretActive, "top-secret", "SEALED", "gold");
   addSelf(self.bloodBattleActive, "blood", "BLOOD", "red");
   addSelf(self.desperationActive, "desperation", "CRITICAL", "red");
   addSelf(self.deadEndActive, "dead-end", "NO EXIT", "red");
@@ -6880,6 +6881,55 @@ socket.on("loan:state", (payload) => {
 });
 socket.on("disconnect", () => { loanRepaymentPending = null; renderLoanDebts(); });
 
+let topSecretDisarmPendingHandId = null;
+
+socket.on("top-secret:result", (payload) => {
+  if (shouldIgnoreSyncEvent(payload)) return;
+  if (payload.handId && payload.handId !== state.activeCommitment?.handId) return;
+  topSecretDisarmPendingHandId = null;
+  if (payload.self) state.skillSelf = payload.self;
+  if (!payload.ok) showToast(t("secretGuard.unavailable"), "error");
+  renderSkillHud();
+});
+socket.on("disconnect", () => { topSecretDisarmPendingHandId = null; renderSkillHud(); });
+
+function renderTopSecretControl(btn, selfSkills, displayName) {
+  const guard = selfSkills.topSecretState;
+  const locked = guard !== "ARMED";
+  const on = guard === "ARMED" || guard === "ACTIVE_LOCKED";
+  const pending = topSecretDisarmPendingHandId === state.activeCommitment?.handId;
+  btn.classList.add("top-secret-guard");
+  btn.dataset.guard = guard || "UNAVAILABLE";
+  btn.dataset.on = String(on);
+  btn.disabled = !socket.connected || !selfSkills.topSecretCanDisarm || pending;
+  btn.classList.remove("is-ready");
+  const hint = t(guard === "ACTIVE_LOCKED" ? "secretGuard.active"
+    : guard === "DISARMED_LOCKED" ? "secretGuard.off" : "secretGuard.armed");
+  const label = t("secretGuard.label", { name: displayName, value: on ? "ON" : "OFF" });
+  btn.title = hint;
+  btn.setAttribute("aria-label", label + ". " + hint);
+  btn.textContent = "";
+  if (locked) {
+    const icon = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    icon.setAttribute("viewBox", "0 0 24 24");
+    icon.setAttribute("aria-hidden", "true");
+    icon.innerHTML = '<rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/>';
+    btn.appendChild(icon);
+  }
+  const text = document.createElement("span");
+  text.className = "secret-guard-label";
+  text.textContent = label;
+  btn.appendChild(text);
+  btn.addEventListener("click", () => {
+    if (btn.disabled || !state.activeCommitment?.handId) return;
+    topSecretDisarmPendingHandId = state.activeCommitment.handId;
+    btn.disabled = true;
+    socket.emit("top-secret:disarm", {
+      roomId: state.roomId, handId: state.activeCommitment.handId,
+    });
+  });
+}
+
 function renderSkillHud() {
   if (!el.skillHud) return;
   renderLoanDebts();
@@ -6912,6 +6962,9 @@ function renderSkillHud() {
   }
   const me = getMe();
   const selfSkills = state.skillSelf || {};
+  if (topSecretDisarmPendingHandId !== state.activeCommitment?.handId || selfSkills.topSecretState !== "ARMED") {
+    topSecretDisarmPendingHandId = null;
+  }
   el.selfEnergy.textContent = String(selfSkills.abyssEnergy ?? 0);
   if (el.selfEnergyCap) el.selfEnergyCap.textContent = String(selfSkills.energyCap || 8);
   renderOpponentEnergy();
@@ -6931,7 +6984,9 @@ function renderSkillHud() {
       tags: [],
     };
     const availability = skillAvailability(def, selfSkills, me);
-    return [currentLocale(), skillId, availability.kind, availability.ready ? "1" : "0", availability.reason, availability.cost].join(":");
+    const guardSignature = skillId === "TOP_SECRET"
+      ? [selfSkills.topSecretState, selfSkills.topSecretCanDisarm, topSecretDisarmPendingHandId, socket.connected].join(":") : "";
+    return [currentLocale(), skillId, availability.kind, availability.ready ? "1" : "0", availability.reason, availability.cost, guardSignature].join(":");
   }).join("|");
   if (el.skillBar.dataset.signature === hudSignature) {
     syncNullifyTargeting();
@@ -6988,7 +7043,8 @@ function renderSkillHud() {
       skillCost.textContent = String(availability.cost);
       btn.appendChild(skillCost);
     }
-    btn.addEventListener("click", () => useSkill(skillId, def));
+    if (skillId === "TOP_SECRET") renderTopSecretControl(btn, selfSkills, displayName);
+    else btn.addEventListener("click", () => useSkill(skillId, def));
     slot.append(btn, createSkillZoomButton(def));
     el.skillBar.appendChild(slot);
   });
@@ -7844,6 +7900,12 @@ socket.on("skill:private-result", (payload) => {
     message,
   });
   if (payload.resultId) state.seenPrivateResultIds.add(payload.resultId);
+  if (payload.skillId === "TOP_SECRET") {
+    // A conditional defense only updates its private feed/HUD. It must not
+    // dismiss or finish an unrelated active-skill request or choice dialog.
+    applySkillRuntimeUi();
+    return;
+  }
   if (payload.cards) state.myCards = payload.cards;
   if (Object.prototype.hasOwnProperty.call(payload, "opponentEnergy")) {
     const known = Number(payload.opponentEnergy);

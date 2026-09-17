@@ -3,6 +3,15 @@
   const i18n = root.OverlimitI18n || (typeof require === "function" ? require("./i18n") : null);
   if (!i18n) return;
   i18n.register("en-US", {
+    secretGuard: {
+      label: "{name}: {value}",
+      armed: "Secret Guard is on. Turn it off once for this hand; it cannot be rearmed. Automatically spends 3 Energy to protect your Hole Cards if affordable.",
+      off: "Guard is locked off for this hand. It resets on next hand.",
+      active: "Protection is active and locked on for this hand. Further protection is free.",
+      unavailable: "Guard cannot be turned off now. Check the updated state.",
+      triggered: "Top Secret is protecting your Hole Cards.",
+      noPrivateInfo: "No usable private information was obtained."
+    },
     meta: {
       title: "OVERLIMIT: HOLD'EM",
       description: "OVERLIMIT: HOLD'EM — realtime heads-up No-Limit Texas Hold'em with optional Overlimit Skills.",
@@ -1048,9 +1057,9 @@
       counterArmed: "Counter is secretly planted.",
       retreatArmed: "Retreat is secretly armed.",
       probeArmed: "Probe is secretly armed.",
-      intelBlocked: "Intel was blocked by Top Secret.",
-      cheatBlocked: "Cheat was blocked by Top Secret.",
-      nullifyBlocked: "Hole Card Nullification was blocked by Top Secret.",
+      intelBlocked: "Could not obtain the target's Hole Card information.",
+      cheatBlocked: "The target's private Hole Cards could not be manipulated.",
+      nullifyBlocked: "Could not lock onto that private Hole Card.",
       nullifyHole: "Nullification secretly locked one opponent Hole Card.",
       nullifyBoard: "Nullification secretly locked Community Card #{n}.",
       destinyNoRiver: "Destiny failed: the future River seat no longer exists.",

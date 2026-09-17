@@ -20,15 +20,30 @@ await fs.mkdir(output, { recursive: true });
 
 async function clickUser(page, selector) {
   const target = page.locator(selector);
-  await target.scrollIntoViewIfNeeded();
-  await lobby.stable(page);
+  // Wait for this control's layout, not every unrelated non-blocking FX on the
+  // table. Waiting for a whole settlement animation would consume the real
+  // two-second repayment window before a user-style click is even attempted.
+  await page.evaluate(() => document.fonts.ready);
+  // Locator actionability retries after a HUD replacement and waits for the
+  // modal's scale transition before we measure its real user hit target.
+  await target.click({ trial: true });
+  await page.waitForFunction((selector) => {
+    const target = document.querySelector(selector);
+    if (!target) return false;
+    for (let node = target; node; node = node.parentElement) {
+      if (node.getAnimations().some((animation) => animation.playState === "running"
+        && animation.effect?.getComputedTiming().iterations !== Infinity)) return false;
+    }
+    return true;
+  }, selector);
   const hit = await target.evaluate((node) => {
     const r = node.getBoundingClientRect();
     const center = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
-    return r.width > 0 && r.height >= 36 && r.left >= 0 && r.right <= innerWidth + 1
-      && r.top >= 0 && r.bottom <= innerHeight + 1 && Boolean(center && node.contains(center));
+    return { ok: r.width > 0 && r.height >= 36 && r.left >= 0 && r.right <= innerWidth + 1
+      && r.top >= 0 && r.bottom <= innerHeight + 1 && Boolean(center && node.contains(center)),
+      rect: r.toJSON(), hit: center?.outerHTML.slice(0, 300) };
   });
-  assert.equal(hit, true, `User hit target: ${selector}`);
+  assert.equal(hit.ok, true, `User hit target: ${selector}: ${JSON.stringify(hit)}`);
   await target.click();
 }
 
@@ -205,6 +220,17 @@ try {
       await owner.click("#btn-skill-choice-confirm");
       await owner.waitForFunction(() => state.skillSelf.loan.tranches.length === 1);
       completeGrace();
+      // Exercise the real offline timer and token restore, not a held fixture
+      // window: the UI must receive END and let a user click Repay in time.
+      const resumedHandNo = room.handNo;
+      app.gameEngine.finalizeHand(room);
+      await owner.evaluate(() => socket.disconnect());
+      await opponent.waitForFunction((handNo) => state.phase === "waiting" && state.handNo === handNo, resumedHandNo);
+      assert.equal(room.phase, "waiting");
+      assert.equal(player.skillRuntime.loanDebts[0].defaultApplied, false);
+      await owner.evaluate(() => socket.connect());
+      await owner.waitForFunction((handNo) => state.phase === "end" && state.handNo === handNo
+        && state.skillSelf?.loan?.tranches[0]?.canRepay, resumedHandNo);
       await owner.locator("#hand-settle-modal:not(.hidden)").waitFor();
       await clickUser(owner, "#settle-loan");
       await owner.waitForFunction(() => state.skillSelf.loan.tranches[0]?.canRepay && state.skillSelf.loan.tranches[0]?.graceHandsRemaining === 0);
@@ -220,11 +246,13 @@ try {
       assert.equal(publicEnergy(), 6);
       assert.equal(await opponent.evaluate((id) => JSON.stringify(window.loanQaPackets).includes(id), finalDebt.id), false);
       await clickUser(owner, "#btn-loan-close");
-      startNextHand();
+      assert.equal(app.gameEngine.startHand(room), false); // Cannot cut the resumed window short.
       await opponent.waitForFunction((id) => state.phase === "pre_flop" && state.players.find((p) => p.playerId === id)?.skills?.abyssEnergy === 0, player.playerId);
+      app.gameEngine.clearActionTimer(room);
+      assert.equal(room.handNo, resumedHandNo + 1);
       assert.equal(finalDebt.defaultApplied, false);
       assert.equal(publicEnergy(), 0);
-      report.scenarios.push({ label, hud, lockedHud, grace, finalWindow, defaulted, repayment: "PASS", finalWindowRepayment: "PASS", boundarySnapshot: "PASS", secrecy: "PASS", conserved: total });
+      report.scenarios.push({ label, hud, lockedHud, grace, finalWindow, defaulted, repayment: "PASS", finalWindowRepayment: "PASS", waitingReconnectRepayment: "PASS", boundarySnapshot: "PASS", secrecy: "PASS", conserved: total });
     } finally {
       if (room) app.gameEngine.closeRoom(room, "verification_complete");
       for (const context of contexts) await context.close();

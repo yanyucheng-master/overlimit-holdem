@@ -88,6 +88,8 @@ function makeFact({
 }
 
 function buildPerceptionFacts(room, observer, target, { holeProtected = false } = {}) {
+  // Never inspect protected data, including when called outside SkillEngine.
+  if (holeProtected) return [];
   const hole = target?.cards || [];
   const board = room?.communityCards || [];
   const known = observerKnownCodes(observer, room);

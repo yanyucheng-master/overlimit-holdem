@@ -21,6 +21,8 @@ const {
 } = require("./definitions");
 const {
   createEmptySkillRuntime,
+  TOP_SECRET_STATE,
+  canDisarmTopSecret,
   createRoomSkillState,
   resetPlayerSkillsForGame,
   resetPlayerSkillsForHand,
@@ -72,7 +74,7 @@ const {
   getHandRankLabel,
 } = require("../handRankBonus");
 
-const { addLoanDebt, closeLoanHand, settleLoanDefaultsBeforeNextHand, adjustLoanInterest, repaymentEligibility, getLoanSummary } = require("./loanState");
+const { addLoanDebt, closeLoanHand, settleLoanDefaultsBeforeNextHand, adjustLoanInterest, repaymentEligibility, getLoanSummary, isFinalLoanResumePending } = require("./loanState");
 
 const ACTIVE_PHASES = new Set(["pre_flop", "flop", "turn", "river"]);
 const CARD_CODE_RE = /^[SHCD](?:[2-9TJQKA])$/;
@@ -288,10 +290,10 @@ function sanitizeSkillEventForReveal(entry = {}) {
 }
 
 function isPrivateOnlyRevealSkillEvent(entry = {}) {
-  // Deep Breath and the Energy Loan branch are private resource planning.
+  // Private resource planning and conditional hole-card defense stay private.
   // Their identity and occurrence stay in the server-side private audit, not public
   // hand reveal; Clairvoyance still reads the authoritative live action log.
-  return ["DEEP_BREATH", "LOAN"].includes(entry.skillId) && entry.secret === true;
+  return ["DEEP_BREATH", "LOAN", "TOP_SECRET"].includes(entry.skillId) && entry.secret === true;
 }
 
 function sanitizeSkillTransformForReveal(entry = {}) {
@@ -362,7 +364,7 @@ function resolveHandStartChips(player) {
 }
 
 function prepareNextHandSkills(room, nextHandNo) {
-  if (!isSkillEnabled(room.skillMode) || !Number.isSafeInteger(nextHandNo)) return;
+  if (!isSkillEnabled(room.skillMode) || !Number.isSafeInteger(nextHandNo) || isFinalLoanResumePending(room)) return;
   room.players.forEach((player) => {
     const runtime = player.skillRuntime;
     if (!runtime || nextHandNo <= (runtime.skillBoundaryHandNo ?? 0)) return;
@@ -440,7 +442,7 @@ function clearPersistentSkillState(room) {
     runtime.defenseActive = false;
     runtime.defenseRevealed = false;
     runtime.deadEndActive = false;
-    runtime.topSecretActive = false;
+    if (hasEquipped(player, "TOP_SECRET")) runtime.topSecretState = TOP_SECRET_STATE.DISARMED_LOCKED;
     runtime.retreatActive = false;
     runtime.probeActive = false;
     runtime.disguiseActive = false;
@@ -466,7 +468,7 @@ function countPersistentRuntimeFlags(runtime) {
     runtime.bloodBattleActive,
     runtime.defenseActive,
     runtime.deadEndActive,
-    runtime.topSecretActive,
+    runtime.topSecretState === TOP_SECRET_STATE.ACTIVE_LOCKED,
     runtime.retreatActive,
     runtime.probeActive,
     runtime.disguiseActive,
@@ -579,34 +581,43 @@ class SkillEngine {
     });
   }
 
-  tryActivateTopSecret(room, defender, { requestId } = {}) {
+  requestTopSecretDisarm(room, player, { handId } = {}) {
+    if (!room || !player || !isSkillEnabled(room.skillMode) || isEconomyFaulted(room)
+      || !handId || handId !== room.handId || !canDisarmTopSecret(player, room)) {
+      return { ok: false, reason: "unavailable" };
+    }
+    // A private preference, not a skill event or a poker action. No timer, log,
+    // Counter, Alert, Deep Breath, quota or presentation-barrier side effects.
+    player.skillRuntime.topSecretState = TOP_SECRET_STATE.DISARMED_LOCKED;
+    return { ok: true };
+  }
+
+  // Call BEFORE reading/inferencing/mutating an opponent's private hole cards.
+  // The synchronous server event order determines whether disarm or access wins.
+  blocksPrivateHoleAccess(room, attacker, defender, { skillId, operation, requestId } = {}) {
     const runtime = defender?.skillRuntime;
-    if (!defender || !hasEquipped(defender, "TOP_SECRET")) return false;
-    if (runtime.topSecretActive) return true;
+    if (!attacker || !defender || attacker.playerId === defender.playerId
+      || !hasEquipped(defender, "TOP_SECRET") || room.skillState?.fairnessActive) return false;
+    if (runtime.topSecretState === TOP_SECRET_STATE.ACTIVE_LOCKED) return true;
+    if (runtime.topSecretState !== TOP_SECRET_STATE.ARMED) return false;
     if (!canTriggerNewSkillEvent(defender, "TOP_SECRET", room)) return false;
     if (runtime.abyssEnergy < SKILL_CONFIG.TOP_SECRET_COST) return false;
     if (!spendEnergy(defender, SKILL_CONFIG.TOP_SECRET_COST)) return false;
-    runtime.topSecretActive = true;
-    runtime.topSecretPaidThisHand = true;
-    runtime.topSecretRevealed = true;
-    confirmPublicSkill(defender, "TOP_SECRET");
+    runtime.topSecretState = TOP_SECRET_STATE.ACTIVE_LOCKED;
     markSkillEvent(defender, "TOP_SECRET");
     const skill = getSkillDefinition("TOP_SECRET");
     this.recordSkill(room, defender, skill, {
       status: "TRIGGERED",
-      secret: false,
+      secret: true,
       paid: true,
       cost: SKILL_CONFIG.TOP_SECRET_COST,
       persistent: true,
-      publicSummary: `${defender.name} 的「绝密」生效`,
-      audit: { requestId },
+      publicSummary: "秘密技能已结算",
+      audit: { requestId, intrusionSkillId: skillId, operation },
     });
-    this.emitToRoom(room, "skill:resolved", {
-      requestId: requestId || null,
+    this.notifyPrivate(defender, {
       skillId: skill.id,
-      casterId: defender.playerId,
-      status: "TRIGGERED",
-      publicSummary: `${defender.name} 的「绝密」生效`,
+      message: "绝密已生效。",
     });
     return true;
   }
@@ -808,7 +819,7 @@ class SkillEngine {
         return { ok: false, error: "请选择千术交换目标" };
       }
       const index = asIndex(target.index);
-      if (zone === "opponent" && (![0, 1].includes(index) || !opponentOf(room, player)?.cards?.[index])) {
+      if (zone === "opponent" && (![0, 1].includes(index) || !opponentOf(room, player)?.cards?.length)) {
         return { ok: false, error: "请选择有效的对手底牌位置" };
       }
       if (zone === "community" && (index == null || !room.communityCards[index])) {
@@ -1120,13 +1131,13 @@ class SkillEngine {
   resolveIntelOne(room, player, opponent, target, requestId, cost) {
     const zone = String(target.zone || target.mode || "opponent").toLowerCase();
     if (zone === "opponent" || zone === "hole") {
-      if (this.tryActivateTopSecret(room, opponent, { requestId }) || opponent?.skillRuntime?.topSecretActive) {
+      if (this.blocksPrivateHoleAccess(room, player, opponent, { skillId: "INTEL_ONE", operation: "read", requestId })) {
         return {
           status: "FAILED",
           secret: true,
           failureReason: "TOP_SECRET",
           publicSummary: "秘密技能已结算",
-          privateResult: { message: "情报目标受到绝密保护，本次读取失败。" },
+          privateResult: { message: "未能获取目标底牌信息。" },
           audit: { reason: "TOP_SECRET", paidEnergy: cost },
         };
       }
@@ -1158,6 +1169,16 @@ class SkillEngine {
     const zone = String(target.zone || "").toLowerCase();
     const ownCard = player.cards?.[ownIndex];
     if (!ownCard) throw new Error("自己的目标底牌不存在");
+    if (zone === "opponent" && this.blocksPrivateHoleAccess(room, player, opponent, {
+      skillId: "CHEAT", operation: "exchange", requestId,
+    })) {
+      return {
+        status: "FAILED", secret: true, failureReason: "TOP_SECRET",
+        publicSummary: "秘密技能已结算",
+        privateResult: { message: "目标私人底牌无法被操作。" },
+        audit: { reason: "TOP_SECRET", paidEnergy: cost },
+      };
+    }
     const snapshot = snapshotZones(room);
     let otherCard = null;
     let otherLocation = null;
@@ -1165,16 +1186,6 @@ class SkillEngine {
     let communityChanged = false;
 
     if (zone === "opponent") {
-      if (this.tryActivateTopSecret(room, opponent, { requestId }) || opponent?.skillRuntime?.topSecretActive) {
-        return {
-          status: "FAILED",
-          secret: true,
-          failureReason: "TOP_SECRET",
-          publicSummary: "秘密技能已结算",
-          privateResult: { message: "千术目标受到绝密保护，交换失败。" },
-          audit: { reason: "TOP_SECRET", paidEnergy: cost },
-        };
-      }
       const index = asIndex(target.index);
       if (![0, 1].includes(index) || !opponent.cards[index]) throw new Error("对手底牌目标无效");
       otherCard = opponent.cards[index];
@@ -1262,13 +1273,13 @@ class SkillEngine {
   resolveNullification(room, player, opponent, target, requestId, cost) {
     const mode = String(target.mode || "board").toLowerCase();
     if (mode === "hole") {
-      if (this.tryActivateTopSecret(room, opponent, { requestId }) || opponent?.skillRuntime?.topSecretActive) {
+      if (this.blocksPrivateHoleAccess(room, player, opponent, { skillId: "NULLIFICATION", operation: "nullify", requestId })) {
         return {
           status: "FAILED",
           secret: true,
           failureReason: "TOP_SECRET",
           publicSummary: "秘密技能已结算",
-          privateResult: { message: "零化底牌受到绝密保护，技能失败。" },
+          privateResult: { message: "未能锁定该私人底牌。" },
           audit: { reason: "TOP_SECRET", paidEnergy: cost },
         };
       }
@@ -1726,16 +1737,13 @@ class SkillEngine {
       const chance = this.perceptionChance(room, player);
       if (this.random() >= chance) return;
       const opponent = opponentOf(room, player);
-      if (!opponent?.cards?.length) return;
-      const candidateFacts = buildPerceptionFacts(room, player, opponent, { holeProtected: false });
-      const wouldReadHole = candidateFacts.some((fact) => fact.domain === "hole" || fact.requiresHole);
-      if (wouldReadHole && hasEquipped(opponent, "TOP_SECRET")) {
-        this.tryActivateTopSecret(room, opponent);
+      if (!opponent) return;
+      if (this.blocksPrivateHoleAccess(room, player, opponent, { skillId: "PERCEPTION", operation: "infer" })) {
+        this.notifyPrivate(player, { skillId: "PERCEPTION", message: "本次未获得有效的私人信息。", node });
+        return;
       }
-      const holeProtected = Boolean(opponent.skillRuntime?.topSecretActive);
-      const facts = holeProtected
-        ? candidateFacts.filter((fact) => fact.domain !== "hole" && !fact.requiresHole)
-        : candidateFacts;
+      if (!opponent.cards?.length) return;
+      const facts = buildPerceptionFacts(room, player, opponent);
       runtime.perceptionHistory = runtime.perceptionHistory || [];
       const picked = pickPerceptionStatement(facts, {
         truthChance: this.perceptionTruthChance(),

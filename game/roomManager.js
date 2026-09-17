@@ -103,6 +103,7 @@ class RoomManager {
       bigBlind: BIG_BLIND,
       economy: createEconomyState(),
       handNo: 0,
+      finalLoanRepaymentResume: null,
       history: [],
       lastActionAt: Date.now(),
       handResultHistory: [],
@@ -332,6 +333,7 @@ class RoomManager {
     }
     room.presentationBarrier = null;
     room.presentationBarrierRelease = null;
+    room.finalLoanRepaymentResume = null;
     room.players.forEach((player) => {
       this.clearPlayerDisconnectTimer(player);
     });

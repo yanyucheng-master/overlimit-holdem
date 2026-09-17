@@ -112,6 +112,12 @@ describe("launch skill FX system contract", () => {
     }, profiles.getSkillFxProfile("DEFENSE"))).toBe(true);
     expect(profiles.canRenderSkillFx({
       skillId: "TOP_SECRET", audience: "opponent", disclosure: "public",
+    }, profiles.getSkillFxProfile("TOP_SECRET"))).toBe(false);
+    expect(profiles.canRenderSkillFx({
+      skillId: "TOP_SECRET", audience: "opponent", disclosure: "result", revealIdentity: true,
+    }, profiles.getSkillFxProfile("TOP_SECRET"))).toBe(false);
+    expect(profiles.canRenderSkillFx({
+      skillId: "TOP_SECRET", audience: "self", disclosure: "self",
     }, profiles.getSkillFxProfile("TOP_SECRET"))).toBe(true);
     expect(profiles.canRenderSkillFx({
       skillId: "PERCEPTION", audience: "opponent", disclosure: "self", authorized: false,
@@ -187,9 +193,9 @@ describe("launch skill FX system contract", () => {
 
   test("FX-ID-03 matching requestId with different skillIds remains two visual events", () => {
     const fx = createQueuedFxManager();
-    const shared = { requestId: "top-secret-chain", handNo: 9 };
+    const shared = { requestId: "counter-chain", handNo: 9 };
     expect(fx.play({
-      ...shared, skillId: "TOP_SECRET", casterId: "P2", audience: "opponent", disclosure: "public",
+      ...shared, skillId: "COUNTER", casterId: "P2", audience: "opponent", disclosure: "public",
       status: "TRIGGERED",
     })).toBe(true);
     expect(fx.play({
@@ -197,8 +203,8 @@ describe("launch skill FX system contract", () => {
       status: "FAILED",
     })).toBe(true);
     expect(fx.queue.map((job) => job.key)).toEqual([
-      "request:top-secret-chain:TOP_SECRET",
-      "request:top-secret-chain:INTEL_ONE",
+      "request:counter-chain:COUNTER",
+      "request:counter-chain:INTEL_ONE",
     ]);
   });
 

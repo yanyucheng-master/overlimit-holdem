@@ -86,6 +86,223 @@ function emitPlayerAction(socket, turn, action, amount) {
   });
 }
 
+describe("Secret Guard authority and private reconnect over real sockets", () => {
+  let app, baseUrl, room;
+  const clients = [];
+  beforeAll(async () => {
+    app = createAppServer({ reconnectTtlMs: 15000, matchmakingAutoStart: false });
+    await new Promise((resolve) => app.httpServer.listen(0, resolve));
+    baseUrl = `http://localhost:${app.httpServer.address().port}`;
+  });
+  afterEach(() => {
+    if (room) app.roomManager.destroyRoom(room.roomId);
+    room = null;
+    while (clients.length) clients.pop().close();
+  });
+  afterAll(async () => { await new Promise((resolve) => app.io.close(resolve)); });
+  async function connect() {
+    const socket = new Client(baseUrl, { transports: ["websocket"], reconnection: false });
+    clients.push(socket);
+    await waitFor(socket, "connect");
+    return socket;
+  }
+  test.each(["ARMED", "DISARMED_LOCKED", "ACTIVE_LOCKED"])("%s survives actual token reconnect, never leaks to opponent", async (guardState) => {
+    const guard = await connect(), attacker = await connect();
+    const joined = waitFor(guard, "room_joined");
+    guard.emit("create_room", { playerName: "Guard", playerId: "GUARD", skillMode: "abyss" });
+    const identity = await joined;
+    const joinedOther = waitFor(attacker, "room_joined");
+    attacker.emit("join_room", { roomId: identity.roomId, playerName: "Attacker", playerId: "ATTACKER" });
+    await joinedOther;
+    const ready = waitFor(guard, "skill:state", (p) => p.self?.topSecretState === "ARMED");
+    guard.emit("skill:loadout:set", { skillIds: ["TOP_SECRET", "DEEP_BREATH"] });
+    attacker.emit("skill:loadout:set", { skillIds: ["INTEL_ONE", "COUNTER"] });
+    await ready;
+    room = app.roomManager.getRoom(identity.roomId);
+    const engine = app.gameEngine;
+    engine.clearActionTimer(room);
+    const owner = room.players.find((p) => p.playerId === identity.playerId);
+    const enemy = room.players.find((p) => p !== owner);
+    room.currentPlayerIndex = room.players.indexOf(enemy);
+    const packets = [];
+    attacker.onAny((event, payload) => packets.push({ event, payload }));
+    const time = [room.turnId, room.actionDeadline, room.currentPlayerIndex];
+    owner.skillRuntime.breathArmed = true;
+    if (guardState === "DISARMED_LOCKED") {
+      const answer = waitFor(guard, "top-secret:result");
+      guard.emit("top-secret:disarm", { roomId: room.roomId, handId: room.handId, playerId: enemy.playerId });
+      expect(await answer).toMatchObject({ ok: true, self: { topSecretState: guardState } });
+      expect(owner.skillRuntime).toMatchObject({ abyssEnergy: 4, breathBroken: false, skillEventsThisHand: 0 });
+      expect(enemy.skillRuntime.topSecretState).toBeNull();
+    } else if (guardState === "ACTIVE_LOCKED") {
+      const protectedP = waitFor(guard, "skill:state", (p) => p.self?.topSecretState === guardState);
+      const failedP = waitFor(attacker, "skill:private-result", (p) => p.skillId === "INTEL_ONE");
+      attacker.emit("skill:use", { skillId: "INTEL_ONE", target: { zone: "opponent" },
+        requestId: "guard-intrusion", handId: room.handId, turnId: room.turnId, phase: room.phase });
+      expect((await failedP).message).toBe("未能获取目标底牌信息。");
+      await protectedP;
+      expect(owner.skillRuntime).toMatchObject({ abyssEnergy: 1, breathBroken: true, skillEventsThisHand: 1 });
+    }
+    expect([room.turnId, room.actionDeadline, room.currentPlayerIndex]).toEqual(time);
+    const disconnected = waitFor(attacker, "player_disconnected");
+    guard.close(); await disconnected;
+    const restored = await connect();
+    const stateP = waitFor(restored, "skill:state", (p) => p.self?.topSecretState === guardState);
+    restored.emit("join_room", { roomId: room.roomId, playerId: identity.playerId,
+      playerName: "Guard", reconnectToken: identity.reconnectToken });
+    expect((await stateP).self).toMatchObject({ topSecretState: guardState });
+    const resultP = waitFor(restored, "top-secret:result");
+    restored.emit("top-secret:disarm", { roomId: room.roomId, handId: guardState === "ARMED" ? "stale-hand" : room.handId });
+    expect(await resultP).toMatchObject({ ok: false });
+    expect(owner.skillRuntime.topSecretState).toBe(guardState);
+    engine.skillEngine.broadcastSkillState(room);
+    const sync = waitFor(attacker, "room_state"); engine.broadcastRoomState(room); await sync;
+    expect(JSON.stringify(packets)).not.toMatch(/TOP_SECRET|topSecret|绝密|Top Secret|ARMED|DISARMED_LOCKED|ACTIVE_LOCKED/);
+    if (guardState === "ACTIVE_LOCKED") {
+      expect(engine.skillEngine.blocksPrivateHoleAccess(room, enemy, owner, { operation: "read" })).toBe(true);
+      expect(owner.skillRuntime.abyssEnergy).toBe(1);
+    }
+  });
+});
+
+describe("Loan final-window waiting reconnect over real sockets", () => {
+  let app, baseUrl, room;
+  const clients = [];
+  beforeAll(async () => {
+    app = createAppServer({ reconnectTtlMs: 15000, matchmakingAutoStart: false });
+    await new Promise((resolve) => app.httpServer.listen(0, resolve));
+    baseUrl = `http://localhost:${app.httpServer.address().port}`;
+  });
+  afterEach(() => {
+    if (room) app.roomManager.destroyRoom(room.roomId);
+    room = null;
+    while (clients.length) clients.pop().close();
+  });
+  afterAll(async () => { await new Promise((resolve) => app.io.close(resolve)); });
+  async function connect() {
+    const socket = new Client(baseUrl, { transports: ["websocket"], reconnection: false });
+    clients.push(socket);
+    await waitFor(socket, "connect");
+    return socket;
+  }
+
+  test.each(["energy", "chip"])("%s: real timer -> waiting -> token reconnect -> repay -> N+3", async (kind) => {
+    const c1 = await connect(), c2 = await connect();
+    const joined1 = waitFor(c1, "room_joined");
+    c1.emit("create_room", { playerName: "Resume A", playerId: "RESUME-A", skillMode: "abyss" });
+    const j1 = await joined1;
+    const joined2 = waitFor(c2, "room_joined");
+    c2.emit("join_room", { roomId: j1.roomId, playerName: "Resume B", playerId: "RESUME-B" });
+    const j2 = await joined2;
+    const turnP = waitFor(c1, "player_turn");
+    c1.emit("skill:loadout:set", { skillIds: ["LOAN"] });
+    c2.emit("skill:loadout:set", { skillIds: ["LOAN"] });
+    const turn = await turnP;
+    room = app.roomManager.getRoom(j1.roomId);
+    const engine = app.gameEngine;
+    engine.clearActionTimer(room);
+    const borrower = turn.playerId === j1.playerId ? c1 : c2;
+    const observer = borrower === c1 ? c2 : c1;
+    const identity = borrower === c1 ? j1 : j2;
+    const player = room.players.find((p) => p.playerId === turn.playerId);
+    const opponent = room.players.find((p) => p !== player);
+    const packets = [];
+    observer.onAny((event, payload) => packets.push({ event, payload }));
+    const debtP = waitFor(borrower, "skill:state", (p) => p.self?.loan?.tranches?.length === 1);
+    borrower.emit("skill:use", { skillId: "LOAN", target: { mode: kind }, requestId: "resume-loan",
+      handId: room.handId, turnId: turn.turnId, phase: room.phase });
+    const original = (await debtP).self.loan.tranches[0];
+    // Real settlements for N/N+1; only skip their unrelated online delays.
+    for (let i = 0; i < 2; i++) {
+      opponent.status = "folded";
+      engine.settleByFold(room);
+      engine.startHand(room);
+      engine.clearActionTimer(room);
+    }
+    const finalStateP = waitFor(observer, "room_state", (p) => p.phase === "end" && p.handNo === 3);
+    player.skillRuntime.abyssEnergy = 6;
+    opponent.status = "folded";
+    engine.settleByFold(room);
+    await finalStateP;
+    const handId = room.handId, dealer = room.dealerIndex;
+    expect(room.handNo).toBe(original.borrowedHandNo + 2);
+    const disconnected = waitFor(observer, "player_disconnected");
+    const waitingP = waitFor(observer, "room_state", (p) => p.phase === "waiting" && p.handNo === 3);
+    borrower.close();
+    await disconnected;
+    await waitingP; // The production nextHandTimer actually expires offline.
+    expect(room.phase).toBe("waiting");
+    expect(room.nextHandTimer).toBeNull();
+    expect(player.skillRuntime.loanDebts[0]).toMatchObject({
+      amount: kind === "energy" ? 6 : 150, penalty: 0, defaultApplied: false,
+    });
+
+    async function restore(socket) {
+      const stateP = waitFor(socket, "skill:state", (p) => p.self?.loan?.tranches?.[0]?.canRepay === true);
+      socket.emit("join_room", { roomId: room.roomId, playerId: player.playerId,
+        playerName: player.name, reconnectToken: identity.reconnectToken });
+      return stateP;
+    }
+    const reconnected = await connect();
+    const state = await restore(reconnected);
+    expect(state.self.loan).toMatchObject({ state: "DEBT_OPEN", tranches: [{
+      id: original.id, amount: original.amount, graceHandsRemaining: 0,
+      defaultApplied: false, penalty: 0, canRepay: true,
+    }] });
+    expect([room.phase, room.handNo, room.handId]).toEqual(["end", 3, handId]);
+    const timer = room.nextHandTimer;
+    // A replacement socket with the same token restores, not renews, the window.
+    const replacement = await connect();
+    await restore(replacement);
+    expect(room.nextHandTimer).toBe(timer);
+    expect(player.socketId).toBe(replacement.id);
+    const before = [room.turnId, room.currentPlayerIndex, room.actionDeadline,
+      player.skillRuntime.loanTotalUsesThisHand, player.skillRuntime.skillEventsThisHand];
+    const beforeChips = [player.chips, opponent.chips];
+    const repayment = { roomId: room.roomId, debtId: original.id, requestId: "final-resume-repay", handId };
+    const paidP = waitFor(replacement, "loan:repayment:result");
+    replacement.emit("loan:repay", repayment);
+    expect(await paidP).toMatchObject({ ok: true, paid: original.amount });
+    const duplicateP = waitFor(replacement, "loan:repayment:result");
+    replacement.emit("loan:repay", repayment);
+    expect(await duplicateP).toMatchObject({ ok: true, duplicate: true });
+    const replayP = waitFor(replacement, "loan:repayment:result");
+    replacement.emit("loan:repay", { ...repayment, requestId: "final-resume-replay" });
+    expect(await replayP).toMatchObject({ ok: false, reason: "debtMissing" });
+    expect(player.skillRuntime.loanDebts).toEqual([]);
+    expect([room.turnId, room.currentPlayerIndex, room.actionDeadline,
+      player.skillRuntime.loanTotalUsesThisHand, player.skillRuntime.skillEventsThisHand]).toEqual(before);
+    if (kind === "energy") {
+      expect(player.skillRuntime.abyssEnergy).toBe(1);
+      expect(engine.getRoomSnapshot(room, opponent).players.find((p) => p.playerId === player.playerId).skills.abyssEnergy).toBe(7);
+    } else {
+      expect([player.chips, opponent.chips]).toEqual([beforeChips[0] - 150, beforeChips[1] + 150]);
+    }
+    expect(room.pot + player.chips + opponent.chips).toBe(2000);
+    const nextP = waitFor(observer, "room_state", (p) => p.handNo === 4 && p.phase === "pre_flop");
+    expect(engine.startHand(room)).toBe(false);
+    const next = await nextP; // The resumed timer, not the client, opens N+3.
+    expect(room.handNo).toBe(4);
+    expect(room.dealerIndex).toBe(1 - dealer);
+    expect(player.skillRuntime.loanDebts).toEqual([]);
+    expect(engine.startHand(room)).toBe(false);
+    expect(room.handNo).toBe(4);
+    engine.clearActionTimer(room);
+    const remote = JSON.stringify(packets);
+    for (const secret of [original.id, repayment.requestId, '"principal":', '"defaultAfterHandNo":', '"finalLoanRepaymentResume":']) {
+      expect(remote).not.toContain(secret);
+    }
+    if (kind === "energy") {
+      expect(remote).not.toContain('"skillId":"LOAN"');
+      const endPackets = packets.filter((p) => p.event === "room_state" && p.payload.handNo === 3
+        && ["end", "waiting"].includes(p.payload.phase));
+      expect(endPackets.length).toBeGreaterThan(0);
+      expect(endPackets.every((p) => p.payload.players.find((x) => x.playerId === player.playerId).skills.abyssEnergy === 7)).toBe(true);
+      expect(next.players.find((p) => p.playerId === player.playerId).skills.abyssEnergy).toBe(1);
+    }
+  }, 15000);
+});
+
 describe("socket integration", () => {
   let httpServer;
   let appServer;
@@ -375,7 +592,9 @@ describe("socket integration", () => {
       expect(appServer.gameEngine.getRoomSnapshot(room, opponent).players.find((p) => p.playerId === player.playerId).skills.abyssEnergy).toBe(7);
       const nextHandNo = room.handNo + 1;
       const nextState = waitFor(observer, "room_state", (p) => p.phase === "pre_flop" && p.handNo === nextHandNo);
-      appServer.gameEngine.startHand(room);
+      // Reconnection grants the existing bounded settlement timer; a caller
+      // cannot skip the restored repayment opportunity with startHand().
+      expect(appServer.gameEngine.startHand(room)).toBe(false);
       const packet = await nextState;
       expect(packet.players.find((p) => p.playerId === player.playerId).skills.abyssEnergy).toBe(2);
       expect(player.skillRuntime.loanDebts).toEqual([]);

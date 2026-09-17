@@ -2,7 +2,7 @@ const crypto = require("crypto");
 const { GAME_MODE } = require("../game/gameModes");
 const { SKILL_MODE } = require("../game/skillModes");
 const { RoomManager } = require("../game/roomManager");
-const { GameEngine } = require("../game/gameEngine");
+const { GameEngine, HAND_SETTLE_MS } = require("../game/gameEngine");
 const { getValidActions } = require("../game/pokerLogic");
 const { createDeck } = require("../utils/deck");
 const { beginHandSkills, prepareNextHandSkills, setPlayerLoadout } = require("../game/skills/skillEngine");
@@ -433,6 +433,177 @@ describe("V1.0 voluntary Loan lifecycle", () => {
     expect(() => assertChipConservation(2000, c.room.pot + c.a.chips + c.b.chips)).not.toThrow();
     if (c.room.nextHandTimer) clearTimeout(c.room.nextHandTimer);
   });
+});
+
+describe("Loan final repayment window after disconnect", () => {
+  let c;
+  beforeEach(() => { jest.useFakeTimers(); });
+  afterEach(() => {
+    if (c) c.roomManager.destroyRoom(c.room.roomId);
+    c = null;
+    jest.useRealTimers();
+  });
+
+  function finalWindow(kind = "energy", fairness = false) {
+    c = setup(["LOAN"], ["ALERT"]);
+    const d = debt(c, kind);
+    if (fairness) adjustLoanInterest(c.a.skillRuntime);
+    for (let i = 0; i < 2; i++) {
+      c.b.status = "folded";
+      c.engine.settleByFold(c.room);
+      jest.advanceTimersByTime(HAND_SETTLE_MS);
+    }
+    c.a.skillRuntime.abyssEnergy = 6;
+    c.b.status = "folded";
+    c.engine.settleByFold(c.room);
+    expect(c.room.handNo).toBe(d.borrowedHandNo + 2);
+    return d;
+  }
+  function disconnect() {
+    c.roomManager.markDisconnected(c.a.socketId, (room, player) => c.engine.resolveDisconnectTimeout(room, player));
+    c.engine.noteFinalLoanDisconnect(c.room, c.a);
+  }
+  function reconnect(socketId = "rejoined") {
+    c.roomManager.joinRoom({ roomId: c.room.roomId, playerId: c.a.playerId,
+      reconnectToken: c.a.reconnectToken, socketId });
+    if (!c.engine.resumeFinalLoanRepaymentWindow(c.room)) c.engine.tryStartGame(c.room);
+  }
+
+  test.each([false, true])("disconnect/reconnect before timer=%s restores one bounded window and repayment is idempotent", (early) => {
+    const d = finalWindow();
+    const handId = c.room.handId, handNo = c.room.handNo, dealer = c.room.dealerIndex;
+    disconnect();
+    jest.advanceTimersByTime(early ? HAND_SETTLE_MS - 1 : HAND_SETTLE_MS);
+    expect(c.room.phase).toBe(early ? "end" : "waiting");
+    expect(d).toMatchObject({ amount: 6, penalty: 0, defaultApplied: false });
+    if (!early) expect(repay(c, d).reason).toBe("matchUnavailable");
+    reconnect();
+    expect(c.room.phase).toBe("end");
+    expect(c.room.handId).toBe(handId);
+    expect(getSelfSkillSummary(c.a, c.room).loan).toMatchObject({ state: "DEBT_OPEN",
+      tranches: [{ amount: 6, graceHandsRemaining: 0, canRepay: true }] });
+    const timer = c.room.nextHandTimer;
+    const before = [c.room.turnId, c.room.currentPlayerIndex, c.room.actionDeadline,
+      c.a.skillRuntime.loanTotalUsesThisHand, c.a.skillRuntime.skillEventsThisHand];
+    c.engine.finalizeHand(c.room, 1);
+    c.engine.tryStartGame(c.room);
+    expect(c.engine.startHand(c.room)).toBe(false);
+    prepareNextHandSkills(c.room, handNo + 1);
+    reconnect("replacement");
+    c.engine.restorePlayerState(c.room, c.a);
+    expect(c.room.nextHandTimer).toBe(timer);
+    expect(d.amount).toBe(6);
+    expect(repay(c, d, "same-repayment")).toMatchObject({ ok: true, paid: 6 });
+    expect(repay(c, d, "same-repayment")).toMatchObject({ ok: true, duplicate: true });
+    expect(repay(c, d, "new-repayment")).toMatchObject({ ok: false, reason: "debtMissing" });
+    expect(c.a.skillRuntime.abyssEnergy).toBe(1);
+    expect([c.room.turnId, c.room.currentPlayerIndex, c.room.actionDeadline,
+      c.a.skillRuntime.loanTotalUsesThisHand, c.a.skillRuntime.skillEventsThisHand]).toEqual(before);
+    jest.advanceTimersByTime(HAND_SETTLE_MS - 1);
+    expect(c.room.handNo).toBe(handNo);
+    jest.advanceTimersByTime(1);
+    expect(c.room.handNo).toBe(handNo + 1);
+    expect(c.room.dealerIndex).toBe(1 - dealer);
+    expect(c.a.skillRuntime.loanDebts).toEqual([]);
+    expect(d.defaultApplied).toBe(false);
+    expect(c.engine.startHand(c.room)).toBe(false);
+    expect(c.room.handNo).toBe(handNo + 1);
+    expect(c.room.pot + c.a.chips + c.b.chips).toBe(2000);
+  });
+
+  test.each([["chip", false, 175], ["energy", false, 7], ["chip", true, 125], ["energy", true, 6]])(
+    "%s fairness=%s defaults to %i only after resumed opportunity", (kind, fairness, expected) => {
+      const d = finalWindow(kind, fairness);
+      const initial = d.amount, dates = [d.borrowedHandNo, d.defaultAfterHandNo];
+      disconnect(); jest.advanceTimersByTime(HAND_SETTLE_MS);
+      const dealer = c.room.dealerIndex;
+      c.engine.finalizeHand(c.room, 1);
+      expect(c.room.nextHandTimer).toBeNull();
+      expect(d.amount).toBe(initial);
+      reconnect();
+      const start = jest.spyOn(c.engine, "startHand");
+      jest.advanceTimersByTime(HAND_SETTLE_MS);
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(c.room.handNo).toBe(4);
+      expect(c.room.dealerIndex).toBe(dealer);
+      expect(d).toMatchObject({ amount: expected, penalty: kind === "chip" ? 25 : 1, defaultApplied: true });
+      expect(getLoanCreditState(c.a.skillRuntime)).toBe("DEFAULTED");
+      prepareNextHandSkills(c.room, 4); prepareNextHandSkills(c.room, 4);
+      c.engine.broadcastRoomState(c.room); c.engine.restorePlayerState(c.room, c.a);
+      disconnect(); reconnect();
+      expect(c.engine.startHand(c.room)).toBe(false);
+      expect([d.borrowedHandNo, d.defaultAfterHandNo]).toEqual(dates);
+      expect(d.amount).toBe(expected);
+      expect(c.room.handNo).toBe(4);
+    }
+  );
+
+  test("repeated disconnects cannot renew the granted window or rotate the dealer twice", () => {
+    const d = finalWindow();
+    const dealer = c.room.dealerIndex;
+    disconnect(); jest.advanceTimersByTime(HAND_SETTLE_MS); reconnect();
+    const timer = c.room.nextHandTimer;
+    jest.advanceTimersByTime(HAND_SETTLE_MS - 1);
+    disconnect();
+    expect(c.room.nextHandTimer).toBe(timer);
+    jest.advanceTimersByTime(1);
+    expect(c.room.phase).toBe("waiting");
+    expect(d.defaultApplied).toBe(false);
+    reconnect();
+    expect(c.room.phase).toBe("pre_flop");
+    expect(c.room.handNo).toBe(4);
+    expect(c.room.dealerIndex).toBe(1 - dealer);
+    expect(d.amount).toBe(7);
+    expect(c.room.nextHandTimer).toBeNull();
+  });
+
+  test("a borrower already offline when N+2 settles gets the same resume opportunity", () => {
+    c = setup(["LOAN"], ["ALERT"]);
+    const d = debt(c);
+    for (let i = 0; i < 2; i++) {
+      c.b.status = "folded"; c.engine.settleByFold(c.room);
+      jest.advanceTimersByTime(HAND_SETTLE_MS);
+    }
+    disconnect(); // Before the final settlement, so no final-window marker yet.
+    expect(c.room.finalLoanRepaymentResume).toBeNull();
+    c.b.status = "folded"; c.engine.settleByFold(c.room);
+    expect(c.room.finalLoanRepaymentResume).toMatchObject({ handNo: 3, resumed: false });
+    jest.advanceTimersByTime(HAND_SETTLE_MS);
+    expect(c.room.phase).toBe("waiting");
+    reconnect();
+    expect(c.room.phase).toBe("end");
+    expect(d).toMatchObject({ amount: 150, defaultApplied: false });
+    expect(repay(c, d).ok).toBe(true);
+  });
+
+  test("a disconnect after the online boundary cannot reopen the previous grace window", () => {
+    const d = finalWindow();
+    jest.advanceTimersByTime(HAND_SETTLE_MS); // Still online: valid N+3 boundary.
+    expect(c.room.handNo).toBe(4);
+    expect(d.amount).toBe(7);
+    disconnect(); reconnect();
+    expect(c.room.finalLoanRepaymentResume).toBeNull();
+    expect([c.room.phase, c.room.handNo, d.amount]).toEqual(["pre_flop", 4, 7]);
+  });
+
+  test.each(["new", "non-final", "unfinished", "game_over", "rematch", "malformed"])(
+    "%s waiting/state cannot grant repayment or a final-window resume", (state) => {
+      c = setup(["LOAN"], ["ALERT"]);
+      const d = debt(c);
+      c.room.phase = "waiting";
+      if (state === "new") c.room.handNo = 0;
+      if (state === "unfinished") c.room.handNo = d.defaultAfterHandNo;
+      if (state === "game_over") c.room.phase = "game_over";
+      if (state === "rematch") c.engine.resetRoomForRematch(c.room);
+      if (state === "malformed") { c.room.handNo = d.defaultAfterHandNo; c.room.handId = null; }
+      disconnect();
+      c.roomManager.joinRoom({ roomId: c.room.roomId, playerId: c.a.playerId,
+        reconnectToken: c.a.reconnectToken, socketId: "invalid-window-rejoin" });
+      expect(c.engine.resumeFinalLoanRepaymentWindow(c.room)).toBe(false);
+      expect(repay(c, d).ok).toBe(false);
+      expect(c.room.finalLoanRepaymentResume).toBeNull();
+    }
+  );
 });
 
 describe("V1.0 natural energy recovery", () => {

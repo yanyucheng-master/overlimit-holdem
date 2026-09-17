@@ -60,6 +60,7 @@ function translateMeta(items) {
     next = next
       .replace(/结算公开/g, "settlement public")
       .replace(/条件满足时公开/g, "public when conditions met")
+      .replace(/默认ON · 每手可关闭一次/g, "Default ON · one disarm per hand")
       .replace(/每手最多成功提示 1 次/g, "at most one successful hint per hand")
       .replace(/每手最多成功 3 次/g, "at most 3 successes per hand")
       .replace(/牌面改良/g, "Board rewrite")

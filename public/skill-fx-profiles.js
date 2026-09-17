@@ -158,6 +158,7 @@
     }),
     TOP_SECRET: profile({
       id: "TOP_SECRET", name: "绝密", english: "TOP SECRET",
+      selfOnly: true,
       tier: "FX3", durationMs: 1380, verb: "vault-seal",
       family: "top-secret", anchor: "caster", impact: "card", visibility: VISIBILITY.SECRET,
       accent: "#f5c85b", secondary: "#5ee7ff", glyph: "▣", sound: "vault",
@@ -296,6 +297,7 @@
     const fxProfile = selectedProfile || getSkillFxProfile(event.skillId);
     if (!fxProfile) return false;
     const audience = String(event.audience || "public").toLowerCase();
+    if (fxProfile.selfOnly && audience !== "self") return false;
     const disclosure = normalizeDisclosure(event.disclosure);
     if (audience === "self") return true;
     if (disclosure === "public" || disclosure === "result") return true;

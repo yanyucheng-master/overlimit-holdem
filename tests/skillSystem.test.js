@@ -552,7 +552,7 @@ describe("情报、绝密、千术、零化、感知、灵视", () => {
       status: "FAILED",
     });
     expect(blocked.a.skillRuntime.abyssEnergy).toBe(4);
-    expect(blocked.b.skillRuntime.topSecretActive).toBe(true);
+    expect(blocked.b.skillRuntime.topSecretState).toBe("ACTIVE_LOCKED");
     expect(blocked.b.skillRuntime.abyssEnergy).toBe(1);
 
     const future = setupRoom({
@@ -565,7 +565,7 @@ describe("情报、绝密、千术、零化、感知、灵视", () => {
       status: "SUCCESS",
     });
     expect(future.a.skillRuntime.privateResults.at(-1).message).toContain(playerCardLabel(river.card));
-    expect(future.b.skillRuntime.topSecretActive).toBe(false);
+    expect(future.b.skillRuntime.topSecretState).toBe("ARMED");
     expect(future.b.skillRuntime.abyssEnergy).toBe(4);
   });
 
@@ -668,7 +668,7 @@ describe("情报、绝密、千术、零化、感知、灵视", () => {
       loadoutB: ["TOP_SECRET", "DEEP_BREATH"],
       random: () => 0,
     });
-    expect(b.skillRuntime.topSecretActive).toBe(true);
+    expect(b.skillRuntime.topSecretState).toBe("ACTIVE_LOCKED");
     expect(b.skillRuntime.abyssEnergy).toBe(1);
     expect(a.skillRuntime.perceptionTriggerCount).toBe(0);
     goToStreet(engine, room, "flop");

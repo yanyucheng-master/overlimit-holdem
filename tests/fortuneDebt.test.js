@@ -170,7 +170,7 @@ describe("强运负债体验与动态筹码", () => {
       requestId: "intel-debt",
     });
     expect(leaked.ok).toBe(true);
-    expect(debt.a.skillRuntime.topSecretActive).toBe(false);
+    expect(debt.a.skillRuntime.topSecretState).toBe("ARMED");
 
     const ok = setupLiveRoom(["FORTUNE", "TOP_SECRET"], ["INTEL_ONE", "RECYCLE"], () => 0);
     ok.engine.startHand(ok.room);
@@ -183,7 +183,7 @@ describe("强运负债体验与动态筹码", () => {
       target: { zone: "opponent" },
       requestId: "intel-ok",
     });
-    expect(ok.a.skillRuntime.topSecretActive).toBe(true);
+    expect(ok.a.skillRuntime.topSecretState).toBe("ACTIVE_LOCKED");
   });
 
   test("强运+防守：负债时不可发动防守", () => {

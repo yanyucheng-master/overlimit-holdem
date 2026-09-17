@@ -3,6 +3,15 @@
   const i18n = root.OverlimitI18n || (typeof require === "function" ? require("./i18n") : null);
   if (!i18n) return;
   i18n.register("zh-CN", {
+    secretGuard: {
+      label: "{name}：{value}",
+      armed: "秘密戒备开启。点击关闭，本手不能重新开启；能量足够时自动支付3能量保护底牌。",
+      off: "本手戒备已锁定关闭，下一手自动开启。",
+      active: "本手保护已生效并锁定开启，后续保护不再扣费。",
+      unavailable: "当前无法关闭戒备，请以同步后的状态为准。",
+      triggered: "绝密已生效。",
+      noPrivateInfo: "本次未获得有效的私人信息。"
+    },
     meta: {
       title: "超限德州",
       description: "超限德州：双人实时联机德州扑克，可选高爆发牌与超限技能。",
@@ -1048,9 +1057,9 @@
       counterArmed: "反制已秘密布置。",
       retreatArmed: "撤退已秘密生效。",
       probeArmed: "试探已秘密生效。",
-      intelBlocked: "情报目标受到绝密保护，本次读取失败。",
-      cheatBlocked: "千术目标受到绝密保护，交换失败。",
-      nullifyBlocked: "零化底牌受到绝密保护，技能失败。",
+      intelBlocked: "未能获取目标底牌信息。",
+      cheatBlocked: "目标私人底牌无法被操作。",
+      nullifyBlocked: "未能锁定该私人底牌。",
       nullifyHole: "零化已秘密锁定对手一张底牌。",
       nullifyBoard: "零化已秘密锁定第 {n} 张公共牌。",
       destinyNoRiver: "天命失败：未来河牌位置已不存在。",

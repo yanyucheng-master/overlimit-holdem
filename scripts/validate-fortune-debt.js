@@ -260,13 +260,13 @@ function attachTelemetry(engine) {
     }
     return origDealt(room, node);
   };
-  const origSecret = engine.tryActivateTopSecret.bind(engine);
-  engine.tryActivateTopSecret = function tryActivateTopSecretWithDebt(room, defender, opts) {
+  const origSecret = engine.blocksPrivateHoleAccess.bind(engine);
+  engine.blocksPrivateHoleAccess = function privateHoleAccessWithDebt(room, attacker, defender, opts) {
     const hand = engine.__handStats;
     const before = Number(defender?.skillRuntime?.abyssEnergy);
-    const already = Boolean(defender?.skillRuntime?.topSecretActive);
+    const already = defender?.skillRuntime?.topSecretState === "ACTIVE_LOCKED";
     const equipped = hasEquipped(defender, "TOP_SECRET");
-    const result = origSecret(room, defender, opts);
+    const result = origSecret(room, attacker, defender, opts);
     if (hand && equipped && defender?.playerId === "A") {
       hand.topSecret.holeAccess += 1;
       if (!already && before >= 3) {

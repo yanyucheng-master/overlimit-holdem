@@ -96,12 +96,12 @@ describe("首发 24 技能冻结核对", () => {
   });
 });
 
-describe("绝密 FX 请求链身份", () => {
+describe("绝密私人保护与攻击失败反馈隔离", () => {
   test.each([
     ["INTEL_ONE", { zone: "opponent" }],
     ["CHEAT", { ownIndex: 0, zone: "opponent", index: 0 }],
     ["NULLIFICATION", { mode: "hole" }],
-  ])("FX-ID-04 %s 与绝密共享 requestId 时仍分别进入 FX 队列", (skillId, target) => {
+  ])("%s 仅有自身失败反馈，绝密不产生公开或中央 FX", (skillId, target) => {
     const { io, engine, room, a, b } = setupRoom({
       loadoutA: [skillId, "RECYCLE"],
       loadoutB: ["TOP_SECRET", "DEEP_BREATH"],
@@ -120,8 +120,10 @@ describe("绝密 FX 请求链身份", () => {
       && entry.payload?.requestId === requestId
       && ["TOP_SECRET", skillId].includes(entry.payload?.skillId)
     ));
-    expect(resolved.map((entry) => entry.payload.skillId)).toEqual(["TOP_SECRET", skillId]);
-    expect(resolved.find((entry) => entry.payload.skillId === "TOP_SECRET")?.target).toBe(room.roomId);
+    expect(resolved.map((entry) => entry.payload.skillId)).toEqual([skillId]);
+    expect(io.emits.some((entry) => entry.event === "skill:resolved" && entry.payload.skillId === "TOP_SECRET")).toBe(false);
+    expect(io.emits.filter((entry) => entry.event === "skill:private-result" && entry.payload.skillId === "TOP_SECRET"))
+      .toEqual([expect.objectContaining({ target: b.socketId, payload: expect.objectContaining({ message: "绝密已生效。" }) })]);
     expect(resolved.find((entry) => entry.payload.skillId === skillId)?.target).toBe(a.socketId);
     expect(io.emits.some((entry) => (
       entry.target === b.socketId
@@ -139,9 +141,8 @@ describe("绝密 FX 请求链身份", () => {
         disclosure: self ? "self" : "public",
       });
     });
-    expect(accepted).toEqual([true, true]);
+    expect(accepted).toEqual([true]);
     expect(fx.queue.map((job) => job.key)).toEqual([
-      `request:${requestId}:TOP_SECRET`,
       `request:${requestId}:${skillId}`,
     ]);
   });

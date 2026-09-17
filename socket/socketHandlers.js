@@ -1,6 +1,7 @@
 const { GAME_MODE, isGameMode, normalizeGameMode } = require("../game/gameModes");
 const { SKILL_MODE, isSkillMode, normalizeSkillMode } = require("../game/skillModes");
 const { listSkillDefinitions } = require("../game/skills/definitions");
+const { getSelfSkillSummary } = require("../game/skills/skillState");
 
 const INPUT_LIMITS = Object.freeze({
   roomId: 8,
@@ -460,6 +461,10 @@ function registerSocketHandlers({ io, roomManager, gameEngine, logger, matchmaki
         players: roomManager.getPublicPlayers(joined.room),
       });
       gameEngine.broadcastRoomState(joined.room);
+      const resumedFinalWindow = gameEngine.resumeFinalLoanRepaymentWindow(joined.room);
+      // END and private debt state have been restored; never synchronously
+      // enter a new hand after granting the one-shot repayment opportunity.
+      if (resumedFinalWindow) return;
       if (joined.room.phase !== "waiting" && joined.room.phase !== "drafting") {
         if (typeof gameEngine.restorePlayerState === "function") {
           gameEngine.restorePlayerState(joined.room, joined.player);
@@ -530,6 +535,22 @@ function registerSocketHandlers({ io, roomManager, gameEngine, logger, matchmaki
         requestId: payload.requestId, debtId: payload.debtId, handId: payload.handId,
       });
       socket.emit("loan:repayment:result", { ...result, roomId: found.room.roomId, requestId: payload.requestId });
+    });
+
+    socket.on("top-secret:disarm", (rawPayload = {}) => {
+      if (!allowRate("response", "top-secret:result")) return;
+      const payload = safePayload(rawPayload);
+      const found = roomManager.getRoomBySocket(socket.id);
+      if (!found || payload.roomId !== found.room.roomId) {
+        socket.emit("top-secret:result", { ok: false, reason: "unavailable" });
+        return;
+      }
+      const player = found.room.players[found.playerIndex];
+      const result = gameEngine.handleTopSecretDisarm(found.room, player, { handId: payload.handId });
+      socket.emit("top-secret:result", {
+        ...result, roomId: found.room.roomId, handId: found.room.handId,
+        self: getSelfSkillSummary(player, found.room),
+      });
     });
 
     socket.on("skill:use", (rawPayload = {}) => {
@@ -603,6 +624,7 @@ function registerSocketHandlers({ io, roomManager, gameEngine, logger, matchmaki
         gameEngine.resolveDisconnectTimeout(room, loser);
       });
       if (!found) return;
+      gameEngine.noteFinalLoanDisconnect(found.room, found.player);
       io.to(found.room.roomId).emit("player_disconnected", {
         roomId: found.room.roomId,
         playerId: found.player.playerId,

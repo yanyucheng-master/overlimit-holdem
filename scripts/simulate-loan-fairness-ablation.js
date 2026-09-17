@@ -187,7 +187,7 @@ function opponentPersistents(room, opponent) {
     || runtime.probeActive
     || runtime.disguiseActive
     || runtime.deadEndActive
-    || runtime.topSecretActive
+    || runtime.topSecretState === "ACTIVE_LOCKED"
     || runtime.desperationActive
     || (room.skillState?.nullifications || []).length,
   );
