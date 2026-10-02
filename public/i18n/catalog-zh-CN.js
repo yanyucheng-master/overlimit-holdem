@@ -614,6 +614,7 @@
       loanDebt: "贷款债务尚未清偿",
       loanDefault: "贷款信用已违约",
       chipLoanCap: "本手筹码贷款已用完",
+      noLoanableChips: "对手当前没有可借出的筹码",
       energyLoanCap: "本手能量贷款已用完",
       energyLoanOpen: "已有未偿还的能量贷款",
       duplicateSkill: "不能重复装备同名技能",

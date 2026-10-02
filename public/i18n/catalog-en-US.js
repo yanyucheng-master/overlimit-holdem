@@ -614,6 +614,7 @@
       loanDebt: "Loan debt is still unpaid",
       loanDefault: "Loan credit is in default",
       chipLoanCap: "Chip Loan uses this hand are exhausted",
+      noLoanableChips: "Your opponent has no chips left on the table to lend",
       energyLoanCap: "Energy Loan uses this hand are exhausted",
       energyLoanOpen: "An Energy Loan is still unpaid",
       duplicateSkill: "The same skill cannot be equipped twice",

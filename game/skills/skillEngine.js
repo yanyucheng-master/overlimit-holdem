@@ -363,6 +363,13 @@ function resolveHandStartChips(player) {
   return null;
 }
 
+// 贷款斩杀资格只看对手本手开始时（盲注前）的筹码快照，不看桌面剩余筹码。
+// 本手开始时筹码 > 200 的玩家即使已全下或只剩少量筹码，也不能被贷款斩杀。
+function isLoanKillEligible(player) {
+  const start = resolveHandStartChips(player);
+  return Number.isSafeInteger(start) && start <= SKILL_CONFIG.LOAN_KILL_MAX_HAND_START_CHIPS;
+}
+
 function prepareNextHandSkills(room, nextHandNo) {
   if (!isSkillEnabled(room.skillMode) || !Number.isSafeInteger(nextHandNo) || isFinalLoanResumePending(room)) return;
   room.players.forEach((player) => {
@@ -854,6 +861,13 @@ class SkillEngine {
       if (mode === "chip" && chipUses >= quota.maxChip) return { ok: false, error: "本手筹码贷款已用完" };
       if (mode === "energy" && energyUses >= quota.maxEnergy) return { ok: false, error: "本手能量贷款已用完" };
       if (mode === "chip" && !opponentOf(room, player)) return { ok: false, error: "没有可贷款的对手" };
+      if (mode === "chip") {
+        // 对手桌面已无筹码且不具备斩杀资格：拿不到任何筹码却会记 150 债务，扣费前直接拒绝。
+        const lender = opponentOf(room, player);
+        if (!(Number(lender.chips) > 0) && !isLoanKillEligible(lender)) {
+          return { ok: false, error: "对手当前没有可借出的筹码" };
+        }
+      }
     }
     if (skill.id === "RESTART") {
       if (!player.cards || player.cards.length !== 2) return { ok: false, error: "底牌尚未就绪" };
@@ -1399,7 +1413,13 @@ class SkillEngine {
     addDirectChipGain(opponent, -transferred);
     addLoanDebt(runtime, { kind: "chip", principal: transferred, lenderId: opponent.playerId, handNo: room.handNo });
     confirmPublicSkill(player, "LOAN");
-    const kill = opponent.chips <= 0;
+    const drained = opponent.chips <= 0;
+    const kill = drained && isLoanKillEligible(opponent);
+    if (drained && !kill) {
+      // 对手本手开始时筹码 > 200：取光桌面剩余筹码只让其以已投入部分全下，不斩杀、不提前结算底池。
+      opponent.isAllIn = true;
+      if (opponent.skillRuntime) opponent.skillRuntime.loanDrainedAllIn = true;
+    }
     return {
       secret: false,
       publicSummary: kill
@@ -1455,7 +1475,8 @@ class SkillEngine {
     const matched = Math.min(contributionFor(player), contributionFor(opponent));
     const ownerUnmatched = Math.max(0, contributionFor(player) - matched);
     const unmatched = Math.max(0, contributionFor(opponent) - matched);
-    const execution = Number(opponent?.chips || 0) <= 0;
+    // 处决只认标准 ALL IN 或 Call-to-zero；被贷款取光剩余筹码的全下不算。
+    const execution = Number(opponent?.chips || 0) <= 0 && !opponent?.skillRuntime?.loanDrainedAllIn;
     let confiscated = 0;
     if (unmatched > 0) {
       confiscated = releaseFromPot(room, player, unmatched, CHIP_REASON.ENDGAME_CONFISCATION);

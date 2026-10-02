@@ -39,6 +39,8 @@ const SKILL_CONFIG = Object.freeze({
   LOAN_ENERGY_GAIN: 5,
   LOAN_ENERGY_REPAY: 6,
   LOAN_ENERGY_MAX_USES_PER_HAND: 1,
+  // 贷款斩杀资格：对手本手开始时（盲注前）筹码 ≤ 200。与绝境阈值一致。
+  LOAN_KILL_MAX_HAND_START_CHIPS: 200,
   PROBE_FOLD_BONUS: 50,
   ENDGAME_ENERGY_COST: 8,
   ALERT_CHANCES: Object.freeze([0.10, 0.25, 0.40, 0.55, 0.70, 0.85, 1]),

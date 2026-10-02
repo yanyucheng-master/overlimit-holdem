@@ -1321,6 +1321,8 @@ class GameEngine {
     const holders = room.players.filter((player) => {
       const opponent = room.players.find((candidate) => candidate.playerId !== player.playerId);
       if (!opponent || Number(opponent.chips) > 0) return false;
+      // 被贷款取光剩余筹码的全下不是标准 ALL IN / Call-to-zero，不开终局响应窗口。
+      if (opponent.skillRuntime?.loanDrainedAllIn) return false;
       if (aggressorId && player.playerId !== aggressorId) return false;
       if (!player.skillRuntime?.equippedSkillIds?.includes("ENDGAME")) return false;
       if ((player.skillRuntime.skillUsesThisHand?.ENDGAME || 0) > 0) return false;

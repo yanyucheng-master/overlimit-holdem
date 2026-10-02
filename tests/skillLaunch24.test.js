@@ -4,6 +4,7 @@ const { SKILL_CONFIG, PERCEPTION_CONFIG, FORTUNE_RULE, SKILL_RULE_FREEZE } = req
 const { RoomManager } = require("../game/roomManager");
 const { GameEngine } = require("../game/gameEngine");
 const { createDeck } = require("../utils/deck");
+const { getValidActions } = require("../game/pokerLogic");
 const { resetPlayerSkillsForHand } = require("../game/skills/skillState");
 const {
   FORTUNE_CONFIG,
@@ -149,9 +150,11 @@ describe("绝密私人保护与攻击失败反馈隔离", () => {
 });
 
 describe("贷款", () => {
-  test("筹码贷款 100/150，对手≤100 时可斩杀", () => {
+  test("筹码贷款 100/150，对手本手开始时 ≤200 且剩余 ≤100 时可斩杀", () => {
     const { engine, room, a, b } = setupRoom({ loadoutA: ["LOAN", "RECYCLE"], loadoutB: ["DEFENSE", "RECYCLE"] });
     b.chips = 80;
+    // 斩杀资格看本手开始时（盲注前）的筹码快照：开局 130，付完大盲剩 80。
+    b.skillRuntime.handStartChips = 130;
     expect(use(engine, room, a, "LOAN", { mode: "chip" }, "loan-kill")).toMatchObject({ status: "SUCCESS" });
     expect(b.chips).toBe(0);
     expect(b.status).toBe("out");
@@ -194,6 +197,145 @@ describe("贷款", () => {
     expect(a.skillRuntime.loanDebts[0].amount).toBe(6);
     expect(require("../game/skills/skillState").gainEnergy(a, 2)).toBe(2);
     expect(a.skillRuntime.loanDebts[0].amount).toBe(6);
+  });
+});
+
+describe("贷款斩杀资格只看对手本手开始时筹码", () => {
+  function startWithStacks(stackA, stackB, { loadoutA = ["LOAN", "RECYCLE"], loadoutB = ["DEFENSE", "RECYCLE"] } = {}) {
+    const ctx = setupRoom({ loadoutA, loadoutB, start: false });
+    ctx.a.chips = stackA;
+    ctx.b.chips = stackB;
+    expect(ctx.engine.startHand(ctx.room)).toBe(true);
+    ctx.engine.clearActionTimer(ctx.room);
+    ctx.aIndex = ctx.room.players.indexOf(ctx.a);
+    ctx.bIndex = ctx.room.players.indexOf(ctx.b);
+    return ctx;
+  }
+  function stop(ctx) {
+    ctx.engine.clearActionTimer(ctx.room);
+    ctx.engine.cancelPresentationBarrier(ctx.room);
+    if (ctx.room.nextHandTimer) {
+      clearTimeout(ctx.room.nextHandTimer);
+      ctx.room.nextHandTimer = null;
+    }
+  }
+  function toPlayer(ctx, index) {
+    if (ctx.room.currentPlayerIndex !== index) {
+      expect(ctx.engine.handlePlayerAction(ctx.room, ctx.room.currentPlayerIndex, "call", 0)).toMatchObject({ ok: true });
+      ctx.engine.clearActionTimer(ctx.room);
+    }
+    expect(ctx.room.currentPlayerIndex).toBe(index);
+  }
+  function raiseLeaving(ctx, behind) {
+    const { engine, room, b } = ctx;
+    expect(engine.handlePlayerAction(room, ctx.bIndex, "raise", b.chips + b.streetBet - behind)).toMatchObject({ ok: true });
+    engine.clearActionTimer(room);
+    expect(b.chips).toBe(behind);
+  }
+
+  test("开局 1000 的对手全下后，筹码贷款扣费前拒绝，不能斩杀", () => {
+    const ctx = startWithStacks(1000, 1000);
+    const { engine, room, a, b } = ctx;
+    toPlayer(ctx, ctx.bIndex);
+    expect(engine.handlePlayerAction(room, ctx.bIndex, "allin", 0)).toMatchObject({ ok: true });
+    stop(ctx);
+    expect(b.chips).toBe(0);
+    expect(b.isAllIn).toBe(true);
+    const energyBefore = a.skillRuntime.abyssEnergy;
+    const potBefore = room.pot;
+    expect(use(engine, room, a, "LOAN", { mode: "chip" }, "loan-vs-allin"))
+      .toMatchObject({ ok: false, error: "对手当前没有可借出的筹码" });
+    expect(a.skillRuntime.abyssEnergy).toBe(energyBefore);
+    expect(a.skillRuntime.loanDebts).toHaveLength(0);
+    expect(b.status).toBe("active");
+    expect(room.pot).toBe(potBefore);
+    expect(room.phase).toBe("pre_flop");
+    expect(use(engine, room, a, "LOAN", { mode: "energy" }, "loan-energy-vs-allin")).toMatchObject({ status: "SUCCESS" });
+    stop(ctx);
+  });
+
+  test("开局 1000 的对手只剩 80 时，贷款取光剩余只让其全下，本手照常摊牌", () => {
+    const ctx = startWithStacks(1000, 1000);
+    const { engine, room, a, b } = ctx;
+    toPlayer(ctx, ctx.bIndex);
+    raiseLeaving(ctx, 80);
+    const aBefore = a.chips;
+    expect(use(engine, room, a, "LOAN", { mode: "chip" }, "loan-drain")).toMatchObject({ ok: true, status: "SUCCESS" });
+    expect(a.chips).toBe(aBefore + 80);
+    expect(b.chips).toBe(0);
+    expect(b.isAllIn).toBe(true);
+    expect(b.status).toBe("active");
+    expect(b.skillRuntime.loanDrainedAllIn).toBe(true);
+    expect(room.phase).toBe("pre_flop");
+    expect(a.skillRuntime.loanDebts).toEqual([expect.objectContaining({ kind: "chip", principal: 80, amount: 150 })]);
+    const turn = getValidActions(room, ctx.aIndex);
+    expect(turn.validActions).toEqual(expect.arrayContaining(["fold", "call"]));
+    expect(turn.validActions).not.toContain("raise");
+    expect(engine.handlePlayerAction(room, ctx.aIndex, "call", 0)).toMatchObject({ ok: true });
+    stop(ctx);
+    expect(["showdown", "end", "waiting", "game_over"]).toContain(room.phase);
+    expect(room.lastHandResult).toMatchObject({ reason: "showdown" });
+    expect(a.chips + b.chips + room.pot).toBe(2000);
+  });
+
+  test("开局 150 的对手全下后，一次筹码贷款即斩杀并赢得整个底池", () => {
+    const ctx = startWithStacks(1850, 150);
+    const { engine, room, a, b } = ctx;
+    expect(b.skillRuntime.handStartChips).toBe(150);
+    toPlayer(ctx, ctx.bIndex);
+    expect(engine.handlePlayerAction(room, ctx.bIndex, "allin", 0)).toMatchObject({ ok: true });
+    stop(ctx);
+    expect(b.chips).toBe(0);
+    expect(use(engine, room, a, "LOAN", { mode: "chip" }, "loan-kill-short")).toMatchObject({ ok: true, status: "SUCCESS" });
+    stop(ctx);
+    expect(b.status).toBe("out");
+    expect(a.chips).toBe(2000);
+  });
+
+  test.each([
+    [200, true],
+    [201, false],
+  ])("开局 %i 的对手被两次筹码贷款取光剩余，斩杀=%s", (startB, killed) => {
+    const ctx = startWithStacks(2000 - startB, startB);
+    const { engine, room, a, b } = ctx;
+    toPlayer(ctx, ctx.aIndex);
+    const behind = b.chips;
+    expect(behind).toBeGreaterThan(100);
+    expect(use(engine, room, a, "LOAN", { mode: "chip" }, `loan-1-${startB}`)).toMatchObject({ status: "SUCCESS" });
+    expect(use(engine, room, a, "LOAN", { mode: "chip" }, `loan-2-${startB}`)).toMatchObject({ status: "SUCCESS" });
+    stop(ctx);
+    expect(b.chips).toBe(0);
+    if (killed) {
+      expect(b.status).toBe("out");
+      expect(a.chips).toBe(2000);
+    } else {
+      expect(b.status).toBe("active");
+      expect(b.isAllIn).toBe(true);
+      expect(room.phase).toBe("pre_flop");
+      expect(a.skillRuntime.loanDebts.map((debt) => debt.principal)).toEqual([100, behind - 100]);
+    }
+  });
+
+  test("被贷款取光的全下不开终局响应窗口，也不计终局处决", () => {
+    const windowCtx = startWithStacks(1000, 1000, { loadoutA: ["LOAN", "ENDGAME"] });
+    windowCtx.a.skillRuntime.abyssEnergy = 10;
+    toPlayer(windowCtx, windowCtx.bIndex);
+    raiseLeaving(windowCtx, 80);
+    expect(use(windowCtx.engine, windowCtx.room, windowCtx.a, "LOAN", { mode: "chip" }, "loan-drain-window")).toMatchObject({ status: "SUCCESS" });
+    expect(windowCtx.a.skillRuntime.abyssEnergy).toBe(8);
+    expect(windowCtx.engine.handlePlayerAction(windowCtx.room, windowCtx.aIndex, "call", 0)).toMatchObject({ ok: true });
+    stop(windowCtx);
+    expect(windowCtx.room.skillState.endgameWindow).toBeNull();
+    expect(["showdown", "end", "waiting", "game_over"]).toContain(windowCtx.room.phase);
+
+    const execCtx = startWithStacks(1000, 1000, { loadoutA: ["LOAN", "ENDGAME"] });
+    execCtx.a.skillRuntime.abyssEnergy = 10;
+    toPlayer(execCtx, execCtx.bIndex);
+    raiseLeaving(execCtx, 80);
+    expect(use(execCtx.engine, execCtx.room, execCtx.a, "LOAN", { mode: "chip" }, "loan-drain-exec")).toMatchObject({ status: "SUCCESS" });
+    expect(use(execCtx.engine, execCtx.room, execCtx.a, "ENDGAME", {}, "endgame-after-drain")).toMatchObject({ status: "SUCCESS" });
+    stop(execCtx);
+    expect(execCtx.room.skillState.endgameActive).toMatchObject({ execution: false, confiscated: 870 });
   });
 });
 

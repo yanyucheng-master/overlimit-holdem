@@ -108,6 +108,7 @@
     "贷款债务尚未清偿": "server.loanDebt",
     "贷款信用已违约": "server.loanDefault",
     "本手筹码贷款已用完": "server.chipLoanCap",
+    "对手当前没有可借出的筹码": "server.noLoanableChips",
     "本手能量贷款已用完": "server.energyLoanCap",
     "本手贷款次数已用完": "loan.handCap",
     "已有未偿还的能量贷款": "server.energyLoanOpen",

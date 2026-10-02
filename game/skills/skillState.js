@@ -47,6 +47,8 @@ function createEmptySkillRuntime() {
     deadEndActive: false,
     allInAction: false,
     stackCommitted: false,
+    // 本手被筹码贷款取光桌面剩余筹码而进入的全下；不是标准 ALL IN，不计终局处决资格。
+    loanDrainedAllIn: false,
     perceptionTriggerCount: 0,
     perceptionCheckedNodes: [],
     perceptionHistory: [],

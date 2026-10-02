@@ -425,6 +425,8 @@ describe("V1.0 voluntary Loan lifecycle", () => {
   test("two Chip loans retain 200-chip Loan Kill and terminate all debts", () => {
     const c = setup();
     transferChips(c.room, c.b, c.a, c.b.chips - 200, CHIP_REASON.LOAN_TRANSFER);
+    // Kill eligibility reads the hand-start snapshot (≤ 200), not the chips left on the table.
+    c.b.skillRuntime.handStartChips = 200;
     expect(use(c, "LOAN", "chip").status).toBe("SUCCESS");
     expect(c.b.chips).toBe(100);
     expect(use(c, "LOAN", "chip").status).toBe("SUCCESS");
