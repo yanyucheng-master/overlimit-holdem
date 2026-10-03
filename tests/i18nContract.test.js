@@ -32,6 +32,19 @@ const PLACEHOLDER = /TODO|TRANSLATE|TBD|English text here/i;
 const HAN = /[\u4e00-\u9fff]/;
 const ALLOWED_EN_HAN_KEYS = new Set(["a11y.languageZh"]);
 
+// Node 21+ exposes a global navigator whose language follows the host locale,
+// so pin it whenever the result depends on the navigator fallback.
+function withNavigator(value, run) {
+  const original = Object.getOwnPropertyDescriptor(globalThis, "navigator");
+  Object.defineProperty(globalThis, "navigator", { configurable: true, writable: true, value });
+  try {
+    run();
+  } finally {
+    if (original) Object.defineProperty(globalThis, "navigator", original);
+    else delete globalThis.navigator;
+  }
+}
+
 describe("i18n contract", () => {
   test("English rulebook generation retains the current energy and Loan rules", () => {
     const fs = require("fs");
@@ -183,7 +196,22 @@ describe("i18n contract", () => {
     expect(i18n.detectBrowserLanguage(["en-US"])).toBe("en-US");
     expect(i18n.detectBrowserLanguage(["ja-JP"])).toBe("en-US");
     expect(i18n.detectBrowserLanguage(["zh-TW"])).toBe("en-US");
-    expect(i18n.detectBrowserLanguage([])).toBe("zh-CN");
+    withNavigator(undefined, () => {
+      expect(i18n.detectBrowserLanguage([])).toBe("zh-CN");
+    });
+  });
+
+  test("空列表回退读取 navigator 首选语言", () => {
+    withNavigator({ languages: ["zh-CN"], language: "zh-CN" }, () => {
+      expect(i18n.detectBrowserLanguage([])).toBe("zh-CN");
+    });
+    withNavigator({ languages: ["en-GB"], language: "en-GB" }, () => {
+      expect(i18n.detectBrowserLanguage([])).toBe("en-US");
+      expect(i18n.detectBrowserLanguage()).toBe("en-US");
+    });
+    withNavigator({ language: "en-GB" }, () => {
+      expect(i18n.detectBrowserLanguage([])).toBe("en-US");
+    });
   });
 
   test("缺失 key 可诊断", () => {
