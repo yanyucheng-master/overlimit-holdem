@@ -206,7 +206,7 @@ function loadSettings() {
     proPlayerMode: false,
     proFontStyle: "broadcast",
     sfx: 55,
-    music: 0,
+    music: 35,
     skillExpertText: false,
     language: "zh-CN",
     languageChosen: false,
@@ -443,6 +443,8 @@ const el = {
   settingSfxValue: byId("setting-sfx-value"),
   settingMusic: byId("setting-music"),
   settingMusicValue: byId("setting-music-value"),
+  settingMusicStatus: byId("setting-music-status"),
+  btnMusicRetry: byId("btn-music-retry"),
   leaveConfirmModal: byId("leave-confirm-modal"),
   btnLeaveCancel: byId("btn-leave-cancel"),
   btnLeaveConfirm: byId("btn-leave-confirm"),
@@ -762,8 +764,21 @@ const ACTION_LABELS = Object.freeze({
 let lastHandSettlePayload = null;
 let lastGameOverPayload = null;
 let audioContext = null;
-let ambientOscillator = null;
-let ambientGain = null;
+let musicSnapshotReady = false;
+const tableMusicPlayer = new window.OverlimitTableMusic.Player({
+  getContext: () => {
+    if (!window.AudioContext && !window.webkitAudioContext) throw new Error("Web Audio unavailable");
+    return ensureAudioContext();
+  },
+  onStatus: renderMusicStatus,
+});
+const tableMusicDirector = new window.OverlimitTableMusic.Director({
+  onChange: (cue) => tableMusicPlayer.setScene(cue),
+  storage: {
+    getItem: (key) => safeStorageGet("sessionStorage", key),
+    setItem: (key, value) => safeStorageSet("sessionStorage", key, value),
+  },
+});
 let connectionBannerTimer = 0;
 let connectionStatusKey = "connection.ok";
 let allInEffectTimer = 0;
@@ -970,34 +985,28 @@ window.addEventListener("overlimit:skill-fx-sound", (event) => {
 });
 
 function updateAmbientAudio() {
-  const context = Number(state.settings.music) > 0 ? ensureAudioContext() : audioContext;
-  if (!context) return;
-  if (Number(state.settings.music) <= 0 && ambientOscillator) {
-    try {
-      ambientOscillator.stop();
-      ambientOscillator.disconnect();
-      ambientGain?.disconnect();
-    } catch (_error) {
-      // Already-stopped audio nodes are safe to discard.
-    }
-    ambientOscillator = null;
-    ambientGain = null;
-    return;
-  }
-  if (!ambientOscillator && Number(state.settings.music) > 0) {
-    ambientOscillator = context.createOscillator();
-    ambientGain = context.createGain();
-    ambientOscillator.type = "sine";
-    ambientOscillator.frequency.value = 54;
-    ambientGain.gain.value = 0.0001;
-    ambientOscillator.connect(ambientGain).connect(context.destination);
-    ambientOscillator.start();
-  }
-  if (ambientGain) {
-    const target = Number(state.settings.music) > 0 ? Number(state.settings.music) / 25000 : 0.0001;
-    ambientGain.gain.setTargetAtTime(Math.max(0.0001, target), context.currentTime, 0.08);
-  }
+  tableMusicPlayer.setEnvironment({
+    atTable: document.body.dataset.screen === "game",
+    visible: !document.hidden,
+    connected: Boolean(socket.connected && musicSnapshotReady),
+    volume: state.settings.music,
+  });
 }
+
+function renderMusicStatus(status = tableMusicPlayer.getStatus()) {
+  if (!el.settingMusicStatus) return;
+  const song = t("music." + status.scene);
+  el.settingMusicStatus.textContent = t("music.status." + status.state, { song });
+  el.settingMusicStatus.dataset.state = status.state;
+  el.settingMusicStatus.dataset.scene = status.scene;
+  if (el.btnMusicRetry) el.btnMusicRetry.hidden = !["failed", "gesture"].includes(status.state);
+}
+
+document.addEventListener("pointerdown", () => tableMusicPlayer.unlock(), { passive: true });
+document.addEventListener("keydown", () => tableMusicPlayer.unlock());
+document.addEventListener("visibilitychange", updateAmbientAudio);
+window.addEventListener("pagehide", () => tableMusicPlayer.setEnvironment({ visible: false }));
+window.addEventListener("pageshow", updateAmbientAudio);
 
 function saveSettings() {
   safeStorageSet("localStorage", STORAGE.settings, JSON.stringify(state.settings));
@@ -1028,6 +1037,7 @@ function applySettings() {
   el.settingMusic.value = String(state.settings.music);
   el.settingMusicValue.textContent = String(state.settings.music) + "%";
   updateAmbientAudio();
+  renderMusicStatus();
   if (el.game?.classList.contains("active")) renderActions();
 }
 
@@ -1114,6 +1124,7 @@ function applyLanguage() {
   }
   if (previewingSkill) showSkillPreview(previewingSkill, skillPreviewReturnFocus);
   if (typeof socket !== "undefined") setConnectionUI(socket.connected, null, { relocalize: true });
+  renderMusicStatus();
 }
 
 function applyTutorialImages() {
@@ -1161,6 +1172,7 @@ function showScreen(name) {
   if (el.btnSettings.parentElement !== settingsParent) settingsParent.append(el.btnSettings);
   if (name === "auth") syncLobbySelection();
   document.body.dataset.screen = name;
+  updateAmbientAudio();
   window.OverlimitUIFeedback?.enterScreen(target, previous);
   if (name === "game") el.toastRegion.textContent = "";
 }
@@ -2723,6 +2735,9 @@ function clearRoomSession() {
 }
 
 function resetLocalRoom() {
+  musicSnapshotReady = false;
+  tableMusicDirector.reset();
+  updateAmbientAudio();
   clearHandSettlement();
   clearRematch();
   resetTransientUi();
@@ -3380,6 +3395,7 @@ function fillGameOverCopy(payload) {
 
 function showGameOver(payload) {
   if (shouldIgnoreSyncEvent(payload)) return;
+  tableMusicDirector.finishHand(payload);
   invalidateSkillChoiceIfStale({ force: true, includeDossier: true });
   clearHandSettlement();
   el.leaveConfirmModal.classList.add("hidden");
@@ -3802,6 +3818,8 @@ function waitForEndgamePresentation() {
 
 async function queueHandSettlement(payload) {
   if (shouldIgnoreSyncEvent(payload)) return;
+  // Stop special music on the authoritative edge, before any local VFX wait.
+  tableMusicDirector.finishHand(payload);
   // Settlement is authoritative and must never sit underneath an obsolete
   // target/dossier surface while a critical presentation finishes.
   closeSkillChoiceModal({ render: false, restoreFocus: false });
@@ -5662,6 +5680,7 @@ el.settingMusic.addEventListener("input", () => {
   saveSettings();
   applySettings();
 });
+el.btnMusicRetry?.addEventListener("click", () => tableMusicPlayer.retry());
 document.addEventListener("keydown", (event) => {
   const top = visibleModalLayers().at(-1);
   if (top === el.quickStartModal && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) {
@@ -5727,6 +5746,8 @@ socket.on("connect", () => {
   }
 });
 socket.on("disconnect", () => {
+  musicSnapshotReady = false;
+  updateAmbientAudio();
   endAllUiRequests();
   setConnectionUI(false, null, { messageKey: "connection.lost" });
   playTone("disconnect");
@@ -5878,6 +5899,8 @@ socket.on("room_joined", (payload) => {
 });
 socket.on("room_state", (payload) => {
   if (shouldIgnoreSyncEvent(payload)) return;
+  tableMusicDirector.snapshot(payload, state.roomId);
+  musicSnapshotReady = true;
   if (Object.prototype.hasOwnProperty.call(payload, "presentationBarrier")) {
     const incomingId = String(payload.presentationBarrier?.id || "");
     const restored = Boolean(incomingId && incomingId !== state.presentationBarrier?.id);
@@ -5973,9 +5996,12 @@ socket.on("room_state", (payload) => {
   renderSkillDraft();
   renderState();
   announceNullificationReveals(state.nullifiedCommunityCardIds);
+  updateAmbientAudio();
 });
 socket.on("game_started", (payload) => {
   if (shouldIgnoreSyncEvent(payload)) return;
+  tableMusicDirector.beginHand(state.roomId, payload.handId);
+  musicSnapshotReady = true;
   clearPresentationCoordinator();
   invalidateSkillChoiceIfStale({ force: true, includeDossier: true });
   state.gameMode = payload.gameMode || state.gameMode;
@@ -6060,6 +6086,7 @@ socket.on("player_turn", (payload) => {
 });
 socket.on("action_made", (payload) => {
   if (shouldIgnoreSyncEvent(payload)) return;
+  tableMusicDirector.action(payload, { playerId: state.playerId, chipViewHidden: state.chipViewHidden });
   endUiRequest("action");
   state.currentTurnPlayerId = null;
   state.validActions = [];
@@ -7799,6 +7826,7 @@ el.btnSkillPrivateClose?.addEventListener("click", () => {
 
 socket.on("skill:state", (payload) => {
   if (shouldIgnoreSyncEvent(payload)) return;
+  tableMusicDirector.skillState(payload.room);
   endUiRequest("skill");
   state.skillMode = payload.skillMode || state.skillMode;
   state.skillState = payload.room || state.skillState;
@@ -7842,6 +7870,7 @@ socket.on("skill:pending", (payload) => {
 
 socket.on("skill:resolved", (payload) => {
   if (shouldIgnoreSyncEvent(payload)) return;
+  tableMusicDirector.resolved(payload);
   endUiRequest("skill");
   endUiRequest("choice");
   if (isGenericSecretSummary(payload.publicSummary) && payload.casterId === state.playerId) {

@@ -1607,7 +1607,7 @@ class GameEngine {
 
     if (nextPhase === "flop") {
       const burned = room.deck.pop();
-      if (room.skillState && burned) room.skillState.burnedCards.push(burned);
+      if (burned) room.skillState?.burnedCards?.push(burned);
       room.communityCards.push(room.deck.pop(), room.deck.pop(), room.deck.pop());
     } else if (nextPhase === "turn" || nextPhase === "river") {
       const card = this.skillEngine.applyForkDuringDeal(room);

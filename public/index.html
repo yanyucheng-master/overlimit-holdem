@@ -302,12 +302,16 @@
           </label>
 
           <label class="setting-row range-setting" for="setting-music">
-            <span><strong data-i18n="settings.music">背景音乐音量</strong><small id="setting-music-value">0%</small></span>
-            <input id="setting-music" type="range" min="0" max="100" step="5" value="0" />
+            <span><strong data-i18n="settings.music">背景音乐音量</strong><small id="setting-music-value">35%</small></span>
+            <input id="setting-music" type="range" min="0" max="100" step="5" value="35" />
           </label>
 
         </div>
 
+        <div class="music-status-row">
+          <span id="setting-music-status" role="status" aria-live="polite"></span>
+          <button id="btn-music-retry" class="button button-ghost" type="button" data-i18n="music.retry" hidden>播放 / 重试</button>
+        </div>
         <p class="settings-note" data-i18n="settings.note">设置只保存在当前设备，不参与牌局判定。</p>
       </section>
     </div>
@@ -1525,6 +1529,7 @@
     <script src="./skill-fx-manager.js"></script>
     <script src="./skill-fx-gallery.js"></script>
     <script src="./lobby-feedback.js"></script>
+    <script src="./table-music.js"></script>
     <script src="./client.js"></script>
   </body>
 </html>

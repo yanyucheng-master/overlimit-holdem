@@ -1018,6 +1018,20 @@ input[role="switch"]:checked::after {
   font-size: 0.82rem;
 }
 
+.music-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 0.78rem;
+  color: var(--text-muted, #a9a8b5);
+}
+
+.music-status-row [hidden] { display: none; }
+.music-status-row .button { min-height: 36px; padding: 5px 12px; font-size: inherit; }
+
 .settings-navigation {
   display: flex;
   align-items: center;

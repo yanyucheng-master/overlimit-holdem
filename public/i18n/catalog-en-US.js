@@ -61,6 +61,22 @@
       timeoutLoss: "Your connection timed out. You lose this match.",
       opponentTimeoutWin: "The opponent timed out. You win."
     },
+    music: {
+      daily: "Velvet Gambit · B",
+      allin: "No Way Back · C2",
+      endgame: "Final Writ · D5",
+      retry: "Play / Retry",
+      status: {
+        off: "Music is off",
+        outside: "Music plays at the table",
+        paused: "Music is paused",
+        gesture: "Click or press a key to enable music",
+        unsupported: "Music is unavailable in this browser",
+        loading: "Preparing: {song}",
+        playing: "Playing: {song}",
+        failed: "Music could not load. Please retry."
+      }
+    },
     settings: {
       title: "Settings",
       eyebrow: "INTERFACE CONTROL",

@@ -1,0 +1,115 @@
+{
+  "schema_version": 1,
+  "packaged_at_utc": "2026-10-05T16:05:11.563613+00:00",
+  "tracks": {
+    "daily": {
+      "version": "B",
+      "title": "暗金博弈 / Velvet Gambit",
+      "acceptance": "approved_by_user",
+      "flow_url": "https://www.flowmusic.app/song/afbafb0b-da72-40c7-a225-278957752876",
+      "record": "artifacts/bgm-table-candidates-20261004/generation-record.json"
+    },
+    "allin": {
+      "version": "C2",
+      "title": "孤注一掷 / No Way Back",
+      "acceptance": "provisionally_approved_by_user",
+      "flow_url": "https://www.flowmusic.app/song/8df6966e-1ac1-4ea9-92fe-67c054461a5f",
+      "record": "artifacts/bgm-scene-v2-20261005/generation-record.json"
+    },
+    "endgame": {
+      "version": "D5",
+      "title": "终局裁决 / Final Writ",
+      "acceptance": "approved_by_user",
+      "slow_opening_seconds": 3.16,
+      "once_seconds": 12.936354166666666,
+      "fast_entry_seconds": 9.776354166666666,
+      "flow_url": "https://www.flowmusic.app/song/544100d4-8cbc-4872-8ec6-55a3c6605067",
+      "method": "Flow Remix > Replace of D4 opening 0:00-0:40; source-contiguous first handoff; no time stretch",
+      "record": "artifacts/bgm-endgame-d5-20261005/generation-record.json"
+    }
+  },
+  "pieces": {
+    "daily": {
+      "master": "artifacts/bgm-table-candidates-20261004/loops/b-velvet-gambit-loop.wav",
+      "master_sha256": "95bf85bf9601e6fb4a41ffd9dc46c176ad0c48f15befeee6f868dde1bb0bfb8b",
+      "sample_rate": 48000,
+      "channels": 2,
+      "frames": 7305343,
+      "seconds": 152.19464583333334,
+      "flac": {
+        "file": "b-velvet-gambit-loop.flac",
+        "sha256": "23b63cc4fe72e23b98ee2d7ebc510225792a86adcd43d30c14467be50f6f9cd3",
+        "bytes": 9396135,
+        "pcm_equal_to_master": true
+      },
+      "fallback": {
+        "file": "b-velvet-gambit-loop.mp3",
+        "sha256": "f73f2f95a7bf717c1d5ad9459cc4b3cdebff070337281a33508a25552cae6e90",
+        "bytes": 3654188,
+        "note": "192kbps MP3 encoded from the approved PCM; browser loop timing checked separately"
+      }
+    },
+    "allin": {
+      "master": "artifacts/bgm-scene-v2-20261005/loops/c-no-way-back-v2-loop.wav",
+      "master_sha256": "2e60605b0b289c0419538ab29587738eeda5a15233eaa658b78e37774bbcd149",
+      "sample_rate": 48000,
+      "channels": 2,
+      "frames": 2591822,
+      "seconds": 53.996291666666664,
+      "flac": {
+        "file": "c2-no-way-back-loop.flac",
+        "sha256": "0d48723d8c422a7011a5ab02d902fa25c0f6d995d35e3b9c92938ee060b618ac",
+        "bytes": 5755630,
+        "pcm_equal_to_master": true
+      },
+      "fallback": {
+        "file": "c2-no-way-back-loop.mp3",
+        "sha256": "57bdd25dc32f4a10a961b0049bc05fe87fde4f34d370025ee96996c3a6142b32",
+        "bytes": 1297196,
+        "note": "192kbps MP3 encoded from the approved PCM; browser loop timing checked separately"
+      }
+    },
+    "endgameOnce": {
+      "master": "artifacts/bgm-endgame-d5-20261005/audio/d5-endgame-opening-and-entry-once.wav",
+      "master_sha256": "db638a861abbda84b1a43ee1ebf9c41d0dda9e98ada04a27c519094ec309f3ca",
+      "sample_rate": 48000,
+      "channels": 2,
+      "frames": 620945,
+      "seconds": 12.936354166666666,
+      "flac": {
+        "file": "d5-final-writ-once.flac",
+        "sha256": "747f7d1a1c05af6d5fc609323bc2a50493160074a5b8ab7b9b18de02a486e43d",
+        "bytes": 817818,
+        "pcm_equal_to_master": true
+      },
+      "fallback": {
+        "file": "d5-final-writ-once.mp3",
+        "sha256": "28370793a899ce13c8dc06d91a1ee8cc6db99a9d2f156f2f9d7e28174597ffa8",
+        "bytes": 312236,
+        "note": "192kbps MP3 encoded from the approved PCM; browser loop timing checked separately"
+      }
+    },
+    "endgameLoop": {
+      "master": "artifacts/bgm-endgame-d5-20261005/loops/d5-final-writ-loop.wav",
+      "master_sha256": "b1bddff8cfb26d59fa9768f5045d98f148adb7bd49e7f39056efa06cb17f5d26",
+      "sample_rate": 48000,
+      "channels": 2,
+      "frames": 2047902,
+      "seconds": 42.664625,
+      "flac": {
+        "file": "d5-final-writ-loop.flac",
+        "sha256": "5161c7d2aed5f489f8879dff2703526d3962aee9f0cfa6a95cf5bbff1e60f45f",
+        "bytes": 4276443,
+        "pcm_equal_to_master": true
+      },
+      "fallback": {
+        "file": "d5-final-writ-loop.mp3",
+        "sha256": "26023ac437317a90801160818ad57e7392d9ca09114a1c60dcae10721c98428f",
+        "bytes": 1025324,
+        "note": "192kbps MP3 encoded from the approved PCM; browser loop timing checked separately"
+      }
+    }
+  },
+  "processing": "Lossless encoding only; approved gain, loop edits and tempo preserved",
+  "direct_listening_by_agent": false
+}

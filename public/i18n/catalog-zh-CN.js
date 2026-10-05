@@ -61,6 +61,22 @@
       timeoutLoss: "你的连接超时，本局判负",
       opponentTimeoutWin: "对手断线超时，你获得胜利"
     },
+    music: {
+      daily: "暗金博弈 · B",
+      allin: "孤注一掷 · C2",
+      endgame: "终局裁决 · D5",
+      retry: "播放 / 重试",
+      status: {
+        off: "背景音乐已关闭",
+        outside: "进入牌桌后播放背景音乐",
+        paused: "背景音乐已暂停",
+        gesture: "点击或按键后即可播放背景音乐",
+        unsupported: "当前浏览器无法播放背景音乐",
+        loading: "正在准备：{song}",
+        playing: "正在播放：{song}",
+        failed: "背景音乐加载失败，请重试"
+      }
+    },
     settings: {
       title: "界面设置",
       eyebrow: "INTERFACE CONTROL",
