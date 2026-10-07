@@ -62,13 +62,14 @@
       opponentTimeoutWin: "对手断线超时，你获得胜利"
     },
     music: {
+      lobby: "入席之前 · 大厅 L1",
       daily: "暗金博弈 · B",
       allin: "孤注一掷 · C2",
       endgame: "终局裁决 · D5",
       retry: "播放 / 重试",
       status: {
         off: "背景音乐已关闭",
-        outside: "进入牌桌后播放背景音乐",
+        outside: "返回大厅或牌桌后播放背景音乐",
         paused: "背景音乐已暂停",
         gesture: "点击或按键后即可播放背景音乐",
         unsupported: "当前浏览器无法播放背景音乐",

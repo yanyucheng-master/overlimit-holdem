@@ -26,6 +26,29 @@
       "flow_url": "https://www.flowmusic.app/song/544100d4-8cbc-4872-8ec6-55a3c6605067",
       "method": "Flow Remix > Replace of D4 opening 0:00-0:40; source-contiguous first handoff; no time stretch",
       "record": "artifacts/bgm-endgame-d5-20261005/generation-record.json"
+    },
+    "lobby": {
+      "version": "L1",
+      "title": "入席之前 / Before the Deal",
+      "acceptance": "integrated_pending_user_audition",
+      "flow_url": "https://www.flowmusic.app/song/a7139029-4759-4b1d-a4be-e4c1fa45198c",
+      "record": "artifacts/bgm-lobby-20261007/generation-record.json",
+      "requested_bpm": 100,
+      "estimated_bpm": 102.0011480066757,
+      "screens": [
+        "auth",
+        "wait",
+        "skillLab"
+      ],
+      "processing": {
+        "start_seconds": 9.4351875,
+        "end_seconds": 87.081375,
+        "overlap_seconds": 2.3529166666666668,
+        "gain_db": -5.32,
+        "target_lufs": -21.35,
+        "tempo_changed": false,
+        "method": "Raised-cosine overlap, rotate so tail-to-head blend is within the period; constant gain only"
+      }
     }
   },
   "pieces": {
@@ -108,8 +131,31 @@
         "bytes": 1025324,
         "note": "192kbps MP3 encoded from the approved PCM; browser loop timing checked separately"
       }
+    },
+    "lobby": {
+      "master": "artifacts/bgm-lobby-20261007/loops/l1-before-the-deal-loop.wav",
+      "master_sha256": "5aab3342686dfef276168ca0dc6bd7eea8f7b6930f60330a1e96f2896d866bfc",
+      "original": "artifacts/bgm-lobby-20261007/originals/l1-before-the-deal-original.wav",
+      "original_sha256": "6db7aeb48bf3c9dd0991333d4a5bbbcb55f2b133320c13ba4eb17fc2dabd0476",
+      "sample_rate": 48000,
+      "channels": 2,
+      "frames": 3614077,
+      "seconds": 75.29327083333334,
+      "flac": {
+        "file": "l1-before-the-deal-loop.flac",
+        "sha256": "a5dec57ffda5b2267af2f6bc904ee98baa6766a236191e18516367d23dd38b14",
+        "bytes": 4830317,
+        "pcm_equal_to_master": true
+      },
+      "fallback": {
+        "file": "l1-before-the-deal-loop.mp3",
+        "sha256": "bb9e7258c0be84079adb510da6f6fc925b77fe0a26c802a8722ebb23c35f8de8",
+        "bytes": 1808684,
+        "note": "192kbps compatibility encoding; browser sample counts checked separately"
+      }
     }
   },
-  "processing": "Lossless encoding only; approved gain, loop edits and tempo preserved",
-  "direct_listening_by_agent": false
+  "processing": "Existing approved table masters preserved; lobby uses one-bar overlap and constant gain, then lossless/compatibility encoding; no tempo change",
+  "direct_listening_by_agent": false,
+  "updated_at_utc": "2026-10-07T04:53:29.648078+00:00"
 }

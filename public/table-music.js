@@ -6,15 +6,23 @@
   "use strict";
 
   const PIECES = Object.freeze({
+    lobby: "l1-before-the-deal-loop",
     daily: "b-velvet-gambit-loop",
     allin: "c2-no-way-back-loop",
     endgameOnce: "d5-final-writ-once",
     endgameLoop: "d5-final-writ-loop",
   });
   const ONCE_SECONDS = 12.936354166666666;
-  const PIECE_SECONDS = Object.freeze({ daily: 152.19464583333334, allin: 53.996291666666664,
+  const PIECE_SECONDS = Object.freeze({ lobby: 75.29327083333334, daily: 152.19464583333334, allin: 53.996291666666664,
     endgameOnce: ONCE_SECONDS, endgameLoop: 42.664625 });
   const MARKER = "overlimit_table_music_hand_v1";
+  const LOBBY_CUE = Object.freeze({ scene: "lobby", key: "lobby", playOpening: false });
+  const LOBBY_SCREENS = new Set(["auth", "wait", "skillLab"]);
+  // Room creation, waiting and loadout configuration share one continuous cue.
+  // Public hand events only select music while the table is actually visible.
+  const cueForScreen = (screen, tableCue, { reconnectingTable = false } = {}) =>
+    screen === "game" || (screen === "wait" && reconnectingTable) ? tableCue
+      : LOBBY_SCREENS.has(screen) ? LOBBY_CUE : null;
   const own = (value, key) => Boolean(value && Object.prototype.hasOwnProperty.call(value, key));
   const scope = (roomId, handId) => String(roomId || "") + ":" + String(handId || "");
 
@@ -168,13 +176,13 @@
       this.fetchAudio = fetchAudio;
       this.onStatus = onStatus;
       this.baseUrl = baseUrl;
-      this.environment = { atTable: false, visible: true, connected: false, volume: 0 };
+      this.environment = { atTable: false, atLobby: false, visible: true, connected: false, volume: 0 };
       this.cue = { scene: "daily", key: "daily", playOpening: false };
       this.cache = new Map();
       this.encoded = new Map();
       this.revision = 0;
       this.position = 0;
-      this.dailyPosition = 0;
+      this.ambientPositions = { daily: 0, lobby: 0 };
       this.playing = null;
       this.pending = false;
       this.failure = false;
@@ -201,17 +209,20 @@
     setScene(cue) {
       if (!cue || cue.key === this.cue.key) return;
       this.pause();
-      if (this.cue.scene === "daily") this.dailyPosition = this.position;
+      if (own(this.ambientPositions, this.cue.scene)) this.ambientPositions[this.cue.scene] = this.position;
       this.cue = cue;
-      this.position = cue.scene === "daily" ? this.dailyPosition
+      this.position = own(this.ambientPositions, cue.scene) ? this.ambientPositions[cue.scene]
         : cue.scene === "endgame" && !cue.playOpening ? ONCE_SECONDS : 0;
       this.failure = false;
       this.reconcile();
     }
 
-    setEnvironment(next) {
+    setEnvironment(next, cue = this.cue) {
       Object.assign(this.environment, next);
       this.environment.volume = Math.max(0, Math.min(100, Number(this.environment.volume) || 0));
+      // Apply screen availability and its cue together; a new cue must never
+      // start with the previous screen's connection/snapshot permissions.
+      if (cue && cue.key !== this.cue.key) { this.setScene(cue); return; }
       this.reconcile();
     }
 
@@ -221,8 +232,8 @@
     blockedState() {
       const value = this.environment;
       if (value.volume <= 0) return "off";
-      if (!value.atTable) return "outside";
-      if (!value.visible || !value.connected) return "paused";
+      if (!value.atTable && !value.atLobby) return "outside";
+      if (!value.visible || (value.atTable && !value.connected)) return "paused";
       return null;
     }
 
@@ -334,8 +345,8 @@
         formats: Object.fromEntries(keys.map((key, i) => [key, loaded[i].format])) };
       this.pending = false;
       this.report("playing");
-      while (this.cache.size > 3) {
-        const unused = [...this.cache.keys()].find((key) => key !== "daily" && !keys.includes(key));
+      while (this.cache.size > 4) {
+        const unused = [...this.cache.keys()].find((key) => !["daily", "lobby"].includes(key) && !keys.includes(key));
         if (!unused) break;
         this.cache.delete(unused);
       }
@@ -381,5 +392,5 @@
     }
   }
 
-  return { Director, Player, PIECES, ONCE_SECONDS };
+  return { Director, Player, PIECES, ONCE_SECONDS, LOBBY_CUE, cueForScreen };
 });

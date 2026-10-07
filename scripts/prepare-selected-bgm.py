@@ -68,6 +68,14 @@ tracks = {
 provenance = dict(schema_version=1, packaged_at_utc=now, tracks=tracks, pieces=pieces,
                   processing="Lossless encoding only; approved gain, loop edits and tempo preserved",
                   direct_listening_by_agent=False)
+# Repacking the table suite must preserve independently packaged lobby music.
+manifest_path = DEST / "provenance.json"
+if manifest_path.exists():
+    previous = json.loads(manifest_path.read_text(encoding="utf-8"))
+    for section in ("tracks", "pieces"):
+        for key, value in previous.get(section, {}).items():
+            if key not in provenance[section]:
+                provenance[section][key] = value
 (DEST / "provenance.json").write_text(json.dumps(provenance, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 (REPORT / "runtime-assets.json").write_text(json.dumps(provenance, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 

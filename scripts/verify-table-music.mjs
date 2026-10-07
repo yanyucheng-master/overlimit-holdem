@@ -6,7 +6,7 @@ import runtime from "./playwright-runtime.js";
 import lobby from "./lobby-test-helpers.js";
 import server from "../server/server.js";
 
-const output = path.resolve("artifacts/bgm-integration-20261005");
+const output = path.resolve(process.env.BGM_VERIFY_DIR || "artifacts/bgm-integration-20261005");
 await fs.mkdir(output, { recursive: true });
 const app = server.createAppServer({ matchmakingAutoStart: false });
 await new Promise((resolve) => app.httpServer.listen(0, "127.0.0.1", resolve));
@@ -265,7 +265,8 @@ try {
   const confirm = second.pages[0].locator("#btn-leave-confirm");
   if (await confirm.isVisible()) await confirm.click();
   await second.pages[0].locator("#screen-auth.active").waitFor();
-  assert.equal((await status(second.pages[0])).state, "outside");
+  await playing(second.pages[0], "lobby");
+  assert.match(await second.pages[0].locator("#setting-music-status").textContent(), /入席之前/);
   report.cases.push({ case: "failure_retry_localization_mobile_settings_exit", passed: true });
   assert.deepEqual(report.errors, []);
   report.passed = true;

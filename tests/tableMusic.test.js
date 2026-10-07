@@ -141,7 +141,7 @@ describe("music transport", () => {
     player.setScene(endgame);
     player.setEnvironment({ volume: 50 });
     expect(context.starts).toHaveLength(count);
-    expect(player.cache.size).toBeLessThanOrEqual(3);
+    expect(player.cache.size).toBeLessThanOrEqual(4);
     player.pause();
   });
 

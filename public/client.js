@@ -765,6 +765,7 @@ let lastHandSettlePayload = null;
 let lastGameOverPayload = null;
 let audioContext = null;
 let musicSnapshotReady = false;
+let tableMusicCue = { scene: "daily", key: "daily", playOpening: false };
 const tableMusicPlayer = new window.OverlimitTableMusic.Player({
   getContext: () => {
     if (!window.AudioContext && !window.webkitAudioContext) throw new Error("Web Audio unavailable");
@@ -773,7 +774,10 @@ const tableMusicPlayer = new window.OverlimitTableMusic.Player({
   onStatus: renderMusicStatus,
 });
 const tableMusicDirector = new window.OverlimitTableMusic.Director({
-  onChange: (cue) => tableMusicPlayer.setScene(cue),
+  onChange: (cue) => {
+    tableMusicCue = cue;
+    updateAmbientAudio();
+  },
   storage: {
     getItem: (key) => safeStorageGet("sessionStorage", key),
     setItem: (key, value) => safeStorageSet("sessionStorage", key, value),
@@ -985,12 +989,19 @@ window.addEventListener("overlimit:skill-fx-sound", (event) => {
 });
 
 function updateAmbientAudio() {
+  // The initial auth screen is active in the HTML before showScreen runs.
+  const screen = document.body.dataset.screen || "auth";
+  // An in-progress table briefly uses the waiting screen while reconnecting.
+  // Keep its paused cue so ENDGAME never replays its declaration on return.
+  const reconnectingTable = screen === "wait" && state.reconnecting && state.handNo > 0;
+  const cue = window.OverlimitTableMusic.cueForScreen(screen, tableMusicCue, { reconnectingTable });
   tableMusicPlayer.setEnvironment({
-    atTable: document.body.dataset.screen === "game",
+    atTable: screen === "game" || reconnectingTable,
+    atLobby: cue?.scene === "lobby",
     visible: !document.hidden,
     connected: Boolean(socket.connected && musicSnapshotReady),
     volume: state.settings.music,
-  });
+  }, cue);
 }
 
 function renderMusicStatus(status = tableMusicPlayer.getStatus()) {

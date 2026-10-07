@@ -62,13 +62,14 @@
       opponentTimeoutWin: "The opponent timed out. You win."
     },
     music: {
+      lobby: "Before the Deal · Lobby L1",
       daily: "Velvet Gambit · B",
       allin: "No Way Back · C2",
       endgame: "Final Writ · D5",
       retry: "Play / Retry",
       status: {
         off: "Music is off",
-        outside: "Music plays at the table",
+        outside: "Music plays in the lobby and at the table",
         paused: "Music is paused",
         gesture: "Click or press a key to enable music",
         unsupported: "Music is unavailable in this browser",
